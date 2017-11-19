@@ -1,2 +1,3 @@
-![ScreenShot](/cog-logo.png) # cog
-Persistent Key-Value store written python.
+![ScreenShot](/cog-logo.png)
+# cog
+A persistent Key-Value store written python. All I/O is performed directly from disk.
