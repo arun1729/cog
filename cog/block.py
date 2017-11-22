@@ -41,5 +41,3 @@ class Block:
         if(str(self.content)[0]==DELETED_BLOCK):
             return True
         return False
-
-        
