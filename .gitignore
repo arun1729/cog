@@ -1,0 +1,4 @@
+cog.egg-info
+*.pyc
+cogdb.egg-info
+dist
