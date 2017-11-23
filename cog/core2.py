@@ -78,7 +78,8 @@ class Table:
 
 class Indexer:
     
-    def __init__(self,table,config):
+    def __init__(self,table,config, logger):
+        self.logger = logger
         self.table = table
         self.config = config
         self.name=self.config.cog_index(table.db_name,table.name,table.db_instance_id)
@@ -88,40 +89,41 @@ class Indexer:
             i=0
             e_blocks=[]
             empty_block = '0'.zfill(config.INDEX_BLOCK_LEN)
-            while(i<config.index_capacity):
+            while(i<config.INDEX_CAPACITY):
                 e_blocks.append(empty_block)
                 i+=1
             f.write(b''.join(e_blocks))   
             self.file_limit=f.tell()
             f.close()
-            self.logger.info("new index with capacity"+str(config.index_capacity)+"created: "+self.name)
+            self.logger.info("new index with capacity"+str(config.INDEX_CAPACITY)+"created: "+self.name)
             print "Done."
-        else:
-            self.file_limit=self.getLen(self.name)
 
-        self.logger.debug("Index size: "+str(self.file_limit))
-        self.db=open(self.index,'r+b')
+        self.db=open(self.name,'r+b')
         self.db_mem=mmap.mmap(self.db.fileno(), 0)
         
     def index(self, key):
         index_position=self.get_index(key)
-        current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
+        print index_position
+        current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN].strip()
         empty_block = '0'.zfill(self.config.INDEX_BLOCK_LEN)
+        print current_block
         while(current_block != empty_block):
             if(current_block == key):
                 print "updating existing record"
+                break
             else:
                 index_position += self.config.INDEX_BLOCK_LEN
                 current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
         #if an free index block is found, then write key to at that position.
-        self.db_mem[index_position]=key
+        self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]=key.rjust(self.config.INDEX_BLOCK_LEN)
+        self.logger.debug("indexed "+key+" @: "+str(index_position))
         #need to handle capacity overflow condition
         return index_position
     
     def get_index(self,key):
         num=hash(key) % ((sys.maxsize + 1) * 2)
         logging.debug("hash for: "+key+" : "+str(num))
-        index=(self.config.INDEX_BLOCK_LEN*(max( (num%self.config.capacity)-1,0) )) #there may be diff when using mem slice vs write (+1 needed)
+        index=(self.config.INDEX_BLOCK_LEN*(max( (num%self.config.INDEX_CAPACITY)-1,0) )) #there may be diff when using mem slice vs write (+1 needed)
         logging.debug("offset : "+key+" : "+str(index))
         return index
     
