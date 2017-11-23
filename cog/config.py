@@ -29,7 +29,7 @@ cog_context = [COG_PATH_PREFIX,COG_HOME,COG_SYS_DIR,COG_SYS_FILE]
 STORE="-store-"
 INDEX="-index-"
 
-STORE_BLOCK_HEADER_LEN=4
+INDEX_BLOCK_LEN=10
 
 def cog_instance_sys_file():
     return "/".join(cog_context)

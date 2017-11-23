@@ -101,6 +101,12 @@ class Database:
         self.store_file.seek(0, 2)
         pos = self.store_file.tell()
         logging.debug("Store position for: "+key+" = "+str(pos))
+        record=marshal.dumps((key,value))
+        length=len(record) 
+        self.db_mem[pos]=0 #not deleted flag by default
+        self.db_mem[pos+1]=length # second position for 2 bytes is the length of the content to be written.
+        self.db_mem[pos+3]=record # record is written at the third position
+        
 
         block=self.read_block(pos)
 
