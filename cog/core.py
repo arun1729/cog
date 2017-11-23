@@ -94,35 +94,36 @@ class Database:
     def drop_db(self):
         """ """
 
-    def set(self,key,value,pos=None,start_pos=None):
-
+    def put(self,key,value):
         assert type(key) is str, "Only string type is supported is currenlty supported."
         assert type(value) is str, "Only string type is supported is currenlty supported."
 
-        if not pos:
-            pos=self.get_offset(key)
-            start_pos=pos
-
-        logging.debug("setting pos ->"+str(pos) + " for:"+key)
+        self.store_file.seek(0, 2)
+        pos = self.store_file.tell()
+        logging.debug("Store position for: "+key+" = "+str(pos))
 
         block=self.read_block(pos)
 
-        if block.isFull() or block.isDeleted():
-            self.collision_cnt+=1
-            next_block=pos+BLOCK_LEN
+        if block.isFull() and marshal.loads(self.get_record(int(block.getValue())))[1]==key:
+            print "update!"
+        else:
+            if block.isFull() or block.isDeleted():
+                logging.debug("block is full? "+str(block.isFull()) + " block is deleted? "+ str(block.isDeleted()))
+                self.collision_cnt+=1
+                next_block=pos+BLOCK_LEN
 
-            logging.debug("trying next block: "+str(next_block)+" file limit : "+str(self.file_limit) + " start_pos: "+str(start_pos))
+                logging.debug("trying next block: "+str(next_block)+" file limit : "+str(self.file_limit) + " start_pos: "+str(start_pos))
 
-            if next_block%self.file_limit != start_pos:
-                self.set(key, value,next_block,start_pos)
-                return
-            else:
-                raise ValueError("Database capacity reached!")
+                if next_block%self.file_limit != start_pos:
+                    self.put(key, value,next_block,start_pos)
+                    return
+                else:
+                    raise ValueError("Database capacity reached!")
 
         self.store_file.seek(0, 2)
         content=self.store_file.tell()
 
-        logging.debug("[*] index pos set: "+str(pos) + " Store pos " + str(content))
+        logging.debug("[*] index position set: "+str(pos) + " Store pos " + str(content))
 
         self.db_mem[pos:pos+BLOCK_LEN]=Block().fill(content)
         rec=marshal.dumps((key,value))
@@ -161,7 +162,7 @@ class Database:
                 return None
 
         logging.debug("[*] found key @ "+str(pos))
-        return res
+        return res[1]
 
     def get_record(self,pos):
         self.store_file.seek(pos)
@@ -178,9 +179,9 @@ class Database:
 
     def get_offset(self,text):
         num=hash(text) % ((sys.maxsize + 1) * 2)
-        logging.debug("num hash : "+str(num))
+        logging.debug("hash for: "+text+" : "+str(num))
         offset=(BLOCK_LEN*(max( (num%self.capacity)-1,0) )) #there may be diff when using mem slice vs write (+1 needed)
-        logging.debug("offset :"+str(offset))
+        logging.debug("offset : "+text+" : "+str(offset))
         return offset
 
     #get length of table
