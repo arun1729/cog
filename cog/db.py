@@ -1,4 +1,5 @@
 from core2 import Indexer
+from core2 import Store
 from core2 import Table
 import config
 import logging
@@ -12,5 +13,10 @@ dictConfig(config.logging_config)
 logger = logging.getLogger()
 
 table = Table("testdb","test_table","test_xcvzdfsadx")
-indexer = Indexer(table,config,logger)
-indexer.index("test")
+
+# indexer = Indexer(table,config,logger)
+# indexer.index("test")
+
+store = Store(table,config,logger)
+store.save(("test","testx"))
+print store.read(0)

@@ -132,17 +132,17 @@ class Indexer:
         current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
         while(current_block != key):
             index_position += self.config.INDEX_BLOCK_LEN
-            current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
-        
+            current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]   
         return current_block
                 
 class Store:
     
-    def __init__(self,table,config):
+    def __init__(self,table,config,logger):
         self.table = table
         self.config = config
         self.store=self.config.cog_store(table.db_name,table.name,table.db_instance_id)
         self.store_file=open(self.store,'ab+')
+        logger.info("Store for file init: "+self.store)
     
     def save(self,kv):
         """Store data"""
@@ -150,10 +150,27 @@ class Store:
         record=marshal.dumps(kv)
         length=str(len(record))
         self.store_file.seek(0, 2)
-        self.store_file.write(0)
+        self.store_file.write("0")#delete bit
         self.store_file.write(length)
-        self.store_file.write('1F')#unit seperator
+        self.store_file.write('\x1F')#unit seperator
         self.store_file.write(record)
+    
+    def read(self, position):
+        self.store_file.seek(position)
+        tombstone=self.store_file.read(1)
+        c=self.store_file.read(1)
+        data=[c]
+        while(c !='\x1F'):
+            data.append(c)
+            c = self.store_file.read(1)
+            
+        length=int("".join(data))
+        record=marshal.loads(self.store_file.read(length))
+        return (tombstone,record)
+        
+        
+            
+        
 
           
 
