@@ -20,7 +20,7 @@ logging_config = dict(
 
 
 COG_PATH_PREFIX = "/tmp"
-COG_HOME = "cog-db"
+COG_HOME = "cog-test"
 COG_SYS_DIR = "sys"
 COG_SYS_FILE = "cogsys.c"
 
