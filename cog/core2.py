@@ -101,22 +101,21 @@ class Indexer:
         self.db=open(self.name,'r+b')
         self.db_mem=mmap.mmap(self.db.fileno(), 0)
         
-    def index(self, key):
+    def index(self, key, store_position, store):
         index_position=self.get_index(key)
-        print index_position
         current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN].strip()
         empty_block = '0'.zfill(self.config.INDEX_BLOCK_LEN)
-        print current_block
         while(current_block != empty_block):
-            if(current_block == key):
-                print "updating existing record"
+            record = store.read(int(current_block))
+            if(record[1][0]==key):
+                self.logger.debug("Updating index")
                 break
             else:
                 index_position += self.config.INDEX_BLOCK_LEN
                 current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
         #if an free index block is found, then write key to at that position.
-        self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]=key.rjust(self.config.INDEX_BLOCK_LEN)
-        self.logger.debug("indexed "+key+" @: "+str(index_position))
+        self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]=str(store_position).rjust(self.config.INDEX_BLOCK_LEN)
+        self.logger.debug("indexed "+key+" @: "+str(index_position) + " : store position: "+str(store_position))
         #need to handle capacity overflow condition
         return index_position
     
@@ -127,17 +126,20 @@ class Indexer:
         logging.debug("offset : "+key+" : "+str(index))
         return index
     
-    def get(self, key):
+    def get(self, key, store):
         index_position=self.get_index(key)
         current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
-        while(current_block != key):
+        record = store.read(int(current_block))
+        while(key != record[1][0]):
             index_position += self.config.INDEX_BLOCK_LEN
-            current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]   
-        return current_block
+            current_block=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
+            record = store.read(int(current_block)) 
+        return record
                 
 class Store:
     
     def __init__(self,table,config,logger):
+        self.logger = logger
         self.table = table
         self.config = config
         self.store=self.config.cog_store(table.db_name,table.name,table.db_instance_id)
@@ -147,6 +149,7 @@ class Store:
     def save(self,kv):
         """Store data"""
         self.store_file.seek(0, 2)
+        store_position=self.store_file.tell()
         record=marshal.dumps(kv)
         length=str(len(record))
         self.store_file.seek(0, 2)
@@ -154,6 +157,7 @@ class Store:
         self.store_file.write(length)
         self.store_file.write('\x1F')#unit seperator
         self.store_file.write(record)
+        return store_position
     
     def read(self, position):
         self.store_file.seek(position)
@@ -163,6 +167,9 @@ class Store:
         while(c !='\x1F'):
             data.append(c)
             c = self.store_file.read(1)
+            if(c==''):
+                self.logger.debug("EOF store file! Data read error.")
+                return None
             
         length=int("".join(data))
         record=marshal.loads(self.store_file.read(length))

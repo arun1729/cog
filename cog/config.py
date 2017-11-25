@@ -30,7 +30,7 @@ STORE="-store-"
 INDEX="-index-"
 
 INDEX_BLOCK_LEN=10
-INDEX_CAPACITY = 100
+INDEX_CAPACITY = 1000
 
 def cog_instance_sys_file():
     return "/".join(cog_context)
