@@ -19,11 +19,14 @@ table = Table("testdb","test_table","test_xcvzdfsadx")
 store = Store(table,config,logger)
 indexer = Indexer(table,config,logger)
 
-position=store.save(data)
-print "store position: "+str(position)
 
-indexer.index(data[0],position,store)
-print "indexed"
-store_pos=indexer.get(data[0], store)
-if(store_pos):
-    print "retrieved data: "+str(store_pos)
+# position=store.save(data)
+# print "stored"
+#   
+# indexer.index(data[0],position,store)
+# print "indexed"
+
+indexer.delete(data[0],store)
+
+data=indexer.get(data[0], store)
+print "retrieved data: "+str(data)
