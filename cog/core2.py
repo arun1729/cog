@@ -83,7 +83,7 @@ class Indexer:
         self.table = table
         self.config = config
         self.name=self.config.cog_index(table.db_name,table.name,table.db_instance_id)
-        self.empty_block = '0'.zfill(self.config.INDEX_BLOCK_LEN)
+        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
             print "creating index..."
             f=open(self.name,'wb+')
@@ -128,8 +128,10 @@ class Indexer:
     
     def get(self, key, store):
         index_position=self.get_index(key)
-        current_store_position=int(self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN])
-        record = store.read(current_store_position)
+        current_store_position=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
+        if(current_store_position == self.empty_block):
+            return None
+        record = store.read(int(current_store_position))
         if(record == None):
             self.logger.info("Store EOF reached! Record not found.")
             return
@@ -139,7 +141,7 @@ class Indexer:
             if(current_store_position == ''):
                 self.logger.info("Index EOF reached! Key not found.")
                 return None
-            record = store.read(current_store_position)
+            record = store.read(int(current_store_position))
             if(record == ''):
                 self.logger.info("Store EOF reached! Record not found.")
                 return None
@@ -147,8 +149,11 @@ class Indexer:
     
     def delete(self, key, store):
         index_position=self.get_index(key)
-        current_store_position=int(self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN])
-        record = store.read(current_store_position)
+        current_store_position=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
+        print current_store_position
+        if(current_store_position == self.empty_block):
+            return None
+        record = store.read(int(current_store_position))
         if(record == None):
             self.logger.info("Store EOF reached! Record not found.")
             return
@@ -158,13 +163,13 @@ class Indexer:
             if(current_store_position == ''):
                 self.logger.info("Index EOF reached! Key not found.")
                 return
-            record = store.read(current_store_position)
+            record = store.read(int(current_store_position))
             if(record == ''):
                 self.logger.info("Store EOF reached! Record not found.")
                 return
         
         self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]=self.empty_block
-        store.tombstone(current_store_position)
+        store.tombstone(int(current_store_position))
     
 class Store:
     
@@ -210,11 +215,10 @@ class Store:
     
     def tombstone(self, position):
         """Used for compaction."""
-        print position
         self.store_file.seek(position)
-        print self.store_file.tell()
-        print self.store_file.read(1)
-        print self.store_file.tell()
+#         print self.store_file.tell()
+#         print self.store_file.read(1)
+#         print self.store_file.tell()
         self.store_file.write("1")#deleted
         self.store_file.flush()
         

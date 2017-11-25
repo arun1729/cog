@@ -20,11 +20,11 @@ store = Store(table,config,logger)
 indexer = Indexer(table,config,logger)
 
 
-# position=store.save(data)
-# print "stored"
-#   
-# indexer.index(data[0],position,store)
-# print "indexed"
+position=store.save(data)
+print "stored"
+   
+indexer.index(data[0],position,store)
+print "indexed"
 
 indexer.delete(data[0],store)
 
