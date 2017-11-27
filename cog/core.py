@@ -54,7 +54,7 @@ class Index:
         while(current_block != self.empty_block):
             record = store.read(int(current_block))
             if(record[1][0]==key):
-                self.logger.debug("Updating index")
+                self.logger.debug("Updating index: "+self.name)
                 break
             else:
                 index_position += self.config.INDEX_BLOCK_LEN
@@ -73,6 +73,7 @@ class Index:
         return index
     
     def get(self, key, store):
+        self.logger.debug("Reading index: "+self.name)
         index_position=self.get_index(key)
         current_store_position=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
         if(current_store_position == self.empty_block):
@@ -96,7 +97,6 @@ class Index:
     def delete(self, key, store):
         index_position=self.get_index(key)
         current_store_position=self.db_mem[index_position:index_position+self.config.INDEX_BLOCK_LEN]
-        print current_store_position
         if(current_store_position == self.empty_block):
             return None
         record = store.read(int(current_store_position))

@@ -1,3 +1,28 @@
+COG_PATH_PREFIX = "/tmp"
+COG_HOME = "cog-test"
+COG_SYS_DIR = "sys"
+COG_SYS_FILE = "cogsys.c"
+STORE="-store-"
+INDEX="-index-"
+INDEX_BLOCK_LEN=10
+INDEX_CAPACITY = 1000
+
+cog_context = [COG_PATH_PREFIX,COG_HOME,COG_SYS_DIR,COG_SYS_FILE]
+
+def cog_instance_sys_file():
+    return "/".join(cog_context)
+
+def cog_instance_sys_dir():
+    return "/".join(cog_context[0:-1])
+
+def cog_data_dir(db_name):
+    return "/".join(cog_context[0:-2]+[db_name])
+
+def cog_index(db_name, table_name, instance_id):
+    return "/".join(cog_context[0:-2]+[db_name,table_name+INDEX+instance_id])
+
+def cog_store(db_name, table_name, instance_id):
+    return "/".join(cog_context[0:-2]+[db_name,table_name+STORE+instance_id])
 
 import logging
 
@@ -17,32 +42,3 @@ logging_config = dict(
         'level': logging.DEBUG,
         },
 )
-
-
-COG_PATH_PREFIX = "/tmp"
-COG_HOME = "cog-test"
-COG_SYS_DIR = "sys"
-COG_SYS_FILE = "cogsys.c"
-
-cog_context = [COG_PATH_PREFIX,COG_HOME,COG_SYS_DIR,COG_SYS_FILE]
-
-STORE="-store-"
-INDEX="-index-"
-
-INDEX_BLOCK_LEN=10
-INDEX_CAPACITY = 1000
-
-def cog_instance_sys_file():
-    return "/".join(cog_context)
-
-def cog_instance_sys_dir():
-    return "/".join(cog_context[0:-1])
-
-def cog_data_dir(db_name):
-    return "/".join(cog_context[0:-2]+[db_name])
-
-def cog_index(db_name, table_name, instance_id):
-    return "/".join(cog_context[0:-2]+[db_name,table_name+INDEX+instance_id])
-
-def cog_store(db_name, table_name, instance_id):
-    return "/".join(cog_context[0:-2]+[db_name,table_name+STORE+instance_id])

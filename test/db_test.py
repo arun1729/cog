@@ -9,8 +9,19 @@ from logging.config import dictConfig
 
 data = ("new super data","super new old stuff")
 cogdb = Cog(config)
-cogdb.create_table("data_table")
-cogdb.put(data[0])
+cogdb.create_namespace("testspace")
+cogdb.create_table("data_table", "testspace")
+cogdb.put(data)
+print cogdb.get(data[0])
+cogdb.delete(data[0])
+print cogdb.get(data[0])
+
+
+cogdb.create_namespace("newtestspace")
+cogdb.create_table("data_table", "newtestspace")
+cogdb.put(data)
+print cogdb.get(data[0])
+cogdb.delete(data[0])
 print cogdb.get(data[0])
 
 # dictConfig(config.logging_config)

@@ -26,30 +26,29 @@ from block import Block
 
 class Compaction:
     '''
-    Read index file, reacd records stored in 'store' and write out new store file. Update index with position in store. 
+    Read index file, record records stored in 'store' and write out new store file. Update index with position in store. 
     '''
 
 class Cog:
     
-    def __init__(self,config,db_name="DEFAULT", table_name="DEFAULT"):
+    def __init__(self,config):
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
         self.config=config
         self.logger.info("Cog init.")
-        
+        self.namespaces = {}
+        '''creates Cog instance files.'''
         if os.path.exists(self.config.cog_instance_sys_file()):
             f=open(self.config.cog_instance_sys_file(),"rb")
             self.m_info=pickle.load(f)
             self.instance_id=self.m_info["m_instance_id"]
             f.close()
         else:
-            self.instance_id=self.init_instance(db_name)
+            self.instance_id=self.init_instance()
         
-        self.create_db(db_name)
-        self.db_name=db_name
-        self.table = Table(db_name,table_name,self.instance_id)
-        self.index = Index(self.table,self.config,self.logger)
-        self.store = Store(self.table,self.config,self.logger)
+        '''Create default database and table.'''
+        self.create_namespace("default")
+        self.create_table("default", "default")
     
     def init_instance(self, db_name):
         """ initiates cog instance - called the 'c instance' for the first time"""
@@ -71,27 +70,38 @@ class Cog:
         self.logger.info("done.")
         return instance_id;
 
-    def create_db(self,db_name):
-        if not os.path.exists(self.config.cog_data_dir(db_name)):
-            os.mkdir(self.config.cog_data_dir(db_name))
+    def load_namespaces(self):
+        '''load existing name spaces'''
+    
+    def create_namespace(self,namespace):
+        if not os.path.exists(self.config.cog_data_dir(namespace)):
+            os.mkdir(self.config.cog_data_dir(namespace))
+            '''add namespace to dict'''
+            self.namespaces[namespace] = {}
+        self.current_namespace = namespace
                 
-    def create_table(self, name, db_name=None):
-        if(not db_name):
-            db_name=self.db_name
-        self.table = Table(name,self.db_name,self.instance_id)
-        self.store = Store(self.table,self.config,self.logger)
-        self.index = Index(self.table,self.config,self.logger)
+    def create_table(self, name, namespace):
+        table = Table(name,namespace,self.instance_id)
+        store = Store(table,self.config,self.logger)
+        index = Index(table,self.config,self.logger)
+        self.namespaces[namespace] = {}
+        self.namespaces[namespace][table] = (index,store) 
+        self.current_namespace = namespace
+        self.current_table = table
              
     def put(self,data):
         assert type(data[0]) is str, "Only string type is supported is currently supported."
         assert type(data[1]) is str, "Only string type is supported is currently supported."
-        position=self.store.save(data)
-        self.index.put(data[0],position,self.store)
+        ts = self.namespaces[self.current_namespace][self.current_table]
+        position=ts[1].save(data)
+        ts[0].put(data[0],position,ts[1])
         
     def get(self,key):
-        return self.index.get(key, self.store)
+        ts = self.namespaces[self.current_namespace][self.current_table]
+        return ts[0].get(key, ts[1])
     
     def delete(self, key):
-        self.index.delete(key,self.store)
+        ts = self.namespaces[self.current_namespace][self.current_table]
+        ts[0].delete(key,ts[1])
         
         
