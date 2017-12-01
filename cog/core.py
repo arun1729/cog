@@ -30,8 +30,7 @@ class Index:
         self.logger = logger
         self.table = table
         self.config = config
-        self.name = self.config.cog_index(
-            table.db_name, table.name, table.db_instance_id, index_id)
+        self.name = self.config.cog_index(table.db_name, table.name, table.db_instance_id, index_id)
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
             print "creating index..."
@@ -44,9 +43,10 @@ class Index:
             f.write(b''.join(e_blocks))
             self.file_limit = f.tell()
             f.close()
-            self.logger.info("new index with capacity" +
-                             str(config.INDEX_CAPACITY) + "created: " + self.name)
+            self.logger.info("new index with capacity" + str(config.INDEX_CAPACITY) + "created: " + self.name)
             print "Done."
+        else:
+            logger.info("Index: "+self.name+" already exists.")
 
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
@@ -54,12 +54,13 @@ class Index:
         self.load = 0
         self.db_mem.seek(0)
         current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
+        #computes current load on index file.
         while(current_block != ''):
             if(current_block != self.empty_block):
                 self.load += 1
             current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
 
-        self.db_mem.seek(0)
+        # self.db_mem.seek(0)
 
     def get_load(self):
         return self.load
@@ -140,6 +141,9 @@ class Index:
         self.load -= 1
         return True
 
+    def flush(self):
+        self.db_mem.flush()
+
 
 class Store:
 
@@ -199,19 +203,20 @@ class Indexer:
         self.index_id = 0
         self.index_list = []
         self.index_list.append(Index(table, config, logger, self.index_id))
-        self.live_index_id = self.index_id
-        self.live_index_usage = self.index_list[self.live_index_id].get_load()
+        self.live_index = self.index_list[self.index_id]
+        self.live_index_usage = self.live_index.get_load()
 
     def put(self, key, store_position, store):
         print self.live_index_usage * 100.0 / self.config.INDEX_CAPACITY
         if(self.live_index_usage * 100 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR):
+            self.live_index.flush()
             self.index_id += 1
             self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
             self.index_list.append(Index(self.table, self.config, self.logger, self.index_id))
-            self.live_index_id = self.index_id
-            self.live_index_usage = self.index_list[self.live_index_id].get_load()
+            self.live_index = self.index_list[self.index_id]
+            self.live_index_usage = self.live_index.get_load()
 
-        self.index_list[self.live_index_id].put(key, store_position, store)
+        self.live_index.put(key, store_position, store)
         self.live_index_usage += 1
 
     def get(self, key, store):

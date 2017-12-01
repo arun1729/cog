@@ -26,16 +26,16 @@ class TestIndexer(unittest.TestCase):
         store = Store(table,config,logger)
         indexer = Indexer(table,config,logger)
 
-        for i in range(10000):
+        for i in range(1000000):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = (key,value)
 
             position=store.save(expected_data)
             indexer.put(expected_data[0],position,store)
-        # returned_data=indexer.get(expected_data[0], store)
-        # print "indexer retrieved data: "+str(returned_data)
-        # self.assertEqual(None, returned_data)
+            returned_data=indexer.get(expected_data[0], store)
+            print "indexer retrieved data: "+str(returned_data)
+            self.assertEqual(expected_data, returned_data[1])
 
 
 if __name__ == '__main__':
