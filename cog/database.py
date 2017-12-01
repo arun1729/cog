@@ -26,11 +26,11 @@ from block import Block
 
 class Compaction:
     '''
-    Read index file, record records stored in 'store' and write out new store file. Update index with position in store. 
+    Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
     '''
 
 class Cog:
-    
+
     def __init__(self,config):
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
@@ -44,12 +44,12 @@ class Cog:
             self.instance_id=self.m_info["m_instance_id"]
             f.close()
         else:
-            self.instance_id=self.init_instance()
-        
+            self.instance_id=self.init_instance("default")
+
         '''Create default database and table.'''
         self.create_namespace("default")
         self.create_table("default", "default")
-    
+
     def init_instance(self, db_name):
         """ initiates cog instance - called the 'c instance' for the first time"""
 #
@@ -72,36 +72,34 @@ class Cog:
 
     def load_namespaces(self):
         '''load existing name spaces'''
-    
+
     def create_namespace(self,namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
             os.mkdir(self.config.cog_data_dir(namespace))
             '''add namespace to dict'''
             self.namespaces[namespace] = {}
         self.current_namespace = namespace
-                
+
     def create_table(self, name, namespace):
         table = Table(name,namespace,self.instance_id)
         store = Store(table,self.config,self.logger)
         index = Index(table,self.config,self.logger)
         self.namespaces[namespace] = {}
-        self.namespaces[namespace][table] = (index,store) 
+        self.namespaces[namespace][table] = (index,store)
         self.current_namespace = namespace
         self.current_table = table
-             
+
     def put(self,data):
         assert type(data[0]) is str, "Only string type is supported is currently supported."
         assert type(data[1]) is str, "Only string type is supported is currently supported."
         ts = self.namespaces[self.current_namespace][self.current_table]
         position=ts[1].save(data)
         ts[0].put(data[0],position,ts[1])
-        
+
     def get(self,key):
         ts = self.namespaces[self.current_namespace][self.current_table]
         return ts[0].get(key, ts[1])
-    
+
     def delete(self, key):
         ts = self.namespaces[self.current_namespace][self.current_table]
         ts[0].delete(key,ts[1])
-        
-        
