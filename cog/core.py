@@ -70,6 +70,9 @@ class Index:
         current_block = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN].strip()
 
         while(current_block != self.empty_block):
+            if(current_block == ''):
+                self.logger.info("Store EOF reached! Record not found.")
+                return None
             record = store.read(int(current_block))
             if(record[1][0] == key):
                 self.logger.debug("Updating index: " + self.name)
@@ -110,6 +113,9 @@ class Index:
                                                  index_position + self.config.INDEX_BLOCK_LEN]
             if(current_store_position == ''):
                 self.logger.info("Index EOF reached! Key not found.")
+                return None
+            if(current_store_position == self.empty_block):
+                self.logger.info("Reached empty block! Key not found.")
                 return None
             record = store.read(int(current_store_position))
             if(record == ''):
@@ -173,6 +179,7 @@ class Store:
         return store_position
 
     def read(self, position):
+        print position
         self.store_file.seek(position)
         tombstone = self.store_file.read(1)
         c = self.store_file.read(1)
