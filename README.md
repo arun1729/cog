@@ -3,20 +3,26 @@
 #
 Cog is a persistent key/value micro database written in Python. Cog is simple, easy and fast. 
 
-## API
+## Cog is easy to use
 ```
 
 cog = Cog('path/to/dbdir')
 
 cog.create_table('table_name')
 
-put(record)
+cog.put(record)
 
-get(key)
+cog.get(key)
 
-delete()
+cog.delete(key)
 
 ```
 
+## Installing Cog
+```
+pip install cogdb
+```
 
 Every record inserted into Cog is directly persisted on to disk. Cog stores and retreives data based on hash values of keys, therfore it can perform fast look ups (O(1) Average case). Cog also provides O(1) (Average case) inserts. It is written purely in Python so it has no dependencies outside. 
+
+## Prefomance
