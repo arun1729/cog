@@ -73,12 +73,11 @@ class Index:
         self.logger.debug("PUT: probe position: "+str(probe_position)+" value = "+data_at_prob_position)
         looped_back=False
         while(data_at_prob_position != self.empty_block):
+            if(looped_back):# Terminating condition
+                if(probe_position >= orig_position or data_at_prob_position == ''):
+                    self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
+                    return None
             if(data_at_prob_position == ''):#check if EOF reached.
-                if(looped_back):
-                    if(probe_position >= orig_position or data_at_prob_position == ''):
-                        self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
-                        return None
-                else:
                     probe_position=0
                     data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
                     looped_back=True
@@ -93,11 +92,10 @@ class Index:
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                print "PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position         
+                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position)        
         # if an free index block is found, then write key to at that position.
         self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = str(store_position).rjust(self.config.INDEX_BLOCK_LEN)
         self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position))
-        # need to handle capacity overflow condition
         self.load += 1
         return probe_position
 
