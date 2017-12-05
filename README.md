@@ -1,6 +1,5 @@
 ![ScreenShot](/cog-logo.png)
 
-#
 Cog is a persistent key/value micro database written in Python. Cog is simple, easy and fast. 
 
 ## Cog is easy to use
