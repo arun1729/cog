@@ -70,29 +70,30 @@ class Index:
         orig_position = self.get_index(key)
         probe_position = orig_position
         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
-        self.logger.debug("PUT: probe position @1: "+str(probe_position)+" value = "+data_at_prob_position)
+        self.logger.debug("PUT: probe position: "+str(probe_position)+" value = "+data_at_prob_position)
         looped_back=False
         while(data_at_prob_position != self.empty_block):
-            if(looped_back):
-                if(data_at_prob_position == '' or probe_position >= orig_position):
-                    self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
-                    return None
-            else:
-                probe_position=0
-                data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
-                looped_back=True
-                self.logger.debug("PUT: Updated probe position @2: "+str(probe_position)+" value = "+data_at_prob_position)
-                continue
+            if(data_at_prob_position == ''):#check if EOF reached.
+                if(looped_back):
+                    if(probe_position >= orig_position or data_at_prob_position == ''):
+                        self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
+                        return None
+                else:
+                    probe_position=0
+                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
+                    looped_back=True
+                    self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+data_at_prob_position)
+                    continue
             
             record = store.read(int(data_at_prob_position))
-            print "put store record check: "+str(record)
+#             print "put store record check: "+str(record)
             if(record[1][0] == key):
                 self.logger.debug("PUT: Updating index: " + self.name)
                 break
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                print "PUT: Updated probe position @3: "+str(probe_position)+" value = "+data_at_prob_position         
+                print "PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position         
         # if an free index block is found, then write key to at that position.
         self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = str(store_position).rjust(self.config.INDEX_BLOCK_LEN)
         self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position))
@@ -128,17 +129,15 @@ class Index:
                 self.logger.debug("GET: skipping empty block")
                 continue
             if(data_at_probe_position == ''):
-                if(looped_back):
+                if(not looped_back):
                     probe_position = 0
                     data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
                     self.logger.debug("GET: probe position @2: "+str(probe_position)+" value = "+data_at_probe_position)
+                    looped_back = True
                     continue
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
                     return None
-#             if(data_at_probe_position == self.empty_block):
-#                 self.logger.info("Reached empty block! Key not found in Store.")
-#                 return None
             record = store.read(int(data_at_probe_position))
             if(record == ''):
                 self.logger.error("Store EOF reached! Indexed record not found.")
@@ -201,7 +200,6 @@ class Store:
         return store_position
 
     def read(self, position):
-        print "read position"+str(position)
         self.store_file.seek(position)
         tombstone = self.store_file.read(1)
         c = self.store_file.read(1)
