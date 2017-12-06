@@ -34,7 +34,7 @@ class Index:
         self.name = self.config.cog_index(table.db_name, table.name, table.db_instance_id, index_id)
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
-            print "creating index..."
+            self.logger.info("creating index...")
             f = open(self.name, 'wb+')
             i = 0
             e_blocks = []
@@ -45,7 +45,6 @@ class Index:
             self.file_limit = f.tell()
             f.close()
             self.logger.info("new index with capacity" + str(config.INDEX_CAPACITY) + "created: " + self.name)
-            print "Done."
         else:
             logger.info("Index: "+self.name+" already exists.")
 
@@ -129,7 +128,7 @@ class Index:
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
                     return None
-                
+
             if(data_at_probe_position == self.empty_block):
                 probe_position += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block")
@@ -238,7 +237,7 @@ class Indexer:
     def put(self, key, store_position, store):
 
         while(True):
-            if(self.live_index.get_load() * 100 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR):
+            if(self.live_index.get_load() * 100.0 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR):
                 self.live_index.flush()
                 self.index_id += 1
                 self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
