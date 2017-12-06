@@ -120,11 +120,6 @@ class Index:
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
             self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
 
-            if(data_at_probe_position == self.empty_block):
-                probe_position += self.config.INDEX_BLOCK_LEN
-                self.logger.debug("GET: skipping empty block")
-                continue
-
             if(data_at_probe_position == ''):#EOF index
                 if(not looped_back):
                     probe_position = 0
@@ -134,6 +129,12 @@ class Index:
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
                     return None
+                
+            if(data_at_probe_position == self.empty_block):
+                probe_position += self.config.INDEX_BLOCK_LEN
+                self.logger.debug("GET: skipping empty block")
+                continue
+
             record = store.read(int(data_at_probe_position))
 
             if(record == ''):#EOF store

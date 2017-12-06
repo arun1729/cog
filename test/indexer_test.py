@@ -26,7 +26,8 @@ class TestIndexer(unittest.TestCase):
         store = Store(table,config,logger)
         indexer = Indexer(table,config,logger)
 
-        for i in range(1000):
+        max_range=1000
+        for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = (key,value)
@@ -36,6 +37,7 @@ class TestIndexer(unittest.TestCase):
             returned_data=indexer.get(expected_data[0], store)
             print "indexer retrieved data: "+str(returned_data)
             self.assertEqual(expected_data, returned_data[1])
+            print "Test progress: "+str(i*100.0/max_range)
 
 
 if __name__ == '__main__':
