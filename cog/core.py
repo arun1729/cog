@@ -83,7 +83,7 @@ class Index:
                     looped_back=True
                     self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+data_at_prob_position)
                     continue
-            
+
             record = store.read(int(data_at_prob_position))
 #             print "put store record check: "+str(record)
             if(record[1][0] == key):
@@ -92,7 +92,7 @@ class Index:
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position)        
+                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position)
         # if an free index block is found, then write key to at that position.
         self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = str(store_position).rjust(self.config.INDEX_BLOCK_LEN)
         self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position))
@@ -112,33 +112,39 @@ class Index:
         self.logger.debug("GET: Reading index: " + self.name)
         orig_position = self.get_index(key)
         probe_position = orig_position
-#         data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-#         self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
-#         record = store.read(int(data_at_probe_position))
         record = None
         looped_back=False
-        while(not record or key != record[1][0]):
-            probe_position += self.config.INDEX_BLOCK_LEN
+
+        while(True):
+
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
             self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
+
             if(data_at_probe_position == self.empty_block):
+                probe_position += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block")
                 continue
-            if(data_at_probe_position == ''):
+
+            if(data_at_probe_position == ''):#EOF index
                 if(not looped_back):
                     probe_position = 0
                     data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                    self.logger.debug("GET: probe position @2: "+str(probe_position)+" value = "+data_at_probe_position)
+                    self.logger.debug("GET: LOOP BACK: "+str(probe_position)+" value = "+data_at_probe_position)
                     looped_back = True
-                    continue
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
                     return None
             record = store.read(int(data_at_probe_position))
-            if(record == ''):
+
+            if(record == ''):#EOF store
                 self.logger.error("Store EOF reached! Indexed record not found.")
                 return None
-        return record
+
+            if(record !=None and key == record[1][0]):# found record!
+                return record
+
+            probe_position += self.config.INDEX_BLOCK_LEN
+
 
     def delete(self, key, store):
         index_position = self.get_index(key)
@@ -229,20 +235,32 @@ class Indexer:
         self.live_index = self.index_list[self.index_id]
 
     def put(self, key, store_position, store):
-        if(self.live_index.get_load() * 100 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR):
-            self.live_index.flush()
-            self.index_id += 1
-            self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
-            self.index_list.append(Index(self.table, self.config, self.logger, self.index_id))
-            self.live_index = self.index_list[self.index_id]
-            self.live_index_usage = self.live_index.get_load()
 
-        self.live_index.put(key, store_position, store)
+        while(True):
+            if(self.live_index.get_load() * 100 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR):
+                self.live_index.flush()
+                self.index_id += 1
+                self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
+                self.index_list.append(Index(self.table, self.config, self.logger, self.index_id))
+                self.live_index = self.index_list[self.index_id]
+                self.live_index_usage = self.live_index.get_load()
+
+            resp = self.live_index.put(key, store_position, store)
+
+            if(resp != None):
+                self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
+                break
 
     def get(self, key, store):
+        record = None
         for idx in self.index_list:
-            data=idx.get(key, store)
-            if(data): return data
+            self.logger.info("GET: looking in index: "+idx.name)
+            record=idx.get(key, store)
+            if(record):
+                return record
+
+        self.logger.warn("Key: "+key+ " not found in any index!")
+        return None
 
     def delete(self, key, store):
         for idx in self.index_list:

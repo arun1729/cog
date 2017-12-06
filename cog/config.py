@@ -40,6 +40,6 @@ logging_config = dict(
         },
     root = {
         'handlers': ['h'],
-        'level': logging.DEBUG,
+        'level': logging.INFO,
         },
 )
