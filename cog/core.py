@@ -112,14 +112,12 @@ class Index:
         self.logger.debug("GET: Reading index: " + self.name)
         orig_position = self.get_index(key)
         probe_position = orig_position
-        data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-        self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
-        record = store.read(int(data_at_probe_position))
-#         if(record == None):
-#             self.logger.info("Store EOF reached! Record not found.")
-#             return
+#         data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
+#         self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
+#         record = store.read(int(data_at_probe_position))
+        record = None
         looped_back=False
-        while(key != record[1][0]):
+        while(not record or key != record[1][0]):
             probe_position += self.config.INDEX_BLOCK_LEN
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
             self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
