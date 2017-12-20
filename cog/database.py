@@ -100,6 +100,13 @@ class Cog:
         ts = self.namespaces[self.current_namespace][self.current_table]
         return ts[0].get(key, ts[1])
 
+    # def scan(columns=None):
+    #     if(columns):
+    #         for c in columns:
+    #             print c
+    #     else:
+    #         print "not implemented."
+
     def delete(self, key):
         ts = self.namespaces[self.current_namespace][self.current_table]
         ts[0].delete(key,ts[1])

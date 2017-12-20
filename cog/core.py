@@ -19,7 +19,8 @@ from block import Block
 
 class Table:
 
-    def __init__(self, name, db_name, db_instance_id):
+    def __init__(self, name, db_name, db_instance_id, column_mode=False):
+        self.column_mode=column_mode
         self.name = name
         self.db_name = db_name
         self.db_instance_id = db_instance_id
@@ -115,7 +116,6 @@ class Index:
         looped_back=False
 
         while(True):
-
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
             self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
 
@@ -145,6 +145,36 @@ class Index:
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
+    '''
+        Set a store to scan.
+    '''
+    def set_itr_store(self,store):
+        self.itr_store = store
+
+    def __iter__(self):
+        self.scan_cursor = 0
+        return self
+
+'''
+    Iterates through record in itr_store.
+'''
+    def next(self):
+        if(self.scan_cursor != 0):
+            self.scan_cursor += self.config.INDEX_BLOCK_LEN
+        while(True):
+            data_at_position = self.db_mem[self.scan_cursor:self.scan_cursor + self.config.INDEX_BLOCK_LEN]
+            if(data_at_position == ''):#EOF index
+                self.logger.info("Index EOF reached! Scan terminated.")
+                raise StopIteration
+            if(data_at_position == self.empty_block):
+                self.scan_cursor += self.config.INDEX_BLOCK_LEN
+                self.logger.debug("GET: skipping empty block during iteration.")
+                continue
+            record = self.itr_store.read(int(data_at_position))
+            if(record == ''):#EOF store
+                self.logger.error("Store EOF reached! Iteration terminated.")
+                raise StopIteration
+            return record
 
     def delete(self, key, store):
         index_position = self.get_index(key)
@@ -261,6 +291,11 @@ class Indexer:
 
         self.logger.warn("Key: "+key+ " not found in any index!")
         return None
+
+    # def scan(columns):
+    #     for idx in self.index_list:
+    #         self.logger.info("GET: looking in index: "+idx.name)
+    #         record=scan_next(True)
 
     def delete(self, key, store):
         for idx in self.index_list:
