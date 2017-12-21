@@ -6,9 +6,14 @@ from cog.database import Cog
 from cog import config
 import logging
 import os
+import json
 from logging.config import dictConfig
 
 import unittest
+
+def filter(jsn):
+    d=json.loads(jsn[1])
+    return d["firstname"]
 
 class TestDB(unittest.TestCase):
 
@@ -18,7 +23,7 @@ class TestDB(unittest.TestCase):
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        scanner = cogdb.scanner()
+        scanner = cogdb.scanner(filter)
         for r in scanner:
             print r
 
