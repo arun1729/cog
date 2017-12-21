@@ -18,7 +18,7 @@ import struct
 import sys, traceback
 import uuid
 from core import Table
-from core import Index
+from core import Indexer
 from core import Store
 from block import BLOCK_LEN
 from block import Block
@@ -52,7 +52,6 @@ class Cog:
 
     def init_instance(self, db_name):
         """ initiates cog instance - called the 'c instance' for the first time"""
-#
         instance_id=str(uuid.uuid4())
         if not os.path.exists(self.config.cog_instance_sys_dir()): os.makedirs(self.config.cog_instance_sys_dir())
 
@@ -76,37 +75,45 @@ class Cog:
     def create_namespace(self,namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
             os.mkdir(self.config.cog_data_dir(namespace))
+            self.logger.info("Created new namespace: "+self.config.cog_data_dir(namespace))
             '''add namespace to dict'''
             self.namespaces[namespace] = {}
+        else:
+            self.logger.info("Using existing namespace: "+self.config.cog_data_dir(namespace))
         self.current_namespace = namespace
 
     def create_table(self, name, namespace):
         table = Table(name,namespace,self.instance_id)
         store = Store(table,self.config,self.logger)
-        index = Index(table,self.config,self.logger)
+        indexer = Indexer(table,self.config,self.logger)
         self.namespaces[namespace] = {}
-        self.namespaces[namespace][table] = (index,store)
+        self.namespaces[namespace][table] = (indexer,store)
         self.current_namespace = namespace
         self.current_table = table
+        self.current_indexer = indexer
+        self.current_store = store
 
     def put(self,data):
         assert type(data[0]) is str, "Only string type is supported is currently supported."
         assert type(data[1]) is str, "Only string type is supported is currently supported."
-        ts = self.namespaces[self.current_namespace][self.current_table]
-        position=ts[1].save(data)
-        ts[0].put(data[0],position,ts[1])
+        position=self.current_store.save(data)
+        self.current_indexer.put(data[0],position,self.current_store)
 
     def get(self,key):
-        ts = self.namespaces[self.current_namespace][self.current_table]
-        return ts[0].get(key, ts[1])
+        return self.current_indexer.get(key, self.current_store)
 
-    # def scan(columns=None):
-    #     if(columns):
-    #         for c in columns:
-    #             print c
-    #     else:
-    #         print "not implemented."
+    def scanner(self,filter=None):
+        scanner = self.current_indexer.scanner(self.current_store)
+        for r in scanner:
+            if(filter):
+                yield filter(r[1])
+            else:
+                yield r[1]
 
     def delete(self, key):
-        ts = self.namespaces[self.current_namespace][self.current_table]
-        ts[0].delete(key,ts[1])
+        self.current_indexer.delete(key, self.current_store)
+
+class QueryEngine:
+    '''
+        Implement query engine.
+    '''

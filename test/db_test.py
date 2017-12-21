@@ -13,26 +13,21 @@ import unittest
 class TestDB(unittest.TestCase):
 
     def test_db(self):
-        data = ("new super data","super new old stuff")
+        data = ('user4','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config)
-        cogdb.create_namespace("testspace")
-        cogdb.create_table("data_table", "testspace")
+        cogdb.create_namespace("test")
+        cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        print cogdb.get(data[0])
-        cogdb.delete(data[0])
-        print cogdb.get(data[0])
+        print "-->get"
+        print cogdb.get('user4')
+        scanner = cogdb.scanner()
+        for r in scanner:
+            print r
 
-
-        cogdb.create_namespace("newtestspace")
-        cogdb.create_table("data_table", "newtestspace")
-        cogdb.put(data)
-        print cogdb.get(data[0])
-        cogdb.delete(data[0])
-        print cogdb.get(data[0])
 
 if __name__ == '__main__':
     unittest.main()
-    
+
 # dictConfig(config.logging_config)
 # logger = logging.getLogger()
 #

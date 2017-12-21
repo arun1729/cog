@@ -43,9 +43,9 @@ class TestIndex2(unittest.TestCase):
                 print "Index has reached its capacity."
                 break
 
-        index.set_itr_store(store)
         c = 0
-        for r in index:
+        scanner = index.scanner(store)
+        for r in scanner:
             print r
             c += 1
         print "Total records scanned: " + str(c)

@@ -146,35 +146,25 @@ class Index:
             probe_position += self.config.INDEX_BLOCK_LEN
 
     '''
-        Set a store to scan.
+        Iterates through record in itr_store.
     '''
-    def set_itr_store(self,store):
-        self.itr_store = store
-
-    def __iter__(self):
-        self.scan_cursor = 0
-        return self
-
-'''
-    Iterates through record in itr_store.
-'''
-    def next(self):
-        if(self.scan_cursor != 0):
-            self.scan_cursor += self.config.INDEX_BLOCK_LEN
+    def scanner(self,store):
+        scan_cursor = 0
         while(True):
-            data_at_position = self.db_mem[self.scan_cursor:self.scan_cursor + self.config.INDEX_BLOCK_LEN]
+            data_at_position = self.db_mem[scan_cursor:scan_cursor + self.config.INDEX_BLOCK_LEN]
             if(data_at_position == ''):#EOF index
                 self.logger.info("Index EOF reached! Scan terminated.")
                 raise StopIteration
             if(data_at_position == self.empty_block):
-                self.scan_cursor += self.config.INDEX_BLOCK_LEN
+                scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
-            record = self.itr_store.read(int(data_at_position))
+            record = store.read(int(data_at_position))
             if(record == ''):#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
                 raise StopIteration
-            return record
+            yield record
+            scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
         index_position = self.get_index(key)
@@ -259,10 +249,28 @@ class Indexer:
         self.table = table
         self.config = config
         self.logger = logger
-        self.index_id = 0
         self.index_list = []
-        self.index_list.append(Index(table, config, logger, self.index_id))
-        self.live_index = self.index_list[self.index_id]
+        self.index_id = 0
+        self.load_indexes()
+        #if no index currenlty exist, create new live index.
+        if(len(self.index_list) == 0 ):
+            self.index_list.append(Index(table, config, logger, self.index_id))
+            self.live_index = self.index_list[self.index_id]
+
+    def load_indexes(self):
+        for f in os.listdir(self.config.cog_data_dir(self.table.db_name)):
+
+            if(self.config.INDEX in f):
+                self.logger.info("Loading index "+f)
+                id = self.config.index_id(f)
+                index = Index(self.table, self.config, self.logger, id)
+                self.index_list.append(index)
+                #make the latest index the live index.
+                if(id > self.index_id):
+                    self.index_id = id
+                    self.live_index = index
+        print "``````````````"
+
 
     def put(self, key, store_position, store):
 
@@ -292,10 +300,12 @@ class Indexer:
         self.logger.warn("Key: "+key+ " not found in any index!")
         return None
 
-    # def scan(columns):
-    #     for idx in self.index_list:
-    #         self.logger.info("GET: looking in index: "+idx.name)
-    #         record=scan_next(True)
+    def scanner(self, store):
+        for idx in self.index_list:
+            self.logger.info("SCAN: index: "+idx.name)
+            for r in idx.scanner(store):
+                yield r
+
 
     def delete(self, key, store):
         for idx in self.index_list:

@@ -39,6 +39,13 @@ class TestIndexer(unittest.TestCase):
             self.assertEqual(expected_data, returned_data[1])
             print "Test progress: "+str(i*100.0/max_range)
 
+        c = 0
+        scanner = indexer.scanner(store)
+        for r in scanner:
+            # print r
+            c += 1
+        print "Total records scanned: " + str(c)
+
 
 if __name__ == '__main__':
     unittest.main()

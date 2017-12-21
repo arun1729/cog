@@ -5,7 +5,7 @@ COG_SYS_FILE = "cogsys.c"
 STORE="-store-"
 INDEX="-index-"
 INDEX_BLOCK_LEN=10
-INDEX_CAPACITY = 100000
+INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
 
 cog_context = [COG_PATH_PREFIX,COG_HOME,COG_SYS_DIR,COG_SYS_FILE]
@@ -21,6 +21,9 @@ def cog_data_dir(db_name):
 
 def cog_index(db_name, table_name, instance_id, index_id):
     return "/".join(cog_context[0:-2]+[db_name,table_name+INDEX+instance_id+"-"+str(index_id)])
+
+def index_id(index_name):
+    return int(index_name.split("-")[-1])
 
 def cog_store(db_name, table_name, instance_id):
     return "/".join(cog_context[0:-2]+[db_name,table_name+STORE+instance_id])
@@ -40,6 +43,6 @@ logging_config = dict(
         },
     root = {
         'handlers': ['h'],
-        'level': logging.WARN,
+        'level': logging.INFO,
         },
 )
