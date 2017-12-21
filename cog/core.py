@@ -259,18 +259,15 @@ class Indexer:
 
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.table.db_name)):
-
             if(self.config.INDEX in f):
                 self.logger.info("Loading index "+f)
                 id = self.config.index_id(f)
                 index = Index(self.table, self.config, self.logger, id)
                 self.index_list.append(index)
                 #make the latest index the live index.
-                if(id > self.index_id):
+                if(id >= self.index_id):
                     self.index_id = id
                     self.live_index = index
-        print "``````````````"
-
 
     def put(self, key, store_position, store):
 

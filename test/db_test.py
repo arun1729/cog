@@ -13,13 +13,11 @@ import unittest
 class TestDB(unittest.TestCase):
 
     def test_db(self):
-        data = ('user4','{"firstname":"Hari","lastname":"seldon"}')
+        data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config)
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        print "-->get"
-        print cogdb.get('user4')
         scanner = cogdb.scanner()
         for r in scanner:
             print r
