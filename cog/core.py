@@ -13,9 +13,6 @@ import sys
 import traceback
 import uuid
 
-from block import BLOCK_LEN
-from block import Block
-
 
 class Table:
 

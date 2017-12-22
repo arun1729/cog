@@ -1,17 +1,14 @@
-from context import cog
-from cog.core import Index
 from cog.core import Store
 from cog.core import Table
 from cog.core import Indexer
-from cog import database
 from cog import config
 import logging
 import os
 from logging.config import dictConfig
 import string
 import random
-
 import unittest
+
 
 class TestIndexer(unittest.TestCase):
     def test_indexer(self):

@@ -6,28 +6,20 @@ Created on Nov 25, 2017
 
 import logging
 from logging.config import dictConfig
-import marshal
-import mmap
-from operator import pos
-from os import mkdir
 import os
 import os.path
 import pickle
 import socket
-import struct
-import sys, traceback
 import uuid
 from core import Table
 from core import Indexer
 from core import Store
-from block import BLOCK_LEN
-from block import Block
 
+# '''
+# Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
+# '''
+# class Compaction:
 
-class Compaction:
-    '''
-    Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
-    '''
 
 class Cog:
 
@@ -50,8 +42,9 @@ class Cog:
         self.create_namespace("default")
         self.create_table("default", "default")
 
+    ''' initiates cog instance - called the 'c instance' for the first time '''
     def init_instance(self, db_name):
-        """ initiates cog instance - called the 'c instance' for the first time"""
+
         instance_id=str(uuid.uuid4())
         if not os.path.exists(self.config.cog_instance_sys_dir()): os.makedirs(self.config.cog_instance_sys_dir())
 
@@ -69,8 +62,8 @@ class Cog:
         self.logger.info("done.")
         return instance_id;
 
+    '''load existing name spaces'''
     def load_namespaces(self):
-        '''load existing name spaces'''
 
     def create_namespace(self,namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
@@ -102,18 +95,13 @@ class Cog:
     def get(self,key):
         return self.current_indexer.get(key, self.current_store)
 
-    def scanner(self,filter=None):
+    def scanner(self, scan_filter=None):
         scanner = self.current_indexer.scanner(self.current_store)
         for r in scanner:
-            if(filter):
-                yield filter(r[1])
+            if scan_filter :
+                yield scan_filter(r[1])
             else:
                 yield r[1]
 
     def delete(self, key):
         self.current_indexer.delete(key, self.current_store)
-
-class QueryEngine:
-    '''
-        Implement query engine.
-    '''

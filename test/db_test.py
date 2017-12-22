@@ -1,18 +1,12 @@
-from context import cog
-from cog.core import Index
-from cog.core import Store
-from cog.core import Table
+
 from cog.database import Cog
 from cog import config
-import logging
-import os
 import json
-from logging.config import dictConfig
-
 import unittest
 
-def filter(jsn):
-    d=json.loads(jsn[1])
+
+def qfilter(jsn):
+    d = json.loads(jsn[1])
     return d["firstname"]
 
 class TestDB(unittest.TestCase):
@@ -23,7 +17,7 @@ class TestDB(unittest.TestCase):
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        scanner = cogdb.scanner(filter)
+        scanner = cogdb.scanner(qfilter)
         for r in scanner:
             print r
 
