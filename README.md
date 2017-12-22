@@ -1,6 +1,7 @@
 # ![ScreenShot](/cog-logo.png)
 
-Cog is a persistent key/value micro database written in Python. Cog is simple, easy and fast. 
+Cog is a persistent key/value and JSON database written in Python. Cog is simple, easy and fast. 
+Can uses works with raw text, JSONs and images. Cog can be used as a fast persistant key/value store. JSONs stored in Cog can be queried as columns using SQL.
 
 ## Cog is easy to use
 ```
