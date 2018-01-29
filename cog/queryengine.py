@@ -41,11 +41,18 @@ class Planner:
         where_tokens = re.split(COMMAND_LIST[2], from_tokens[1], flags=re.IGNORECASE)
 
         where_conditions = []
+        operators = []
         if len(where_tokens) > 1:
             where_conditions_str = where_tokens[1]
-            for w in re.split('AND | , | OR ', where_conditions_str, flags=re.IGNORECASE):
-                where_conditions.append(w.strip())
+            l = 0
+            for w in re.split('(AND | , | OR) ', where_conditions_str, flags=re.IGNORECASE):
+                print w
+                if l%2 == 0:
+                    where_conditions.append(w.strip())
+                else:
+                    operators.append(w.strip())
+                l += 1
         else:
             where_conditions = None
 
-        return columns, where_conditions
+        return columns, where_conditions, operators

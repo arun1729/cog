@@ -15,6 +15,7 @@ class TestQueryEngine(unittest.TestCase):
     def test_select_parser(self):
         planner = Planner(None, None)
         select_cmd = planner.get_select_command('select username from test_table where firstname = "Hari" and lastname = "Seldon"')
+        print select_cmd
         self.assertEqual(select_cmd[0], ['username'])
         self.assertEqual(select_cmd[1], ['firstname = "Hari"', 'lastname = "Seldon"'])
 
