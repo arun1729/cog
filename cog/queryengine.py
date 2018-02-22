@@ -5,7 +5,6 @@ import re
 COMMAND_LIST = ["SELECT", "FROM", "WHERE"]
 
 class Parser:
-
     def __init__(self, index, store):
         self.index = index
         self.store = store
@@ -40,7 +39,7 @@ class Parser:
         where_tokens = re.split(COMMAND_LIST[2], from_tokens[1], flags=re.IGNORECASE)
 
         where_expressions = []
-        conditions = []
+        operations = []
         if len(where_tokens) > 1:
             where_conditions_str = where_tokens[1]
             l = 0
@@ -48,22 +47,41 @@ class Parser:
                 if l%2 == 0:
                     where_expressions.append(w.strip())
                 else:
-                    conditions.append(w.strip().upper())
+                    operations.append(w.strip().upper())
                 l += 1
         else:
             where_expressions = None
 
-        return select_expression, where_expressions, conditions
+        return select_expression, where_expressions, operations
 
     def process_where_expression(self, where_expression):
-        operations = []
+        conditions = []
         for exp in where_expression:
             tokens = re.split("(IN|LIKE|BETWEEN|IS|=|<>|<=|>=|!=)", exp, flags=re.IGNORECASE)
             assert len(tokens) == 3, "Syntax error in where expression: " + str(exp)
             cleaned = []
             for t in tokens:
                 cleaned.append(t.strip())
-            operations.append(cleaned)
-        return operations
+            conditions.append(cleaned)
+        return conditions
 
         return None
+
+
+# class Query:
+#     def __init__(self, command, where, sub_query):
+#         self.select = select
+#         self.where = where
+#         self.sub_query = sub_query
+
+
+class Select:
+    def __init__(self, select_expression, table_expression, where=None, group_by=None, having=None, order_by=None, limit=None):
+        self.select_expression = select_expression
+        self.table_expression = table_expression
+
+
+class Where:
+    def __init__(self, where_expression, conditions):
+        self.where_expression = where_expression
+        self.conditions = conditions
