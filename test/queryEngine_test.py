@@ -48,7 +48,7 @@ class TestQueryEngine(unittest.TestCase):
     #     self.assertEqual(ops[1][2], '"Seldon"')
 
     def test_parser(self):
-        query_list = parse('select username, email from user_data where firstname = "Hari" and lastname = "Seldon"')
+        query_list = parse('select username, email from user_data where firstname = "Hari" and lastname = "Seldon" limit 10')
         query_list[0].select.columns, ['username', 'email']
         self.assertEqual(query_list[0].select.table_name, 'user_data')
         i = 0
@@ -58,6 +58,8 @@ class TestQueryEngine(unittest.TestCase):
 
             if i == 1: self.assertEqual(sc.prefix_op, 'AND')
             if i == 1: self.assertEqual(sc.operation, ['lastname', '=', '"Seldon"'])
+
+            print sc.limit
             i += 1
 
 if __name__ == '__main__':

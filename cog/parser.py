@@ -2,7 +2,7 @@ import re
 
 # SQL Grammar reference: https://forcedotcom.github.io/phoenix/
 
-COMMAND_LIST = ["SELECT", "FROM", "WHERE"]
+COMMAND_LIST = ["SELECT", "FROM", "WHERE", "LIMIT"]
 
 
 class Query:
@@ -17,13 +17,6 @@ class Select:
         self.table_name = table_name
         self.conditions = conditions
         self.limit = limit
-
-
-# class Where:
-#     def __init__(self, where_expression, conditional_expression):
-#         self.where_expression = where_expression
-#         self.conditional_expression = conditional_expression
-
 
 class Condition:
     def __init__(self, condition, prefix_op=None):
@@ -62,8 +55,12 @@ def process_select_statement(select_statement):
 
     conditions = []
     operators = [None] # No prefix op if only one condition exists
+    limit = None
+    limit_token = []
     if len(where_tokens) > 1:
-        where_conditions_str = where_tokens[1]
+        print where_tokens
+        limit_token = re.split(where_tokens[1], COMMAND_LIST[3], flags=re.IGNORECASE)
+        where_conditions_str = limit_token[0]
         l = 0
         for w in re.split('(AND|,|OR) ', where_conditions_str, flags=re.IGNORECASE):
             if l % 2 == 0:
@@ -73,8 +70,12 @@ def process_select_statement(select_statement):
             l += 1
     else:
         conditions = None
+        limit_token = re.split(from_tokens[1], COMMAND_LIST[3], flags=re.IGNORECASE)
 
-    return columns, table_name, conditions, operators
+    print limit_token
+    if type(limit_token) is list and len(limit_token) > 0: limit = limit_token[1]
+
+    return columns, table_name, conditions, operators, limit
 
 
 def process_where_expression(exp):
@@ -90,13 +91,13 @@ def parse(sql_statement):
     query_string_list = get_query_list(sql_statement)
     query_list = []
     for qs in query_string_list:
-        columns, table_name, conditions, operators = process_select_statement(qs)
+        columns, table_name, conditions, operators, limit = process_select_statement(qs)
         conditions_list = []
         op = 0
         for c in conditions:
             conditions_list.append(Condition(c,operators[op]))
             op += 1
-        select = Select(columns, table_name, conditions_list)
+        select = Select(columns, table_name, conditions_list, limit)
         query = Query(select)
         query_list.append(query)
 
