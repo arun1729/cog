@@ -58,9 +58,10 @@ class TestQueryEngine(unittest.TestCase):
 
             if i == 1: self.assertEqual(sc.prefix_op, 'AND')
             if i == 1: self.assertEqual(sc.operation, ['lastname', '=', '"Seldon"'])
-
-            print sc.limit
             i += 1
+
+            self.assertEqual(query_list[0].select.limit, '10')
+
 
 if __name__ == '__main__':
     unittest.main()

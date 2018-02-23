@@ -58,8 +58,7 @@ def process_select_statement(select_statement):
     limit = None
     limit_token = []
     if len(where_tokens) > 1:
-        print where_tokens
-        limit_token = re.split(where_tokens[1], COMMAND_LIST[3], flags=re.IGNORECASE)
+        limit_token = re.split(COMMAND_LIST[3], where_tokens[1], flags=re.IGNORECASE)
         where_conditions_str = limit_token[0]
         l = 0
         for w in re.split('(AND|,|OR) ', where_conditions_str, flags=re.IGNORECASE):
@@ -72,10 +71,9 @@ def process_select_statement(select_statement):
         conditions = None
         limit_token = re.split(from_tokens[1], COMMAND_LIST[3], flags=re.IGNORECASE)
 
-    print limit_token
     if type(limit_token) is list and len(limit_token) > 0: limit = limit_token[1]
 
-    return columns, table_name, conditions, operators, limit
+    return columns, table_name, conditions, operators, limit.strip()
 
 
 def process_where_expression(exp):
