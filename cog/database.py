@@ -63,7 +63,7 @@ class Cog:
         return instance_id;
 
     '''load existing name spaces'''
-    def load_namespaces(self):
+    # def load_namespaces(self):
 
     def create_namespace(self,namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
