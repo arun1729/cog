@@ -11,7 +11,7 @@ import unittest
     SELECT * FROM TEST LIMIT 1000;
 '''
 
-class TestQueryEngine(unittest.TestCase):
+class TestParser(unittest.TestCase):
 
     # def test_query_planner(self):
     #     parser = Parser(None, None)
@@ -49,10 +49,10 @@ class TestQueryEngine(unittest.TestCase):
 
     def test_parser(self):
         query_list = parse('select username, email from user_data where firstname = "Hari" and lastname = "Seldon" limit 10')
-        query_list[0].select.columns, ['username', 'email']
-        self.assertEqual(query_list[0].select.table_name, 'user_data')
+        self.assertEqual(query_list[0].command.columns, ['username', 'email'])
+        self.assertEqual(query_list[0].command.table_name, 'user_data')
         i = 0
-        for sc in query_list[0].select.conditions:
+        for sc in query_list[0].command.conditions:
             if i == 0: self.assertEqual(sc.prefix_op, None)
             if i == 0: self.assertEqual(sc.operation, ['firstname', '=', '"Hari"'])
 
@@ -60,7 +60,13 @@ class TestQueryEngine(unittest.TestCase):
             if i == 1: self.assertEqual(sc.operation, ['lastname', '=', '"Seldon"'])
             i += 1
 
-            self.assertEqual(query_list[0].select.limit, '10')
+            self.assertEqual(query_list[0].command.limit, '10')
+
+    def test_parser2(self):
+        query_list = parse(
+            'select username, email from user_data')
+        self.assertEqual(query_list[0].command.columns, ['username', 'email'])
+        self.assertEqual(query_list[0].command.table_name, 'user_data')
 
 
 if __name__ == '__main__':

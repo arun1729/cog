@@ -95,11 +95,12 @@ class Cog:
     def get(self,key):
         return self.current_indexer.get(key, self.current_store)
 
-    def scanner(self, scan_filter=None):
+    def scanner(self, sfilter=None):
         scanner = self.current_indexer.scanner(self.current_store)
         for r in scanner:
-            if scan_filter :
-                yield scan_filter(r[1])
+            print r
+            if sfilter:
+                yield sfilter.process(r[1])
             else:
                 yield r[1]
 

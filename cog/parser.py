@@ -6,9 +6,9 @@ COMMAND_LIST = ["SELECT", "FROM", "WHERE", "LIMIT"]
 
 
 class Query:
-    def __init__(self, select, sub_select=None):
-        self.select = select
-        self.sub_select = sub_select
+    def __init__(self, select, sub_command=None):
+        self.command = select
+        self.sub_command = sub_command
 
 
 class Select:
@@ -71,9 +71,9 @@ def process_select_statement(select_statement):
         conditions = None
         limit_token = re.split(from_tokens[1], COMMAND_LIST[3], flags=re.IGNORECASE)
 
-    if type(limit_token) is list and len(limit_token) > 0: limit = limit_token[1]
+    if type(limit_token) is list and len(limit_token) > 1: limit = limit_token[1].strip()
 
-    return columns, table_name, conditions, operators, limit.strip()
+    return columns, table_name, conditions, operators, limit
 
 
 def process_where_expression(exp):
@@ -92,9 +92,10 @@ def parse(sql_statement):
         columns, table_name, conditions, operators, limit = process_select_statement(qs)
         conditions_list = []
         op = 0
-        for c in conditions:
-            conditions_list.append(Condition(c,operators[op]))
-            op += 1
+        if conditions:
+            for c in conditions:
+                conditions_list.append(Condition(c,operators[op]))
+                op += 1
         select = Select(columns, table_name, conditions_list, limit)
         query = Query(select)
         query_list.append(query)
