@@ -35,6 +35,7 @@ def execute_query(query, database):
         return itertools.chain(scan_filter.get_column_names(), scanner)
 
 
+
 # def row_filter(rows, iex_filter):
 #     filtered_rows = []
 #     for row in rows:
