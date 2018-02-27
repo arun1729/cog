@@ -17,7 +17,7 @@ class TestDB(unittest.TestCase):
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        scanner = cogdb.scanner(qfilter)
+        scanner = cogdb.scanner()
         for r in scanner:
             print r
 

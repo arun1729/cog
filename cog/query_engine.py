@@ -8,7 +8,7 @@ ops = { "+": operator.add, "-": operator.sub}
 class ScanFilter:
 
     def __init__(self, col_names):
-        self.col_name = col_names
+        self.col_names = col_names
 
     def process(self, record):
         value = json.loads(record)
@@ -19,7 +19,7 @@ class ScanFilter:
 
 
 def execute_query(query, database):
-    if type(query.command) is Select:
+    if isinstance(query.command, Select):
         scanner = database.scanner(ScanFilter(query.command.columns))
         return scanner
 

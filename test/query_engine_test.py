@@ -7,13 +7,17 @@ from cog.parser import parse
 
 class TestQueryEngine(unittest.TestCase):
     def test_db(self):
-        data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config)
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
-        cogdb.put(data)
+        cogdb.put(('user100','{"firstname":"Hari","lastname":"seldon"}'))
+        cogdb.put(('user101', '{"firstname":"Adam","lastname":"Smith"}'))
+        cogdb.put(('user102', '{"firstname":"James","lastname":"Bond"}'))
 
-        print execute_query(parse("select fristname from test;")[0], cogdb)
+        rows = execute_query(parse("select firstname, lastname from test;")[0], cogdb)
+
+        for row in rows:
+            print row
 
 
 if __name__ == '__main__':

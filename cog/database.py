@@ -98,9 +98,8 @@ class Cog:
     def scanner(self, sfilter=None):
         scanner = self.current_indexer.scanner(self.current_store)
         for r in scanner:
-            print r
             if sfilter:
-                yield sfilter.process(r[1])
+                yield sfilter.process(r[1][1])
             else:
                 yield r[1]
 
