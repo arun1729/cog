@@ -3,7 +3,9 @@ import re
 # SQL Grammar reference: https://forcedotcom.github.io/phoenix/
 
 SELECT_COMMAND_LIST = ["SELECT", "FROM", "WHERE", "LIMIT"]
-CREATE_COMMAND_LIST = ["CREATE", "TABLE"]
+
+create_table_pattern = re.compile('CREATE\s+TABLE\s+(?P<tablename>(.*))', flags=re.IGNORECASE)
+add_index_pattern = re.compile('ADD\s+INDEX\s+(?P<tablename>(.*))\s+KEYS(?P<keys>(.*))', flags=re.IGNORECASE)
 
 
 class Query:
@@ -19,6 +21,7 @@ class Select:
         self.conditions = conditions
         self.limit = limit
 
+
 class Condition:
     def __init__(self, condition, prefix_op=None):
         self.operation = condition
@@ -33,9 +36,14 @@ Create table is 'IF NOT EXISTS' by default. Columns are not necessary.
 
 
 class Create:
-    def __init__(self, table_name, columns=None):
-        self.table_name = table_name
-        self.columns = columns
+    def __init__(self, tablename):
+        self.tablename = tablename
+
+
+class AddIndex:
+    def __init__(self, tablename, keys):
+        self.tablename = tablename
+        self.keys = keys
 
 
 def get_query_list(statement):
@@ -100,34 +108,44 @@ def process_where_expression(exp):
     return conditions
 
 
-#CREATE TABLE my_schema.my_table ( id BIGINT not null primary key, date DATE not null)
+#CREATE TABLE namespace.tablename;
 def process_create_statement(create_statement):
-    tokens = re.split(CREATE_COMMAND_LIST[0], create_statement, flags=re.IGNORECASE)
-    assert tokens[0] is '' or len(tokens) == 2, "Syntax error: invalid CREATE statement."
+    m = re.match(create_table_pattern, create_statement)
+    return Create(m.groupdict()["tablename"])
 
-    table_tokens = re.split(CREATE_COMMAND_LIST[1], tokens[1], flags=re.IGNORECASE)
-    assert len(table_tokens) == 2, "Syntax error: invalid CREATE statement."
 
-    columns_str = table_tokens[0]
-    columns = []
-    for c in columns_str.split(","):
-        columns.append(c.strip())
+#ADD INDEX TABLE namespace.tablename KEYS key1,key2
+def process_index_statement(index_statement):
+    m = re.match(add_index_pattern, index_statement)
+    meta = m.groupdict()
+    print meta
+    keys = []
+    for k in meta["keys"].strip().split(","):
+        keys.append(k.strip())
+    return AddIndex(meta["tablename"], keys)
 
 
 def parse(sql_statement):
     query_string_list = get_query_list(sql_statement)
     query_list = []
     for qs in query_string_list:
-        columns, table_name, conditions, operators, limit = process_select_statement(qs)
-        conditions_list = []
-        op = 0
-        if conditions:
-            for c in conditions:
-                conditions_list.append(Condition(c,operators[op]))
-                op += 1
-        select = Select(columns, table_name, conditions_list, limit)
-        query = Query(select)
-        query_list.append(query)
+        qs = re.sub(r'\s+', ' ', qs) #remove multiple spaces
+        if qs.upper().startswith(SELECT_COMMAND_LIST[0]) :
+            columns, table_name, conditions, operators, limit = process_select_statement(qs)
+            conditions_list = []
+            op = 0
+            if conditions:
+                for c in conditions:
+                    conditions_list.append(Condition(c,operators[op]))
+                    op += 1
+            select = Select(columns, table_name, conditions_list, limit)
+            query = Query(select)
+            query_list.append(query)
+        elif qs.upper().startswith("CREATE"):
+            query_list.append(process_create_statement(qs))
+        elif qs.upper().startswith("ADD"):
+            if "INDEX" in qs.upper():
+                query_list.append(query_list.append(process_index_statement(qs)))
 
     return query_list
 

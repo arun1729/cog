@@ -13,27 +13,6 @@ import unittest
 
 class TestParser(unittest.TestCase):
 
-    # def test_query_planner(self):
-    #     parser = Parser(None, None)
-    #     query_list = parser.get_query_list('select username from test_table;')
-    #     self.assertEqual(query_list[0], 'select username from test_table')
-    #
-    #     query_list = parser.get_query_list('select username from test_table; select username, email from test_table')
-    #     self.assertEqual(query_list[0], 'select username from test_table')
-    #     self.assertEqual(query_list[1].strip(), 'select username, email from test_table')
-    #
-    # def test_select_parser(self):
-    #     parser = Parser(None, None)
-    #     select_cmd = parser.process_select_statement('select username from test_table where firstname = "Hari" and lastname = "Seldon"')
-    #     self.assertEqual(select_cmd[0], ['username'])
-    #     self.assertEqual(select_cmd[1], ['firstname = "Hari"', 'lastname = "Seldon"'])
-    #
-    # def test_select_parser_multiple_columns(self):
-    #     parser = Parser(None, None)
-    #     columns, where_expression, conditions = parser.process_select_statement('select username, email from user_data where firstname = "Hari" and lastname = "Seldon"')
-    #     self.assertEqual(columns, ['username','email'])
-    #     self.assertEqual(where_expression, ['firstname = "Hari"', 'lastname = "Seldon"'])
-    #     self.assertEqual(conditions,['AND'])
     #
     # def test_select_aggregate(self):
     #     parser = Parser(None, None)
@@ -47,7 +26,7 @@ class TestParser(unittest.TestCase):
     #     self.assertEqual(ops[1][1], '=')
     #     self.assertEqual(ops[1][2], '"Seldon"')
 
-    def test_parser(self):
+    def test_select(self):
         query_list = parse('select username, email from user_data where firstname = "Hari" and lastname = "Seldon" limit 10')
         self.assertEqual(query_list[0].command.columns, ['username', 'email'])
         self.assertEqual(query_list[0].command.table_name, 'user_data')
@@ -62,11 +41,20 @@ class TestParser(unittest.TestCase):
 
             self.assertEqual(query_list[0].command.limit, '10')
 
-    def test_parser2(self):
+    def test_select2(self):
         query_list = parse(
             'select username, email from user_data')
         self.assertEqual(query_list[0].command.columns, ['username', 'email'])
         self.assertEqual(query_list[0].command.table_name, 'user_data')
+
+    def test_create(self):
+        commands = parse('create table userbase')
+        self.assertEqual(commands[0].tablename, 'userbase')
+
+    def test_addindex(self):
+        commands = parse('add index userbase keys username, userid')
+        self.assertEqual(commands[0].tablename, 'userbase')
+        self.assertEqual(commands[0].keys, ["username", "userid"])
 
 
 if __name__ == '__main__':
