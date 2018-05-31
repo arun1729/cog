@@ -28,11 +28,11 @@ class TestQueryEngine(unittest.TestCase):
         cogdb.put(('user102', '{"firstname":"James","lastname":"Bond"}'))
 
         rows = execute_query(parse("select * from test;")[0], cogdb)
-
-
-
         for row in rows:
             print row
+
+    def test_create_table(self):
+        
 
 
 if __name__ == '__main__':
