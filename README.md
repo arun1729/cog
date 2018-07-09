@@ -1,28 +1,37 @@
 # ![ScreenShot](/cog-logo.png)
 
-Cog is a persistent key/value and JSON database written in Python. Cog is simple, easy and fast. 
-Can uses works with raw text, JSONs and images. Cog can be used as a fast persistant key/value store. JSONs stored in Cog can be queried as columns using SQL.
-
-## Cog is easy to use
-```
-
-cog = Cog('path/to/dbdir')
-
-cog.create_table('table_name')
-
-cog.put(record)
-
-cog.get(key)
-
-cog.delete(key)
-
-```
 
 ## Installing Cog
 ```
 pip install cogdb
+
 ```
 
-Every record inserted into Cog is directly persisted on to disk. Cog stores and retreives data based on hash values of keys, therfore it can perform fast look ups (O(1) Average case). Cog also provides O(1) (Average case) inserts. It is written purely in Python so it has no dependencies outside. 
+Cog is a simple key value store based on persistent hashmap. Every record inserted into Cog is directly persisted on to disk. Cog stores and retrieves data based on hash values of keys, therefore it can perform fast look ups (O(1) Average case). Cog also provides O(1) (Average case) inserts. It is written purely in Python so it has no complex dependencies.
 
-## Prefomance
+
+## Cog is easy to use
+```
+
+from cog.database import Cog
+
+cogdb = Cog('path/to/dbdir')
+
+cogdb.create_namespace("my_namespace")
+
+cogdb.create_table("new_db", "my_namespace")
+
+cogdb.put(('key','val'))
+
+cogdb.get('key')
+
+cogdb.put(('key2','val2'))
+
+scanner = cogdb.scanner()
+for r in scanner:
+    print r
+
+cogdb.delete('key1')
+
+```
+
