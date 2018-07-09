@@ -14,6 +14,8 @@ import uuid
 from core import Table
 from core import Indexer
 from core import Store
+import config as cfg
+
 
 # '''
 # Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
@@ -23,7 +25,9 @@ from core import Store
 
 class Cog:
 
-    def __init__(self,config):
+    def __init__(self, db_path=None, config=cfg):
+        if not db_path:
+            config.COG_PATH_PREFIX = db_path
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
         self.config=config

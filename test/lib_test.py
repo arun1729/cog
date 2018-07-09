@@ -1,7 +1,4 @@
-
 from cog.database import Cog
-from cog import config
-import json
 import unittest
 
 
@@ -9,17 +6,15 @@ def qfilter(jsn):
     d = json.loads(jsn[1])
     return d["firstname"]
 
-class TestDB(unittest.TestCase):
+class TestLib(unittest.TestCase):
 
     def test_db(self):
-        data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
-        cogdb = Cog(config)
+        data = ('testKey','testVal')
+        cogdb = Cog("~/temp/test")
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        scanner = cogdb.scanner()
-        for r in scanner:
-            print r
+        self.assertEqual(cogdb.get("testKey"), ('0', ('testKey', 'testVal')))
 
 
 if __name__ == '__main__':
