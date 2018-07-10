@@ -1,3 +1,4 @@
+# Cog - A persistent hashtable implemented purely in Python.
 # ![ScreenShot](/cog-logo.png)
 
 
