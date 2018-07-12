@@ -1,12 +1,10 @@
-from context import cog
-from cog.core import Index
 from cog.core import Store
 from cog.core import Table
 from cog.core import Indexer
-from cog import database
 from cog import config
 import logging
 import os
+import shutil
 from logging.config import dictConfig
 import string
 import random
@@ -14,13 +12,24 @@ import timeit
 import unittest
 import matplotlib.pyplot as plt
 
+
 #!!! clean namespace before running test.
 #need OPS/s
 #read, ops/s: 16784.0337416
+
+DIR_NAME = "TestIndexerPerf"
+
+
 class TestIndexerPerf(unittest.TestCase):
+
+    def test_aaa_before_all_tests(self):
+        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
+            os.mkdir("/tmp/" + DIR_NAME + "/")
+            os.mkdir("/tmp/"+DIR_NAME+"/perf_ns/")
+
+        config.COG_HOME = DIR_NAME
+
     def test_indexer(self):
-        if (not os.path.exists("/tmp/cog-test/perf_ns/")):
-            os.mkdir("/tmp/cog-test/perf_ns/")
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -54,6 +63,11 @@ class TestIndexerPerf(unittest.TestCase):
         plt.plot(insert_perf)
         plt.savefig("test.png")
         print "ops/s: "+str(max_range/total_seconds)
+
+    def test_zzz_after_all_tests(self):
+        shutil.rmtree("/tmp/"+DIR_NAME)
+        print "*** deleted test data."
+
 
 if __name__ == '__main__':
     unittest.main()

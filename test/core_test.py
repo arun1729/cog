@@ -3,19 +3,28 @@ from cog.core import Index
 from cog.core import Store
 from cog.core import Table
 from cog.core import Indexer
-from cog import database
 from cog import config
 import logging
 import os
 from logging.config import dictConfig
+import shutil
 
 import unittest
 
+DIR_NAME = "TestCore"
+
+
 class TestCore(unittest.TestCase):
 
+    def test_aaa_before_all_tests(self):
+        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
+            os.mkdir("/tmp/" + DIR_NAME + "/")
+            os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
+
+        config.COG_HOME = DIR_NAME
+
     def test_put_get(self):
-        if (not os.path.exists("/tmp/cog-test/test_table/")):
-            os.mkdir("/tmp/cog-test/test_table/")
+
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -23,9 +32,9 @@ class TestCore(unittest.TestCase):
         expected_data = ("new super data","super new old stuff")
 
         table = Table("testdb","test_table","test_xcvzdfsadx")
-
-        store = Store(table,config,logger)
-        index = Index(table,config,logger)
+        print config.COG_HOME
+        store = Store(table, config, logger)
+        index = Index(table, config, logger)
 
 
         position=store.save(expected_data)
@@ -40,8 +49,6 @@ class TestCore(unittest.TestCase):
         self.assertEqual(expected_data, returned_data[1])
 
     def test_delete(self):
-        if (not os.path.exists("/tmp/cog-test/test_table/")):
-            os.mkdir("/tmp/cog-test/test_table/")
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -67,8 +74,6 @@ class TestCore(unittest.TestCase):
         self.assertEqual(None, returned_data)
 
     def test_indexer(self):
-        if (not os.path.exists("/tmp/cog-test/test_table/")):
-            os.mkdir("/tmp/cog-test/test_table/")
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -92,6 +97,9 @@ class TestCore(unittest.TestCase):
         print "indexer retrieved data: "+str(returned_data)
         self.assertEqual(None, returned_data)
 
+    def test_zzz_after_all_tests(self):
+        shutil.rmtree("/tmp/"+DIR_NAME)
+        print "*** deleted test data."
 
 if __name__ == '__main__':
     unittest.main()

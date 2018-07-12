@@ -4,16 +4,25 @@ from cog.core import Indexer
 from cog import config
 import logging
 import os
+import shutil
 from logging.config import dictConfig
 import string
 import random
 import unittest
 
+DIR_NAME = "TestIndexer"
+
 
 class TestIndexer(unittest.TestCase):
-    def test_indexer(self):
-        if (not os.path.exists("/tmp/cog-test/test_table/")):
-            os.mkdir("/tmp/cog-test/test_table/")
+
+    def test_aaa_before_all_tests(self):
+        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
+            os.mkdir("/tmp/" + DIR_NAME + "/")
+            os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
+
+        config.COG_HOME = DIR_NAME
+
+    def test_indexer_put_get(self):
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -42,6 +51,10 @@ class TestIndexer(unittest.TestCase):
             # print r
             c += 1
         print "Total records scanned: " + str(c)
+
+    def test_zzz_after_all_tests(self):
+        shutil.rmtree("/tmp/"+DIR_NAME+"/")
+        print "*** deleted test data: " + "/tmp/"+DIR_NAME
 
 
 if __name__ == '__main__':

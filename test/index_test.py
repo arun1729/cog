@@ -1,23 +1,30 @@
-from context import cog
 from cog.core import Index
 from cog.core import Store
 from cog.core import Table
-from cog.core import Indexer
-from cog import database
 from cog import config
 import logging
 import os
+import shutil
 from logging.config import dictConfig
 import random
 import string
 
 import unittest
 
+
+DIR_NAME = "TestIndex2"
+
+
 class TestIndex2(unittest.TestCase):
 
+    def test_aaa_before_all_tests(self):
+        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
+            os.mkdir("/tmp/" + DIR_NAME + "/")
+            os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
+
+        config.COG_HOME = DIR_NAME
+
     def test_put_get(self):
-        if (not os.path.exists("/tmp/cog-test/test_table/")):
-            os.mkdir("/tmp/cog-test/test_table/")
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -50,6 +57,9 @@ class TestIndex2(unittest.TestCase):
             c += 1
         print "Total records scanned: " + str(c)
 
+    def test_zzz_after_all_tests(self):
+        shutil.rmtree("/tmp/"+DIR_NAME)
+        print "*** deleted test data."
 
 if __name__ == '__main__':
     unittest.main()
