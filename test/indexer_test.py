@@ -23,7 +23,7 @@ class TestIndexer(unittest.TestCase):
         store = Store(table,config,logger)
         indexer = Indexer(table,config,logger)
 
-        max_range=1000
+        max_range=100
         for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
