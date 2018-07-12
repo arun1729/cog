@@ -1,3 +1,4 @@
+[![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb)
 # Cog - A persistent hashtable implemented purely in Python.
 # ![ScreenShot](/cog-logo.png)
 
