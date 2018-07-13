@@ -28,6 +28,7 @@ class TestIndexerPerf(unittest.TestCase):
             os.mkdir("/tmp/"+DIR_NAME+"/perf_ns/")
 
         config.COG_HOME = DIR_NAME
+        config.INDEX_CAPACITY = 100000
 
     def test_indexer(self):
 
