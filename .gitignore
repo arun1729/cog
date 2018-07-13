@@ -2,3 +2,8 @@ cog.egg-info
 *.pyc
 cogdb.egg-info
 dist
+.idea/
+.project
+.pydevproject
+build/
+test.png
