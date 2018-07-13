@@ -45,14 +45,14 @@ cogdb.delete('key1')
 
 ## Config
 
-If no config is given while creating a Cog instance, it will use the defaults:
+If no config is provided while creating a Cog instance, it will use the defaults:
 
 ```
 COG_PATH_PREFIX = "/tmp"
 COG_HOME = "cog-test"
 ```
 
-### Example config
+### Example updating config
 
 ```python
 from cog import config
@@ -76,7 +76,7 @@ INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
 ```
 
-Default index capacity of 2000 is on the lower end, it is intend for light weight use Cog such as hash data structure.
+Default index capacity of 2000 is on the lower end, it is intend for light usage of Cog such as using it as a hash-table data structure.
 For larger indexing use case, INDEX_CAPACITY should be set to larger number otherwise it could lead to too many open index files.
 
 ## Performance
@@ -87,3 +87,9 @@ Put and Get calls performance:
 
 The perf test script is included with the tests: insert_bench.py
 
+INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
+Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
+
+#### Put performance
+
+![Put Perf](put_perf.jpg)
