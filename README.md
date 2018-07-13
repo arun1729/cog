@@ -1,6 +1,6 @@
 [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Cog - A persistent hashtable implemented purely in Python.
+# Cog - a key/value store implemented purely in Python.
 # ![ScreenShot](/cog-logo.png)
 
 
@@ -9,7 +9,9 @@
 pip install cogdb
 ```
 
-Cog is a simple key value store based on persistent hashmap. Every record inserted into Cog is directly persisted on to disk. Cog stores and retrieves data based on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog also provides fast (O(1) avg) inserts. It is written purely in Python so it has no complex dependencies.
+Cog is a simple, fast key-value store based on persistent hash tables. Cog is ideal for Python projects that does not require a full featured databases. 
+Every record inserted into Cog is directly persisted on to disk. Cog stores and retrieves data based on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog also provides fast (O(1) avg) inserts. 
+It is written purely in Python so it has no dependencies other than Python standard library.
 
 
 ## Cog is easy:
@@ -46,7 +48,7 @@ cogdb.delete('key1')
 
 ## Config
 
-If no config is provided while creating a Cog instance, it will use the defaults:
+If no config is provided when creating a Cog instance, it will use the defaults:
 
 ```
 COG_PATH_PREFIX = "/tmp"
@@ -72,19 +74,19 @@ for r in scanner:
 ### Advance config
 
 ```
-INDEX_BLOCK_LEN=10
+INDEX_BLOCK_LEN = 10
 INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
 ```
 
 Default index capacity of 2000 is on the lower end, it is intend for light usage of Cog such as using it as a hash-table data structure.
-For larger indexing use case, INDEX_CAPACITY should be set to larger number otherwise it could lead to too many open index files.
+For larger indexing use case, INDEX_CAPACITY should be set to larger number otherwise it will lead to too many open index files.
 
 ## Performance
 
 Put and Get calls performance:
 
-> ops/s: 15685.4110073
+> ops/second: 15685
 
 The perf test script is included with the tests: insert_bench.py
 
