@@ -90,6 +90,6 @@ The perf test script is included with the tests: insert_bench.py
 INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
 Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
 
-#### Put performance
+#### Put performance profile
 
-![Put Perf](put_perf.jpg)
+![Put Perf](put_perf.png)
