@@ -15,7 +15,7 @@ class TestLib(unittest.TestCase):
 
     def test_db(self):
         data = ('testKey','testVal')
-        cogdb = Cog("/tmp/"+DIR_NAME+"/test/")
+        cogdb = Cog("/tmp/"+DIR_NAME+"/test")
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)

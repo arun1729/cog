@@ -26,7 +26,7 @@ import config as cfg
 class Cog:
 
     def __init__(self, db_path=None, config=cfg):
-        if not db_path:
+        if db_path is not None:
             config.COG_PATH_PREFIX = db_path
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
