@@ -27,7 +27,7 @@ class Cog:
 
     def __init__(self, db_path=None, config=cfg):
         if db_path is not None:
-            config.COG_PATH_PREFIX = db_path
+            config.CUSTOM_COG_DB_PATH = db_path
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
         self.config=config

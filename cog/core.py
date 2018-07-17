@@ -1,17 +1,9 @@
 import logging
-from logging.config import dictConfig
 import marshal
 import mmap
-from operator import pos
-from os import mkdir
 import os
 import os.path
-import pickle
-import socket
-import struct
 import sys
-import traceback
-import uuid
 
 
 class Table:

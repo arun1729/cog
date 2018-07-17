@@ -26,7 +26,7 @@ class TestDB(unittest.TestCase):
 
     def test_db(self):
         data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
-        cogdb = Cog(config)
+        cogdb = Cog(config=config)
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)

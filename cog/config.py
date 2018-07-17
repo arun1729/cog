@@ -7,10 +7,18 @@ INDEX="-index-"
 INDEX_BLOCK_LEN=10
 INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
+##### CUSTOM COG DB PATH #####
+CUSTOM_COG_DB_PATH=None
 
+
+def cog_db_path():
+    if CUSTOM_COG_DB_PATH:
+        return CUSTOM_COG_DB_PATH
+    else:
+        return "/".join([COG_PATH_PREFIX,COG_HOME])
 
 def cog_context():
-    return [COG_PATH_PREFIX,COG_HOME,COG_SYS_DIR,COG_SYS_FILE]
+    return [cog_db_path(), COG_SYS_DIR,COG_SYS_FILE]
 
 
 def cog_instance_sys_file():
