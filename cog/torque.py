@@ -42,22 +42,30 @@ class Graph:
 
     def __hop(self, direction):
         visit_verts = {}
-        print "before hop ****"
-        print self.vertices
+        #print "before hop **** "+direction
+        #print self.vertices
         for cog in self.cogs:
             for v in self.vertices.values():
+                meta = {}
+                for key in v:
+                    if key != "id":
+                        meta[key] = v[key]
                 if(direction == "out"):
                     record = cog.get(out_nodes(v["id"]))
                 else:
                     record = cog.get(in_nodes(v["id"]))
                 if record:
-                    for vx in ast.literal_eval(record[1][1]):
-                        self.vertices[vx] = {"id" : vx }
-                        visit_verts[vx] = self.vertices[vx]
+                    for v_hop in ast.literal_eval(record[1][1]):
+                        # if v_hop not in self.vertices:
+                        #     self.vertices[v_hop] = {"id" : v_hop }
+                        # visit_verts[v_hop] = self.vertices[v_hop]
+                        visit_verts[v_hop] = {"id" : v_hop }
+                        visit_verts[v_hop].update(meta)
+
         # discard other vertices and keep only visited verts
         self.vertices = visit_verts
-        print "after hop ****"
-        print self.vertices
+        #print "after hop ****" + direction
+        #print self.vertices
 
     def tag(self, tag_name):
         tagged_verts = {}
@@ -66,8 +74,8 @@ class Graph:
             tagged_verts[v["id"]][tag_name] = v["id"]
 
         self.vertices = tagged_verts
-        print "*** TAG"
-        print self.vertices
+        #print "*** TAG: "+tag_name
+        #print self.vertices
         return self
 
     def count(self):

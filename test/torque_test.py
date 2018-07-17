@@ -23,6 +23,9 @@ DIR_NAME = "TorqueTest"
 # // Finds all things dani points at on the status linkage, given from a separate query path.
 # // Result is {"id": "cool_person", "pred": "<status>"}
 # g.V("<dani>").Out(g.V("<status>"), "pred").All()
+
+#https://docs.janusgraph.org/latest/gremlin.html
+
 class TorqueTest(unittest.TestCase):
 
     def test_aaa_before_all_tests(self):
@@ -41,8 +44,14 @@ class TorqueTest(unittest.TestCase):
         g = Graph(graph_name="people", cog_dir="/tmp/graph")
         #print g.v("<alice>").out().count()
         #print g.v("<bob>").out().tag("source").all()
-        print g.v("<bob>").out().tag("source").inc().tag("target").all()
+        #print g.v("<bob>").out().tag("source").out().tag("target").all()
+        #print g.v("<bob>").out().tag("source").inc().tag("target").all()
 
+        #print g.v("<fred>").out().tag("source").inc().tag("target").all()
+
+        # repeat loops are not included, it seems to be there in cayley db in the following
+        # print g.v("<fred>").out().tag("source").out().tag("target").all()
+        print g.v("<fred>").out().tag("source").inc().out().tag("target").all()
 
     def test_zzz_after_all_tests(self):
         shutil.rmtree("/tmp/"+DIR_NAME)
