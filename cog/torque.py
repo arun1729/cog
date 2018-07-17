@@ -5,17 +5,6 @@ import ast
 from os import listdir
 from os.path import isfile, join
 
-# g.V("<alice>").Tag("source").Out().In().Tag("target").All()
-#g.V("<alice>").Out().All()
-# ('<fred>__:in:__', "['<bob>', '<emily>']")
-# ('<dani>__:in:__', "['<charlie>']")
-# ('<dani>__:out:__', "['<bob>', '<greg>']")
-# ('<fred>__:out:__', "['<greg>']")
-# ('<greg>__:in:__', "['<dani>', '<fred>']")
-# ('<emily>__:out:__', "['<fred>']")
-# ('<bob>__:out:__', "['<fred>']")
-# ('<alice>__:out:__', "['<bob>']")
-
 class Graph:
 
     def __init__(self, graph_name, cog_dir):
@@ -40,27 +29,45 @@ class Graph:
 
 
     def v(self, vertex):
-        self.vertices = [vertex]
+        self.vertices = {vertex : {"id" : vertex }}
         return self
 
     def out(self):
-        tmp_vrts = []
-        for cog in self.cogs:
-            for v in self.vertices:
-                record = cog.get(out_nodes(v))
-                if record:
-                    tmp_vrts.extend(ast.literal_eval(record[1][1]))
-        self.vertices = tmp_vrts
+        self.__hop("out")
         return self
 
     def inc(self):
-        tmp_vrts = []
+        self.__hop("in")
+        return self
+
+    def __hop(self, direction):
+        visit_verts = {}
+        print "before hop ****"
+        print self.vertices
         for cog in self.cogs:
-            for v in self.vertices:
-                record = cog.get(in_nodes(v))
+            for v in self.vertices.values():
+                if(direction == "out"):
+                    record = cog.get(out_nodes(v["id"]))
+                else:
+                    record = cog.get(in_nodes(v["id"]))
                 if record:
-                    tmp_vrts.extend(ast.literal_eval(record[1][1]))
-        self.vertices = tmp_vrts
+                    for vx in ast.literal_eval(record[1][1]):
+                        self.vertices[vx] = {"id" : vx }
+                        visit_verts[vx] = self.vertices[vx]
+        # discard other vertices and keep only visited verts
+        self.vertices = visit_verts
+        print "after hop ****"
+        print self.vertices
+
+    def tag(self, tag_name):
+        tagged_verts = {}
+        for v in self.vertices.values():
+            tagged_verts[v["id"]] = self.vertices[v["id"]]
+            tagged_verts[v["id"]][tag_name] = v["id"]
+
+        self.vertices = tagged_verts
+        print "*** TAG"
+        print self.vertices
         return self
 
     def count(self):
@@ -68,8 +75,8 @@ class Graph:
 
     def all(self):
         result = []
-        for v in self.vertices:
-            result.append({"id":v})
+        for v in self.vertices.values():
+            result.append(v)
         return json.dumps({"result" : result})
 
 
@@ -79,30 +86,7 @@ def out_nodes(v):
 def in_nodes(v):
     return (v + "__:in:__")
 
-"""
---> edge:<in/out> list strategy
-table: predicate
-<node1> : [node2, node3, node4 ...]
 
-insert(alice:follows:john) =>
-1. create_table_if_not_exist(follows)
-2. list = get(key: alice)
-3. put(key: alice, value: list += john)
-** using string list (json dumps).
-** deleting an item from the list will need to traverse the list. slightly slow. but most use cases for graph traversal are read only.
-
-{
-	"result": [
-		{
-			"id": "<fred>"
-		},
-		{
-			"id": "cool_person"
-		}
-	]
-}
-
-"""
 class Loader:
 
     def __init__(self, graph_data_path, graph_name, db_path=None, config=cfg):

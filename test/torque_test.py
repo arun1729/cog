@@ -7,7 +7,22 @@ import shutil
 
 DIR_NAME = "TorqueTest"
 
+#target api set
+# in("predicate"), out("predicate"), all, count, tag
+# next release .forEach(function), this can do filter, adding values etc.
 
+# // The working set of this is bob and dani
+# g.V("<charlie>").Out("<follows>").All()
+# // The working set of this is fred, as alice follows bob and bob follows fred.
+# g.V("<alice>").Out("<follows>").Out("<follows>").All()
+# // Finds all things dani points at. Result is bob, greg and cool_person
+# g.V("<dani>").Out().All()
+# // Finds all things dani points at on the status linkage.
+# // Result is bob, greg and cool_person
+# g.V("<dani>").Out(["<follows>", "<status>"]).All()
+# // Finds all things dani points at on the status linkage, given from a separate query path.
+# // Result is {"id": "cool_person", "pred": "<status>"}
+# g.V("<dani>").Out(g.V("<status>"), "pred").All()
 class TorqueTest(unittest.TestCase):
 
     def test_aaa_before_all_tests(self):
@@ -25,7 +40,8 @@ class TorqueTest(unittest.TestCase):
 
         g = Graph(graph_name="people", cog_dir="/tmp/graph")
         #print g.v("<alice>").out().count()
-        print g.v("<bob>").inc().out().inc().all()
+        #print g.v("<bob>").out().tag("source").all()
+        print g.v("<bob>").out().tag("source").inc().tag("target").all()
 
 
     def test_zzz_after_all_tests(self):
