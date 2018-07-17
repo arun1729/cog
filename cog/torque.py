@@ -41,29 +41,26 @@ class Graph:
 
     def v(self, vertex):
         self.vertices = [vertex]
-        """read vertex from cog"""
-        self.current_vertex_in = []
-        self.current_vertex_out = []
-
-        for cog in self.cogs:
-            record = cog.get(in_nodes(vertex))
-
-            if record:
-                self.current_vertex_in=ast.literal_eval(record[1][1])
-
-            record = cog.get(out_nodes(vertex))
-            if record:
-                self.current_vertex_out=ast.literal_eval(record[1][1])
-
         return self
 
     def out(self):
-        self.vertices = self.current_vertex_out
+        tmp_vrts = []
+        for cog in self.cogs:
+            for v in self.vertices:
+                record = cog.get(out_nodes(v))
+                if record:
+                    tmp_vrts.extend(ast.literal_eval(record[1][1]))
+        self.vertices = tmp_vrts
         return self
 
     def inc(self):
-        """ """
-        self.vertices = self.current_vertex_in
+        tmp_vrts = []
+        for cog in self.cogs:
+            for v in self.vertices:
+                record = cog.get(in_nodes(v))
+                if record:
+                    tmp_vrts.extend(ast.literal_eval(record[1][1]))
+        self.vertices = tmp_vrts
         return self
 
     def count(self):
@@ -73,7 +70,7 @@ class Graph:
         result = []
         for v in self.vertices:
             result.append({"id":v})
-        return "{" + json.dumps(result) + "}"
+        return json.dumps({"result" : result})
 
 
 def out_nodes(v):

@@ -15,7 +15,7 @@ class TorqueTest(unittest.TestCase):
             os.mkdir("/tmp/" + DIR_NAME + "/")
 
     def test_torque(self):
-        loader = Loader("./test-data/test.nq", "people", "/tmp/graph")
+        #loader = Loader("./test-data/test.nq", "people", "/tmp/graph")
 
         cog = Cog("/tmp/graph")
         cog.create_table("<follows>", "people")
@@ -24,8 +24,8 @@ class TorqueTest(unittest.TestCase):
         #     print r
 
         g = Graph(graph_name="people", cog_dir="/tmp/graph")
-        print g.v("<alice>").out().count()
-        print g.v("<alice>").out().all()
+        #print g.v("<alice>").out().count()
+        print g.v("<bob>").inc().out().inc().all()
 
 
     def test_zzz_after_all_tests(self):
