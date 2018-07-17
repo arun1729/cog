@@ -1,5 +1,6 @@
 from cog.database import Cog
 from cog import config as cfg
+import json
 import ast
 from os import listdir
 from os.path import isfile, join
@@ -69,8 +70,10 @@ class Graph:
         return len(self.vertices)
 
     def all(self):
-        """ """
-        return self
+        result = []
+        for v in self.vertices:
+            result.append({"id":v})
+        return "{" + json.dumps(result) + "}"
 
 
 def out_nodes(v):
@@ -90,6 +93,17 @@ insert(alice:follows:john) =>
 3. put(key: alice, value: list += john)
 ** using string list (json dumps).
 ** deleting an item from the list will need to traverse the list. slightly slow. but most use cases for graph traversal are read only.
+
+{
+	"result": [
+		{
+			"id": "<fred>"
+		},
+		{
+			"id": "cool_person"
+		}
+	]
+}
 
 """
 class Loader:

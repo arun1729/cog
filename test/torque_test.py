@@ -25,6 +25,7 @@ class TorqueTest(unittest.TestCase):
 
         g = Graph(graph_name="people", cog_dir="/tmp/graph")
         print g.v("<alice>").out().count()
+        print g.v("<alice>").out().all()
 
 
     def test_zzz_after_all_tests(self):
