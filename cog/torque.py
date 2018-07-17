@@ -13,11 +13,11 @@ class Graph:
         :param cog_dir:
         '''
         self.predicates = self.list_predicate_tables(cog_dir, graph_name)
-        self.cogs = []
+        self.cogs = {}
         for predicate in self.predicates:
             cog = Cog(db_path=cog_dir)
             cog.use_table(predicate, graph_name)
-            self.cogs.append(cog)
+            self.cogs[predicate] = cog
 
     def list_predicate_tables(self, cog_dir, graph_name):
         path = "/"+"/".join([cog_dir, graph_name])
@@ -32,19 +32,25 @@ class Graph:
         self.vertices = {vertex : {"id" : vertex }}
         return self
 
-    def out(self):
-        self.__hop("out")
+    def out(self, predicates=None):
+        self.__hop("out", predicates)
         return self
 
-    def inc(self):
-        self.__hop("in")
+    def inc(self, predicates=None):
+        self.__hop("in", predicates)
         return self
 
-    def __hop(self, direction):
+    def __hop(self, direction, predicates=None):
         visit_verts = {}
         #print "before hop **** "+direction
         #print self.vertices
-        for cog in self.cogs:
+        cogs = self.cogs.values()
+        if predicates:
+            cogs = []
+            for p in predicates:
+                if p in self.cogs:
+                    cogs.append(self.cogs[p])
+        for cog in cogs:
             for v in self.vertices.values():
                 meta = {}
                 for key in v:

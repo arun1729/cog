@@ -51,7 +51,13 @@ class TorqueTest(unittest.TestCase):
 
         # repeat loops are not included, it seems to be there in cayley db in the following
         # print g.v("<fred>").out().tag("source").out().tag("target").all()
-        print g.v("<fred>").out().tag("source").inc().out().tag("target").all()
+        #print g.v("<fred>").out().tag("source").inc().out().tag("target").all()
+
+        #print g.v("<bob>").out(["<follows>"]).tag("source").all()
+        #print g.v("<bob>").out(["<follows>","<status>"]).tag("source").all()
+
+        #bad predicates, should not break test
+        print g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
 
     def test_zzz_after_all_tests(self):
         shutil.rmtree("/tmp/"+DIR_NAME)
