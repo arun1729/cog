@@ -46,8 +46,12 @@ class Cog:
         self.create_namespace("default")
         self.create_table("default", "default")
 
-    ''' initiates cog instance - called the 'c instance' for the first time '''
     def init_instance(self, db_name):
+        '''
+        Initiates cog instance - called the 'c instance' for the first time
+        :param db_name:
+        :return:
+        '''
 
         instance_id=str(uuid.uuid4())
         if not os.path.exists(self.config.cog_instance_sys_dir()): os.makedirs(self.config.cog_instance_sys_dir())
@@ -66,8 +70,6 @@ class Cog:
         self.logger.info("done.")
         return instance_id;
 
-    '''load existing name spaces'''
-    # def load_namespaces(self):
 
     def create_namespace(self,namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
@@ -89,6 +91,15 @@ class Cog:
         self.current_table = table
         self.current_indexer = indexer
         self.current_store = store
+
+    def use_table(self, name, namespace):
+        '''
+        Wrapper method just for the sake of brevity, create_table does all the work.
+        :param name:
+        :param namespace:
+        :return:
+        '''
+        self.create_table(name, namespace)
 
     def put(self,data):
         assert type(data[0]) is str, "Only string type is supported is currently supported."

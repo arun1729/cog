@@ -1,6 +1,8 @@
 from cog.database import Cog
 from cog import config as cfg
 import ast
+from os import listdir
+from os.path import isfile, join
 
 # g.V("<alice>").Tag("source").Out().In().Tag("target").All()
 #g.V("<alice>").Out().All()
@@ -14,11 +16,27 @@ import ast
 # ('<alice>__:out:__', "['<bob>']")
 
 class Graph:
-    """Graph object like in Gizmo"""
+
     def __init__(self, graph_name, cog_dir):
-        self.cog = Cog(db_path=cog_dir)
-        self.cog.create_namespace(graph_name)
-        self.cog.create_table("<follows>", graph_name)
+        '''
+        :param graph_name:
+        :param cog_dir:
+        '''
+        self.predicates = self.list_predicate_tables(cog_dir, graph_name)
+        self.cogs = []
+        for predicate in self.predicates:
+            cog = Cog(db_path=cog_dir)
+            cog.use_table(predicate, graph_name)
+            self.cogs.append(cog)
+
+    def list_predicate_tables(self, cog_dir, graph_name):
+        path = "/"+"/".join([cog_dir, graph_name])
+        files = [f for f in listdir(path) if isfile(join(path, f))]
+        p = set(())
+        for f in files:
+            p.add(f.split("-")[0])
+        return p
+
 
     def v(self, vertex):
         self.vertices = [vertex]
@@ -26,19 +44,15 @@ class Graph:
         self.current_vertex_in = []
         self.current_vertex_out = []
 
-        record = self.cog.get(in_nodes(vertex))
+        for cog in self.cogs:
+            record = cog.get(in_nodes(vertex))
 
-        if record:
-            self.current_vertex_in=ast.literal_eval(record[1][1])
+            if record:
+                self.current_vertex_in=ast.literal_eval(record[1][1])
 
-        print out_nodes(vertex)
-        record = self.cog.get(out_nodes(vertex))
-        print record
-        if record:
-            self.current_vertex_out=ast.literal_eval(record[1][1])
-
-        print self.current_vertex_in
-        print self.current_vertex_out
+            record = cog.get(out_nodes(vertex))
+            if record:
+                self.current_vertex_out=ast.literal_eval(record[1][1])
 
         return self
 
@@ -79,7 +93,9 @@ insert(alice:follows:john) =>
 
 """
 class Loader:
+
     def __init__(self, graph_data_path, graph_name, db_path=None, config=cfg):
+
          cog = Cog(db_path=db_path, config=config)
          cog.create_namespace(graph_name)
 

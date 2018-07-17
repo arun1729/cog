@@ -19,9 +19,9 @@ class TorqueTest(unittest.TestCase):
 
         cog = Cog("/tmp/graph")
         cog.create_table("<follows>", "people")
-        scanner = cog.scanner()
-        for r in scanner:
-            print r
+        # scanner = cog.scanner()
+        # for r in scanner:
+        #     print r
 
         g = Graph(graph_name="people", cog_dir="/tmp/graph")
         print g.v("<alice>").out().count()
