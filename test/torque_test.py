@@ -3,6 +3,7 @@ from cog.torque import Graph
 from cog.database import Cog
 import unittest
 import os
+import json
 import shutil
 
 DIR_NAME = "TorqueTest"
@@ -25,39 +26,102 @@ DIR_NAME = "TorqueTest"
 # g.V("<dani>").Out(g.V("<status>"), "pred").All()
 
 #https://docs.janusgraph.org/latest/gremlin.html
+#https://tinkerpop.apache.org/gremlin.html
+
+def ordered(obj):
+    if isinstance(obj, dict):
+        return sorted((k, ordered(v)) for k, v in obj.items())
+    if isinstance(obj, list):
+        return sorted(ordered(x) for x in obj)
+    else:
+        return obj
 
 class TorqueTest(unittest.TestCase):
 
     def test_aaa_before_all_tests(self):
-        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
-            os.mkdir("/tmp/" + DIR_NAME + "/")
 
-    def test_torque(self):
-        #loader = Loader("./test-data/test.nq", "people", "/tmp/graph")
+        if not os.path.exists("/tmp/"+DIR_NAME):
+            os.mkdir("/tmp/" + DIR_NAME)
 
-        cog = Cog("/tmp/graph")
-        cog.create_table("<follows>", "people")
+        if os.path.exists("test-data/test.nq"):
+            Loader("test-data/test.nq", "people", "/tmp/"+DIR_NAME)
+        else:
+            Loader("test/test-data/test.nq", "people", "/tmp/" + DIR_NAME)
+
+        TorqueTest.cog = Cog("/tmp/"+DIR_NAME)
+        TorqueTest.cog.create_table("<follows>", "people")
+        TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
+
+
+    def test_torque_1(self):
+        self.assertEqual(1, TorqueTest.g.v("<alice>").out().count())
+
+    def test_torque_2(self):
+        expected = json.loads(r'{"result":[{"source": "<fred>","id": "<fred>"},{"source": "\"cool_person\"","id": "\"cool_person\""}]}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out().tag("source").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_3(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out().tag("source").out().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_4(self):
+        expected = json.loads(
+            r'{"result": [{"source": "\"cool_person\"", "id": "<greg>", "target": "<greg>"}, {"source": "\"cool_person\"", "id": "<dani>", "target": "<dani>"}, {"source": "<fred>", "id": "<emily>", "target": "<emily>"}, {"source": "<fred>", "id": "<bob>", "target": "<bob>"}]}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_5(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<greg>", "id": "<dani>", "target": "<dani>"}, {"source": "<greg>", "id": "<fred>", "target": "<fred>"}]}')
+        actual = json.loads(TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_6(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<greg>", "id": "<dani>", "target": "<dani>"}, {"source": "<greg>", "id": "<fred>", "target": "<fred>"}]}')
+        actual = json.loads(TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    # repeat loops are not included, it seems to be there in cayley db in the following
+    def test_torque_7(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
+        actual = json.loads(TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_8(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<greg>", "id": "<greg>", "target": "<greg>"}, {"source": "<greg>", "id": "<bob>", "target": "<bob>"}, {"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
+        actual = json.loads(TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_9(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<fred>", "id": "<fred>"}]}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out(["<follows>"]).tag("source").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_10(self):
+        expected = json.loads(
+            r'{"result": [{"source": "<fred>", "id": "<fred>"}, {"source": "\"cool_person\"", "id": "\"cool_person\""}]}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag("source").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    # bad predicates, should not break test
+    def test_torque_11(self):
+        expected = json.loads(
+            r'{"result": []}')
+        actual = json.loads(TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all())
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    #def test_torque(self):
+
         # scanner = cog.scanner()
         # for r in scanner:
         #     print r
-
-        g = Graph(graph_name="people", cog_dir="/tmp/graph")
-        #print g.v("<alice>").out().count()
-        #print g.v("<bob>").out().tag("source").all()
-        #print g.v("<bob>").out().tag("source").out().tag("target").all()
-        #print g.v("<bob>").out().tag("source").inc().tag("target").all()
-
-        #print g.v("<fred>").out().tag("source").inc().tag("target").all()
-
-        # repeat loops are not included, it seems to be there in cayley db in the following
-        # print g.v("<fred>").out().tag("source").out().tag("target").all()
-        #print g.v("<fred>").out().tag("source").inc().out().tag("target").all()
-
-        #print g.v("<bob>").out(["<follows>"]).tag("source").all()
-        #print g.v("<bob>").out(["<follows>","<status>"]).tag("source").all()
-
-        #bad predicates, should not break test
-        print g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
 
     def test_zzz_after_all_tests(self):
         shutil.rmtree("/tmp/"+DIR_NAME)

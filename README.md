@@ -1,6 +1,6 @@
 [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Cog - a key/value store implemented purely in Python.
+# Cog - A pure Python Graph Database.
 # ![ScreenShot](/cog-logo.png)
 
 
@@ -8,13 +8,20 @@
 ```
 pip install cogdb
 ```
+Cog is graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides low level API to it fast key-value store.
 
-Cog is a simple, fast key-value store based on persistent hash tables. Cog is ideal for Python projects that does not require a full featured databases. 
+Cog is ideal for python applications that does no
+
+Cog has a simple, fast key-value store based on persistent hash tables. This is ideal for Python projects that does not require a full featured databases.
 Every record inserted into Cog is directly persisted on to disk. Cog stores and retrieves data based on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog also provides fast (O(1) avg) inserts. 
 It is written purely in Python so it has no dependencies other than Python standard library.
 
+## Torque is a query language inspired by Gizmo. Cog store graph as triples
 
-## Cog is easy:
+## Torque query examples.
+
+
+## Low level key-value store API:
 ```python
 
 from cog.database import Cog
