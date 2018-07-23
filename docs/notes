@@ -1,1 +1,7 @@
 Peer to peer DHT architecture : Distributed Systems principles and paradigm, p44
+
+https://coverage.readthedocs.io/en/coverage-4.5.1a/
+python -m unittest discover -s test/ -p '*_test.py'
+coverage run -m unittest discover -s test/ -p '*_test.py'
+coverage report -m
+

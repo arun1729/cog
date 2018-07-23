@@ -44,12 +44,13 @@ class TorqueTest(unittest.TestCase):
             os.mkdir("/tmp/" + DIR_NAME)
 
         if os.path.exists("test-data/test.nq"):
-            Loader("test-data/test.nq", "people", "/tmp/"+DIR_NAME)
+            loader = Loader("/tmp/"+DIR_NAME)
+            loader.load_triples("test-data/test.nq", "people")
         else:
-            Loader("test/test-data/test.nq", "people", "/tmp/" + DIR_NAME)
+            loader = Loader("/tmp/" + DIR_NAME)
+            loader.load_triples("test/test-data/test.nq", "people")
 
         TorqueTest.cog = Cog("/tmp/"+DIR_NAME)
-        TorqueTest.cog.create_table("<follows>", "people")
         TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
 
 
