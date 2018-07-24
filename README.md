@@ -1,6 +1,6 @@
 [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Cog - A pure Python Graph Database.
+# Cog - A pure Python Graph Database
 # ![ScreenShot](/cog-logo.png)
 
 
@@ -8,20 +8,69 @@
 ```
 pip install cogdb
 ```
-Cog is graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides low level API to it fast key-value store.
+Cog is graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides low level API to its fast key-value store.
 
-Cog is ideal for python applications that does no
+Cog is ideal for python applications that does not required a full featured database. Cog can easily be used as library from within the Python application.
 
-Cog has a simple, fast key-value store based on persistent hash tables. This is ideal for Python projects that does not require a full featured databases.
-Every record inserted into Cog is directly persisted on to disk. Cog stores and retrieves data based on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog also provides fast (O(1) avg) inserts. 
 It is written purely in Python so it has no dependencies other than Python standard library.
 
-## Torque is a query language inspired by Gizmo. Cog store graph as triples
+## Torque is a query language inspired by Gizmo
+Cog stores graph as triples:
 
-## Torque query examples.
+  ```vertex <predicate> vertex```
+  
+- Sample data
+```
+<alice> <follows> <bob> .
+<bob> <follows> <fred> .
+<bob> <status> "cool_person" .
+<charlie> <follows> <bob> .
+<charlie> <follows> <dani> .
+```
+- Loading triples:
 
+```python
+from cog.torque import Loader
+from cog.torque import Graph
+
+loader = Loader('path/to/dbdir')
+loader.load_triples('path/to/triple_file', "graph_name")
+
+```
+
+- Loading edge list:
+
+```python
+from cog.torque import Loader
+from cog.torque import Graph
+loader = Loader('path/to/dbdir')
+loader.load_edgelist('path/to/edgelist', "graph_name")
+```
+
+## Torque query examples
+
+- starting from a vertex, follow all out going edges and list all vertices
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.v("<bob>").out().all()
+
+```
+> '{"result": [{"id": "<greg>", "id": "<alice>"}]}'
+
+- starting from a vertex, follow all out going edges and count vertices
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.v("<bob>").out().count()
+
+```
+> '2'
 
 ## Low level key-value store API:
+Every record inserted into Cog is directly persisted on to disk. KV store stores and retrieves data based 
+on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog can also perform fast (O(1) avg) inserts. 
+
 ```python
 
 from cog.database import Cog

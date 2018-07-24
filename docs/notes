@@ -5,3 +5,4 @@ python -m unittest discover -s test/ -p '*_test.py'
 coverage run -m unittest discover -s test/ -p '*_test.py'
 coverage report -m
 
+python -m unittest discover -s test/ -p '*_test.py'

@@ -5,4 +5,4 @@ cache: pip
 install:
   - pip install -r requirements.txt
 script:
-  - python -m unittest discover -s test/ -p '*_test.py'
+  - coverage run -m unittest discover -s test/ -p '*_test.py'

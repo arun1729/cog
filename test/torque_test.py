@@ -118,12 +118,6 @@ class TorqueTest(unittest.TestCase):
         actual = json.loads(TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all())
         self.assertTrue(ordered(expected) == ordered(actual))
 
-    #def test_torque(self):
-
-        # scanner = cog.scanner()
-        # for r in scanner:
-        #     print r
-
     def test_zzz_after_all_tests(self):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
