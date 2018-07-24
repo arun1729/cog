@@ -67,6 +67,17 @@ g.v("<bob>").out().count()
 ```
 > '2'
 
+- starting from a vertex, follow all out going edges and tag them
+
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.v("<bob>").out().tag("source").out().tag("target").all()
+
+```
+> '{"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}'
+
+
 ## Low level key-value store API:
 Every record inserted into Cog is directly persisted on to disk. KV store stores and retrieves data based 
 on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog can also perform fast (O(1) avg) inserts. 
