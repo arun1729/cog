@@ -4,6 +4,7 @@ import json
 import ast
 from os import listdir
 from os.path import isfile, join
+import os
 
 class Graph:
 
@@ -23,15 +24,18 @@ class Graph:
 
     def put(self, vertex1, predicate, vertex2):
         cog = Cog(db_path=self.cog_dir)
-        cog.create_table(predicate, self.graph_name)  # it wont create if it exists.
-
+        cog.create_namespace(self.graph_name)
+        cog.use_table(predicate, self.graph_name)  # it wont create if it exists.
         put_node(cog, vertex1, predicate, vertex2)
+        self.cogs[predicate] = cog
+        return self
 
 
     def list_predicate_tables(self, cog_dir, graph_name):
-        path = "/"+"/".join([cog_dir, graph_name])
-        files = [f for f in listdir(path) if isfile(join(path, f))]
         p = set(())
+        path = "/".join([cog_dir, graph_name])
+        if not os.path.exists(path): return p
+        files = [f for f in listdir(path) if isfile(join(path, f))]
         for f in files:
             p.add(f.split("-")[0])
         return p
@@ -110,7 +114,6 @@ def in_nodes(v):
     return (v + "__:in:__")
 
 def put_node(cog_instance, vertex1, predicate, vertex2):
-
     # out vertices
     out_ng_vertices = []
     record = cog_instance.get(out_nodes(vertex1))
