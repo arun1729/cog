@@ -17,7 +17,7 @@ Cog stores graph as triples:
 
   ```vertex <predicate> vertex```
   
-- Sample data
+### Sample data
 ```
 alice follows bob
 bob follows fred
@@ -31,7 +31,7 @@ emily follows fred
 fred follows greg
 greg status cool_person
 ```
-- Loading triples:
+### Loading triples:
 
 ```python
 from cog.torque import Loader
@@ -42,7 +42,7 @@ loader.load_triples('path/to/triple_file', "graph_name")
 
 ```
 
-- Loading edge list:
+### Loading edge list:
 
 ```python
 from cog.torque import Loader
@@ -53,7 +53,7 @@ loader.load_edgelist('path/to/edgelist', "graph_name")
 
 ## Torque query examples
 
-- starting from a vertex, follow all outgoing edges and list all vertices
+### starting from a vertex, follow all outgoing edges and list all vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
@@ -61,7 +61,7 @@ g.v("bob").out().all()
 ```
 > {"result": [{"id": "greg", "id": "alice"}]}
 
-- starting from a vertex, follow all outgoing edges and count vertices
+### starting from a vertex, follow all outgoing edges and count vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
@@ -70,7 +70,7 @@ g.v("bob").out().count()
 ```
 > '2'
 
-- starting from a vertex, follow all out going edges and tag them
+### starting from a vertex, follow all out going edges and tag them
 
 ```python
 from cog.torque import Graph
@@ -82,17 +82,15 @@ g.v("bob").out().tag("source").out().tag("target").all()
 
 By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
 
-- starting from a vertex, follow all incoming edges and list all vertices
+### starting from a vertex, follow all incoming edges and list all vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").inc().all()
 ```
-
 > {"result": [{"id": "alice", "id": "dani"}]}
 
-
-- Adding vertices
+### Adding vertices
 
 ```python
 from cog.torque import Graph
