@@ -8,11 +8,9 @@
 ```
 pip install cogdb
 ```
-Cog is graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides low level API to its fast key-value store.
+Cog is a graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
 
-Cog is ideal for python applications that does not required a full featured database. Cog can easily be used as library from within the Python application.
-
-It is written purely in Python so it has no dependencies other than Python standard library.
+Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It is written purely in Python so it has no dependencies other than Python standard library.
 
 ## Torque is a query language inspired by Gizmo
 Cog stores graph as triples:
@@ -21,11 +19,17 @@ Cog stores graph as triples:
   
 - Sample data
 ```
-<alice> <follows> <bob> .
-<bob> <follows> <fred> .
-<bob> <status> "cool_person" .
-<charlie> <follows> <bob> .
-<charlie> <follows> <dani> .
+alice follows bob
+bob follows fred
+bob status cool_person
+charlie follows bob
+charlie follows dani
+dani follows bob
+dani follows greg
+dani status cool_person
+emily follows fred
+fred follows greg
+greg status cool_person
 ```
 - Loading triples:
 
@@ -49,20 +53,19 @@ loader.load_edgelist('path/to/edgelist', "graph_name")
 
 ## Torque query examples
 
-- starting from a vertex, follow all out going edges and list all vertices
+- starting from a vertex, follow all outgoing edges and list all vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
-g.v("<bob>").out().all()
-
+g.v("bob").out().all()
 ```
-> '{"result": [{"id": "<greg>", "id": "<alice>"}]}'
+> {"result": [{"id": "greg", "id": "alice"}]}
 
-- starting from a vertex, follow all out going edges and count vertices
+- starting from a vertex, follow all outgoing edges and count vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
-g.v("<bob>").out().count()
+g.v("bob").out().count()
 
 ```
 > '2'
@@ -72,15 +75,41 @@ g.v("<bob>").out().count()
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
-g.v("<bob>").out().tag("source").out().tag("target").all()
+g.v("bob").out().tag("source").out().tag("target").all()
 
 ```
-> '{"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}'
+> {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
+
+By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
+
+- starting from a vertex, follow all incoming edges and list all vertices
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.v("bob").inc().all()
+```
+
+> {"result": [{"id": "alice", "id": "dani"}]}
+
+
+- Adding vertices
+
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.put("A","letters","B").put("B","letters","C").put("C","letters","D")
+g.put("Z","letters","D")
+g.v("A").out(["letters"]).out().out().inc().all()
+
+```
+Query makes multiple hops on outgoing edges.
+
+> {"result": [{"id": "C"}, {"id": "Z"}]}'
 
 
 ## Low level key-value store API:
-Every record inserted into Cog is directly persisted on to disk. KV store stores and retrieves data based 
-on hash values of keys, therefore it can perform fast look ups (O(1) avg). Cog can also perform fast (O(1) avg) inserts. 
+Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 
+on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts. 
 
 ```python
 
