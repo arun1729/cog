@@ -26,13 +26,13 @@ import config as cfg
 class Cog:
 
     def __init__(self, db_path=None, config=cfg):
-        db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
-        try:
-            os.makedirs(db_path)
-        except OSError:
-            if not os.path.isdir(db_path):
-                raise
         if db_path is not None:
+            db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
+            try:
+                os.makedirs(db_path)
+            except OSError:
+                if not os.path.isdir(db_path):
+                    raise
             config.CUSTOM_COG_DB_PATH = db_path
         dictConfig(config.logging_config)
         self.logger = logging.getLogger()
