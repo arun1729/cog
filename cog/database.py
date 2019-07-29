@@ -26,6 +26,12 @@ import config as cfg
 class Cog:
 
     def __init__(self, db_path=None, config=cfg):
+        db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
+        try:
+            os.makedirs(db_path)
+        except OSError:
+            if not os.path.isdir(db_path):
+                raise
         if db_path is not None:
             config.CUSTOM_COG_DB_PATH = db_path
         dictConfig(config.logging_config)
@@ -68,7 +74,7 @@ class Cog:
         os.mkdir(self.config.cog_data_dir(db_name))
         self.logger.info("Database created: "+db_name)
         self.logger.info("done.")
-        return instance_id;
+        return instance_id
 
 
     def create_namespace(self,namespace):

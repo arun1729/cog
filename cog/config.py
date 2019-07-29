@@ -1,4 +1,5 @@
 COG_PATH_PREFIX = "/tmp"
+COG_ROOT = "cog_root"
 COG_HOME = "cog-test"
 COG_SYS_DIR = "sys"
 COG_SYS_FILE = "cogsys.c"
@@ -56,10 +57,10 @@ logging_config = dict(
     handlers = {
         'h': {'class': 'logging.StreamHandler',
               'formatter': 'f',
-              'level': logging.DEBUG}
+              'level': logging.WARN}
         },
     root = {
         'handlers': ['h'],
-        'level': logging.INFO,
+        'level': logging.WARN,
         },
 )

@@ -64,7 +64,7 @@ class Index:
         while(data_at_prob_position != self.empty_block):
             if(looped_back):# Terminating condition
                 if(probe_position >= orig_position or data_at_prob_position == ''):
-                    self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
+                    self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
                     return None
             if(data_at_prob_position == ''):#check if EOF reached.
                     probe_position=0
@@ -283,7 +283,7 @@ class Indexer:
             if(record):
                 return record
 
-        self.logger.warn("Key: "+key+ " not found in any index!")
+        self.logger.info("Key: "+key+ " not found in any index!")
         return None
 
     def scanner(self, store):
