@@ -17,12 +17,13 @@ DIR_NAME = "TestIndex2"
 
 class TestIndex2(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
-        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
+    def setUp(self):
+        path = "/tmp/"+DIR_NAME+"/"
+        if not os.path.exists(path):
             os.mkdir("/tmp/" + DIR_NAME + "/")
             os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
-
-        config.COG_HOME = DIR_NAME
+        config.CUSTOM_COG_DB_PATH = path
+        print "***"
 
     def test_put_get(self):
 
@@ -57,7 +58,7 @@ class TestIndex2(unittest.TestCase):
             c += 1
         print "Total records scanned: " + str(c)
 
-    def test_zzz_after_all_tests(self):
+    def tearDown(self):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
 

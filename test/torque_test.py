@@ -1,6 +1,7 @@
 from cog.torque import Loader
 from cog.torque import Graph
 from cog.database import Cog
+from cog import config
 import unittest
 import os
 import json
@@ -38,20 +39,24 @@ def ordered(obj):
 
 class TorqueTest(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
+    @classmethod
+    def setUpClass(cls):
 
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
+        loader = Loader("/tmp/" + DIR_NAME)
+
+        # choose appropriate path based on where the test is called from.
         if os.path.exists("test-data/test.nq"):
-            loader = Loader("/tmp/"+DIR_NAME)
             loader.load_triples("test-data/test.nq", "people")
         else:
-            loader = Loader("/tmp/" + DIR_NAME)
             loader.load_triples("test/test-data/test.nq", "people")
 
-        TorqueTest.cog = Cog("/tmp/"+DIR_NAME)
+        TorqueTest.cog = Cog("/tmp/"+DIR_NAME, config)
         TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
+        print TorqueTest.g.all()
+        print ">>> test setup complete."
 
 
     def test_torque_1(self):
@@ -118,7 +123,8 @@ class TorqueTest(unittest.TestCase):
         actual = json.loads(TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all())
         self.assertTrue(ordered(expected) == ordered(actual))
 
-    def test_zzz_after_all_tests(self):
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
 

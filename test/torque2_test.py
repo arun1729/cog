@@ -18,7 +18,8 @@ def ordered(obj):
 
 class TorqueTest2(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
+    @classmethod
+    def setUpClass(cls):
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
@@ -31,6 +32,7 @@ class TorqueTest2(unittest.TestCase):
 
         TorqueTest2.cog = Cog("/tmp/"+DIR_NAME)
         TorqueTest2.g = Graph(graph_name="social_graph", cog_dir="/tmp/" + DIR_NAME)
+        print "test setup done."
 
 
     def test_torque_1(self):
@@ -45,8 +47,8 @@ class TorqueTest2(unittest.TestCase):
         actual = json.loads(TorqueTest2.g.v("A").out(["letters"]).out().out().inc().all())
         self.assertTrue(ordered(expected) == ordered(actual))
 
-
-    def test_zzz_after_all_tests(self):
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
 

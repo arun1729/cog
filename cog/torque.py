@@ -62,6 +62,7 @@ class Graph:
             cogs = []
             for p in predicates:
                 if p in self.cogs:
+                    print p
                     cogs.append(self.cogs[p])
         for cog in cogs:
             for v in self.vertices.values():
@@ -69,7 +70,7 @@ class Graph:
                 for key in v:
                     if key != "id":
                         meta[key] = v[key]
-                if(direction == "out"):
+                if direction == "out":
                     record = cog.get(out_nodes(v["id"]))
                 else:
                     record = cog.get(in_nodes(v["id"]))

@@ -17,7 +17,8 @@ DIR_NAME = "TestDB"
 
 class TestDB(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
+    @classmethod
+    def setUpClass(cls):
         if not os.path.exists("/tmp/"+DIR_NAME+"/"):
             os.mkdir("/tmp/" + DIR_NAME + "/")
             os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
@@ -34,9 +35,11 @@ class TestDB(unittest.TestCase):
         for r in scanner:
             print r
 
-    def test_zzz_after_all_tests(self):
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
+
 
 if __name__ == '__main__':
     unittest.main()

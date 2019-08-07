@@ -9,14 +9,14 @@ INDEX_BLOCK_LEN=10
 INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
 ##### CUSTOM COG DB PATH #####
-CUSTOM_COG_DB_PATH=None
+CUSTOM_COG_DB_PATH = None
 
 
 def cog_db_path():
     if CUSTOM_COG_DB_PATH:
         return CUSTOM_COG_DB_PATH
     else:
-        return "/".join([COG_PATH_PREFIX,COG_HOME])
+        return "/".join([COG_PATH_PREFIX, COG_HOME])
 
 def cog_context():
     return [cog_db_path(), COG_SYS_DIR,COG_SYS_FILE]
@@ -43,7 +43,7 @@ def index_id(index_name):
 
 
 def cog_store(db_name, table_name, instance_id):
-    return "/".join(cog_context()[0:-2]+[db_name,table_name+STORE+instance_id])
+    return "/".join(cog_context()[0:-2]+[db_name, table_name+STORE+instance_id])
 
 
 import logging

@@ -1,9 +1,6 @@
 
 from cog.database import Cog
-from cog import config
-import json
 import unittest
-import os
 import shutil
 
 class TestDB2(unittest.TestCase):
