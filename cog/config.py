@@ -3,6 +3,7 @@ COG_ROOT = "cog_root"
 COG_HOME = "cog-test"
 COG_SYS_DIR = "sys"
 COG_SYS_FILE = "cogsys.c"
+COG_DEFAULT_NAMESPACE = "default"
 STORE="-store-"
 INDEX="-index-"
 INDEX_BLOCK_LEN=10
@@ -19,7 +20,7 @@ def cog_db_path():
         return "/".join([COG_PATH_PREFIX, COG_HOME])
 
 def cog_context():
-    return [cog_db_path(), COG_SYS_DIR,COG_SYS_FILE]
+    return [cog_db_path(), COG_SYS_DIR, COG_SYS_FILE]
 
 
 def cog_instance_sys_file():

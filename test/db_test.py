@@ -33,7 +33,17 @@ class TestDB(unittest.TestCase):
         cogdb.put(data)
         scanner = cogdb.scanner()
         for r in scanner:
-            print r
+            res = r
+        self.assertEqual(res, ('user100', '{"firstname":"Hari","lastname":"seldon"}'))
+
+    def test_list_tables(self):
+        cogdb = Cog(config=config)
+        cogdb.create_namespace("test_ns")
+        cogdb.create_table("table1", "test_ns")
+        cogdb.create_table("table2", "test_ns")
+        cogdb.create_table("table3", "test_ns")
+        self.assertEquals(cogdb.list_tables(), ['table2', 'table3', 'table1'])
+
 
     @classmethod
     def tearDownClass(cls):

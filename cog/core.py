@@ -242,7 +242,7 @@ class Indexer:
         self.index_id = 0
         self.load_indexes()
         #if no index currenlty exist, create new live index.
-        if(len(self.index_list) == 0 ):
+        if(len(self.index_list) == 0):
             self.index_list.append(Index(table, config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
 
