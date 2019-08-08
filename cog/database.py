@@ -31,12 +31,6 @@ def out_nodes(v):
 def in_nodes(v):
     return (v + "__:in:__")
 
-#TODO: subject, object and predicate tables
-# this would help in fast look for start point for query
-# each preicate will be a table so:O1
-# each node in the table will be O1 lookup
-# the connections and get from the key
-# the graph is loaded into memory before final computations, the loading part can/may be multi threaded.
 
 class Cog:
 
