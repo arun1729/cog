@@ -6,22 +6,37 @@ import os.path
 import sys
 
 
+class TableMeta:
+
+    def __init__(self, name, namespace, db_instance_id, column_mode):
+        self.name = name
+        self.namespace = namespace
+        self.db_instance_id = db_instance_id
+        self.column_mode = column_mode
+
+
 class Table:
 
-    def __init__(self, name, db_name, db_instance_id, column_mode=False):
-        self.column_mode=column_mode
-        self.name = name
-        self.db_name = db_name
-        self.db_instance_id = db_instance_id
+    def __init__(self, name, namespace, db_instance_id, logger=None, column_mode=False):
+        self.logger = logger
+        self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
+        self.indexer = self.__create_indexer()
+        self.store = self.__create_store()
+
+    def __create_indexer(self):
+        return Indexer(self.table_meta, self.config, self.logger)
+
+    def __create_store(self):
+        return Store(self.table_meta, self.config, self.logger)
 
 
 class Index:
 
-    def __init__(self, table, config, logger, index_id=0):
+    def __init__(self, table_meta, config, logger, index_id=0):
         self.logger = logger
-        self.table = table
+        self.table = table_meta
         self.config = config
-        self.name = self.config.cog_index(table.db_name, table.name, table.db_instance_id, index_id)
+        self.name = self.config.cog_index(table_meta.db_name, table_meta.name, table_meta.db_instance_id, index_id)
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
             self.logger.info("creating index...")

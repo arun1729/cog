@@ -15,8 +15,6 @@ import pickle
 import socket
 import uuid
 from core import Table
-from core import Indexer
-from core import Store
 import config as cfg
 
 
@@ -58,8 +56,13 @@ class Cog:
             # only single database is currently supported.
             self.instance_id = self.init_instance(config.COG_DEFAULT_NAMESPACE)
 
-        '''Create default database and table.'''
-        self.create_table("default", config.COG_DEFAULT_NAMESPACE)
+        '''Create default namespace and table.'''
+        self.create_namespace(self.config.COG_DEFAULT_NAMESPACE)
+        self.create_or_load_table("default", self.config.COG_DEFAULT_NAMESPACE)
+
+        '''Load all table names but lazy load actual tables on request.'''
+        self.namespaces.update(dict.fromkeys(self.list_tables(), None))
+
 
     def init_instance(self, namespace):
         '''
@@ -72,9 +75,9 @@ class Cog:
         if not os.path.exists(self.config.cog_instance_sys_dir()): os.makedirs(self.config.cog_instance_sys_dir())
 
         m_file=dict()
-        m_file["m_instance_id"]=instance_id
-        m_file["host_name"]=socket.gethostname()
-        m_file["host_ip"]=socket.gethostname()
+        m_file["m_instance_id"] = instance_id
+        m_file["host_name"] = socket.gethostname()
+        m_file["host_ip"] = socket.gethostname()
 
         f=open(self.config.cog_instance_sys_file(),'wb')
         pickle.dump(m_file,f)
@@ -95,16 +98,15 @@ class Cog:
             self.logger.info("Using existing namespace: "+self.config.cog_data_dir(namespace))
         self.current_namespace = namespace
 
-    def create_table(self, name, namespace):
-        table = Table(name, namespace, self.instance_id)
-        store = Store(table, self.config, self.logger)
-        indexer = Indexer(table, self.config, self.logger)
-        self.namespaces[namespace] = {}
-        self.namespaces[namespace][table] = (indexer, store)
+    def create_or_load_table(self, name, namespace):
+        table = Table(name, namespace, self.instance_id, self.logger)
         self.current_namespace = namespace
         self.current_table = table
-        self.current_indexer = indexer
-        self.current_store = store
+
+        if namespace not in self.namespaces:
+            self.namespaces[namespace] = {}
+
+        self.namespaces[namespace][table] = table
 
     def list_tables(self):
         p = set(())
@@ -117,26 +119,29 @@ class Cog:
             p.add(f.split("-")[0])
         return list(p)
 
-    def use_table(self, name, namespace):
+    def use_table(self, name, namespace = "default"):
         '''
-        Wrapper method just for the sake of brevity, create_table does all the work.
         :param name:
         :param namespace:
         :return:
         '''
-        self.create_table(name, namespace)
+        namespace = self.current_namespace if not namespace else namespace
+        if name in self.namespaces[namespace] and self.namespaces[namespace][name]:
+            return
+        else:
+            self.create_or_load_table(name, namespace)
 
-    def put(self,data):
-        assert type(data[0]) is str, "Only string type is supported is currently supported."
-        assert type(data[1]) is str, "Only string type is supported is currently supported."
-        position = self.current_store.save(data)
-        self.current_indexer.put(data[0],position,self.current_store)
+    def put(self, data):
+        assert type(data[0]) is str, "Only string type is supported supported."
+        assert type(data[1]) is str, "Only string type is supported supported."
+        position = self.current_table.store.save(data)
+        self.current_table.indexer.put(data[0], position, self.current_table.store)
 
-    def get(self,key):
-        return self.current_indexer.get(key, self.current_store)
+    def get(self, key):
+        return self.current_table.indexer.get(key, self.current_table.store)
 
     def scanner(self, sfilter=None):
-        scanner = self.current_indexer.scanner(self.current_store)
+        scanner = self.current_table.indexer.scanner(self.current_table.store)
         for r in scanner:
             if sfilter:
                 yield sfilter.process(r[1][1])
@@ -144,7 +149,7 @@ class Cog:
                 yield r[1]
 
     def delete(self, key):
-        self.current_indexer.delete(key, self.current_store)
+        self.table.indexer.delete(key, self.current_table.store)
 
     def put_node(self, vertex1, predicate, vertex2):
         # out vertices
@@ -171,7 +176,7 @@ class Cog:
                 this_vertex = tokens[0].strip()
                 predicate = tokens[1].strip()
                 other_vertex = tokens[2].strip()
-                self.cog.create_table(predicate, graph_name)  # it wont create if it exists.
+                self.cog.create_or_load_table(predicate, graph_name)  # it wont create if it exists.
                 self.put_node(self.cog, this_vertex, predicate, other_vertex)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
@@ -181,6 +186,6 @@ class Cog:
                 tokens = line.split()
                 v1 = tokens[0].strip()
                 v2 = tokens[1].strip()
-                self.cog.create_table(predicate, graph_name)
+                self.cog.create_or_load_table(predicate, graph_name)
                 self.put_node(self.cog, v1, predicate, v2)
 
