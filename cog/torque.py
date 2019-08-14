@@ -1,4 +1,5 @@
 from cog.database import Cog
+from cog.database import in_nodes, out_nodes
 from cog import config as cfg
 import json
 import ast
@@ -18,6 +19,12 @@ class Graph:
         self.cog = Cog(db_path=cog_dir)
         self.graph_name = graph_name
         self.cog_dir = cog_dir
+
+    def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
+        self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
+
+    def load_triples(self, graph_data_path, graph_name):
+        self.cog.load_triples(graph_data_path, graph_name)
 
     def put(self, vertex1, predicate, vertex2):
         self.cog.use_table(predicate, self.graph_name)
@@ -49,37 +56,31 @@ class Graph:
 
     def __hop(self, direction, predicates=None):
         visit_verts = {}
-        #print "before hop **** "+direction
-        #print self.vertices
-        cogs = self.cogs.values()
+        print "before hop **** "+direction
+        print self.vertices
         if predicates:
-            cogs = []
-            for p in predicates:
-                if p in self.cogs:
-                    print p
-                    cogs.append(self.cogs[p])
-        for cog in cogs:
-            for v in self.vertices.values():
-                meta = {}
-                for key in v:
-                    if key != "id":
-                        meta[key] = v[key]
-                if direction == "out":
-                    record = cog.get(out_nodes(v["id"]))
-                else:
-                    record = cog.get(in_nodes(v["id"]))
-                if record:
-                    for v_hop in ast.literal_eval(record[1][1]):
-                        # if v_hop not in self.vertices:
-                        #     self.vertices[v_hop] = {"id" : v_hop }
-                        # visit_verts[v_hop] = self.vertices[v_hop]
-                        visit_verts[v_hop] = {"id" : v_hop }
-                        visit_verts[v_hop].update(meta)
+            for predicate in predicates:
+                for v in self.vertices.values():
+                    meta = {}
+                    for key in v:
+                        if key != "id":
+                            meta[key] = v[key]
+                    if direction == "out":
+                        record = self.cog.use_table(predicate, self.graph_name).get(out_nodes(v["id"]))
+                    else:
+                        record = self.cog.use_table(predicate, self.graph_name).get(in_nodes(v["id"]))
+                    if record:
+                        for v_hop in ast.literal_eval(record[1][1]):
+                            # if v_hop not in self.vertices:
+                            #     self.vertices[v_hop] = {"id" : v_hop }
+                            # visit_verts[v_hop] = self.vertices[v_hop]
+                            visit_verts[v_hop] = {"id" : v_hop }
+                            visit_verts[v_hop].update(meta)
 
         # discard other vertices and keep only visited verts
         self.vertices = visit_verts
-        #print "after hop ****" + direction
-        #print self.vertices
+        print "after hop ****" + direction
+        print self.vertices
 
     def tag(self, tag_name):
         tagged_verts = {}

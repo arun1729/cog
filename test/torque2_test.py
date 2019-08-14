@@ -1,4 +1,3 @@
-from cog.torque import Loader
 from cog.torque import Graph
 from cog.database import Cog
 import unittest
@@ -23,15 +22,12 @@ class TorqueTest2(unittest.TestCase):
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
+        data_dir = "test/test-data/dolphins"
         if os.path.exists("test-data/dolphins"):
-            loader = Loader("/tmp/"+DIR_NAME)
-            loader.load_edgelist("test-data/dolphins", "social_graph")
-        else:
-            loader = Loader("/tmp/" + DIR_NAME)
-            loader.load_edgelist("test/test-data/dolphins", "social_graph")
+            data_dir = "test-data/dolphins"
 
-        TorqueTest2.cog = Cog("/tmp/"+DIR_NAME)
         TorqueTest2.g = Graph(graph_name="social_graph", cog_dir="/tmp/" + DIR_NAME)
+        TorqueTest2.g.load_edgelist(data_dir, "social_graph")
         print "test setup done."
 
 

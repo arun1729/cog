@@ -11,6 +11,7 @@ import os.path
 from os import listdir
 from os.path import isfile
 from os.path import join
+import ast
 import pickle
 import socket
 import uuid
@@ -99,7 +100,7 @@ class Cog:
         self.current_namespace = namespace
 
     def create_or_load_table(self, name, namespace):
-        table = Table(name, namespace, self.instance_id, self.logger)
+        table = Table(name, namespace, self.instance_id, self.config, self.logger)
         self.current_namespace = namespace
         self.current_table = table
 
@@ -126,10 +127,10 @@ class Cog:
         :return:
         '''
         namespace = self.current_namespace if not namespace else namespace
-        if name in self.namespaces[namespace] and self.namespaces[namespace][name]:
-            return
-        else:
+        if name not in self.namespaces[namespace] or self.namespaces[namespace][name]:
             self.create_or_load_table(name, namespace)
+
+        return self
 
     def put(self, data):
         assert type(data[0]) is str, "Only string type is supported supported."
@@ -150,6 +151,7 @@ class Cog:
 
     def delete(self, key):
         self.table.indexer.delete(key, self.current_table.store)
+
 
     def put_node(self, vertex1, predicate, vertex2):
         # out vertices
@@ -176,8 +178,8 @@ class Cog:
                 this_vertex = tokens[0].strip()
                 predicate = tokens[1].strip()
                 other_vertex = tokens[2].strip()
-                self.cog.create_or_load_table(predicate, graph_name)  # it wont create if it exists.
-                self.put_node(self.cog, this_vertex, predicate, other_vertex)
+                self.create_or_load_table(predicate, graph_name)  # it wont create if it exists.
+                self.put_node(this_vertex, predicate, other_vertex)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.create_namespace(graph_name)
@@ -186,6 +188,6 @@ class Cog:
                 tokens = line.split()
                 v1 = tokens[0].strip()
                 v2 = tokens[1].strip()
-                self.cog.create_or_load_table(predicate, graph_name)
-                self.put_node(self.cog, v1, predicate, v2)
+                self.create_or_load_table(predicate, graph_name)
+                self.put_node(v1, predicate, v2)
 

@@ -17,8 +17,9 @@ class TableMeta:
 
 class Table:
 
-    def __init__(self, name, namespace, db_instance_id, logger=None, column_mode=False):
+    def __init__(self, name, namespace, db_instance_id, config, logger=None, column_mode=False):
         self.logger = logger
+        self.config = config
         self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
         self.indexer = self.__create_indexer()
         self.store = self.__create_store()
@@ -36,7 +37,7 @@ class Index:
         self.logger = logger
         self.table = table_meta
         self.config = config
-        self.name = self.config.cog_index(table_meta.db_name, table_meta.name, table_meta.db_instance_id, index_id)
+        self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
@@ -200,12 +201,12 @@ class Index:
 
 class Store:
 
-    def __init__(self, table, config, logger):
+    def __init__(self, tablemeta, config, logger):
         self.logger = logger
-        self.table = table
+        self.tablemeta = tablemeta
         self.config = config
         self.store = self.config.cog_store(
-            table.db_name, table.name, table.db_instance_id)
+            tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
@@ -249,8 +250,8 @@ class Indexer:
     Provides same get/put/del method as single index but over multuple files.
     '''
 
-    def __init__(self, table, config, logger):
-        self.table = table
+    def __init__(self, tablemeta, config, logger):
+        self.tablemeta = tablemeta
         self.config = config
         self.logger = logger
         self.index_list = []
@@ -258,15 +259,15 @@ class Indexer:
         self.load_indexes()
         #if no index currenlty exist, create new live index.
         if(len(self.index_list) == 0):
-            self.index_list.append(Index(table, config, logger, self.index_id))
+            self.index_list.append(Index(tablemeta, config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
 
     def load_indexes(self):
-        for f in os.listdir(self.config.cog_data_dir(self.table.db_name)):
+        for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):
             if(self.config.INDEX in f):
                 self.logger.info("Loading index "+f)
                 id = self.config.index_id(f)
-                index = Index(self.table, self.config, self.logger, id)
+                index = Index(self.tablemeta, self.config, self.logger, id)
                 self.index_list.append(index)
                 #make the latest index the live index.
                 if(id >= self.index_id):
@@ -280,7 +281,7 @@ class Indexer:
                 self.live_index.flush()
                 self.index_id += 1
                 self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
-                self.index_list.append(Index(self.table, self.config, self.logger, self.index_id))
+                self.index_list.append(Index(self.tablemeta, self.config, self.logger, self.index_id))
                 self.live_index = self.index_list[self.index_id]
                 self.live_index_usage = self.live_index.get_load()
 
