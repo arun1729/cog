@@ -36,11 +36,13 @@ class TorqueTest2(unittest.TestCase):
 
 
     def test_torque_2(self):
-        TorqueTest2.g.put("A","letters","B").put("B","letters","C").put("C","letters","D")
-        TorqueTest2.g.put("Z","letters","D")
-        expected = json.loads(
-            r'{"result": [{"id": "C"}, {"id": "Z"}]}')
-        actual = json.loads(TorqueTest2.g.v("A").out(["letters"]).out().out().inc().all())
+        TorqueTest2.g.put("A", "is better than", "B")\
+            .put("B", "is better than", "C")\
+            .put("A", "is better than", "D")\
+            .put("Z", "is better than", "D")\
+            .put("D", "is smaller than", "F")
+        expected = json.loads(r'''{"result": [{"id": "C"}, {"id": "F"}]}''')
+        actual = json.loads(TorqueTest2.g.v("A").out(["is better than"]).out().all())
         self.assertTrue(ordered(expected) == ordered(actual))
 
     @classmethod
