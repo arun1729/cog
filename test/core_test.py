@@ -1,8 +1,5 @@
 from context import cog
-from cog.core import Index
-from cog.core import Store
 from cog.core import Table
-from cog.core import Indexer
 from cog import config
 import logging
 import os
@@ -18,25 +15,21 @@ class TestCore(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
-            os.mkdir("/tmp/" + DIR_NAME + "/")
-            os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
-
-        config.COG_HOME = DIR_NAME
+        path = "/tmp/"+DIR_NAME+"/test_table/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
 
     def test_put_get(self):
-
-
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data = ("new super data","super new old stuff")
 
-        table = Table("testdb","test_table","test_xcvzdfsadx")
+        table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
         print config.COG_HOME
-        store = Store(table, config, logger)
-        index = Index(table, config, logger)
-
+        store = table.store
+        index = table.indexer.index_list[0]
 
         position=store.save(expected_data)
         print "stored"
@@ -56,11 +49,10 @@ class TestCore(unittest.TestCase):
 
         expected_data = ("new super data","super new old stuff")
 
-        table = Table("testdb","test_table","test_xcvzdfsadx")
+        table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
-        store = Store(table,config,logger)
-        index = Index(table,config,logger)
-
+        store = table.store
+        index = table.indexer.index_list[0]
 
         position=store.save(expected_data)
         print "stored"
@@ -81,10 +73,10 @@ class TestCore(unittest.TestCase):
 
         expected_data = ("new super data","super new old stuff")
 
-        table = Table("testdb","test_table","test_xcvzdfsadx")
+        table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
-        store = Store(table,config,logger)
-        indexer = Indexer(table,config,logger)
+        store = table.store
+        indexer = table.indexer
 
         position=store.save(expected_data)
         print "stored"

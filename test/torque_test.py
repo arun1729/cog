@@ -1,7 +1,4 @@
-from cog.torque import Loader
 from cog.torque import Graph
-from cog.database import Cog
-from cog import config
 import unittest
 import os
 import json
@@ -45,17 +42,14 @@ class TorqueTest(unittest.TestCase):
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
-        loader = Loader("/tmp/" + DIR_NAME)
-
+        data_dir = "test/test-data/test.nq"
         # choose appropriate path based on where the test is called from.
         if os.path.exists("test-data/test.nq"):
-            loader.load_triples("test-data/test.nq", "people")
-        else:
-            loader.load_triples("test/test-data/test.nq", "people")
+            data_dir = "test-data/test.nq"
 
-        TorqueTest.cog = Cog("/tmp/"+DIR_NAME, config)
         TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
-        print TorqueTest.g.all()
+        TorqueTest.g.load_triples(data_dir, "people")
+        #print TorqueTest.g.all()
         print ">>> test setup complete."
 
 

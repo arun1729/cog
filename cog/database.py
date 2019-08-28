@@ -171,7 +171,7 @@ class Cog:
         self.put(vertex)
 
     def load_triples(self, graph_data_path, graph_name):
-        self.cog.create_namespace(graph_name)
+        self.create_namespace(graph_name)
         with open(graph_data_path) as f:
             for line in f:
                 tokens = line.split()
