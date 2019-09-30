@@ -19,9 +19,6 @@ from core import Table
 import config as cfg
 
 
-# '''
-# Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
-# '''
 # class Compaction:
 
 def out_nodes(v):
@@ -32,6 +29,9 @@ def in_nodes(v):
 
 
 class Cog:
+    """
+        Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
+    """
 
     def __init__(self, db_path=None, config=cfg):
         if db_path is not None:
@@ -107,12 +107,11 @@ class Cog:
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
 
-        self.namespaces[namespace][table] = table
+        self.namespaces[namespace][name] = table
 
     def list_tables(self):
         p = set(())
         path = self.config.cog_data_dir(self.current_namespace)
-        print path
         if not os.path.exists(path):
             return p
         files = [f for f in listdir(path) if isfile(join(path, f))]
@@ -120,15 +119,21 @@ class Cog:
             p.add(f.split("-")[0])
         return list(p)
 
-    def use_table(self, name, namespace = "default"):
+    def use_namespace(self, namespace):
+        self.current_namespace = namespace
+        return self
+
+    def use_table(self, name):
         '''
         :param name:
         :param namespace:
         :return:
         '''
-        namespace = self.current_namespace if not namespace else namespace
-        if name not in self.namespaces[namespace] or self.namespaces[namespace][name]:
-            self.create_or_load_table(name, namespace)
+
+        if name not in self.namespaces[self.current_namespace] or self.namespaces[self.current_namespace][name]:
+            self.create_or_load_table(name, self.current_namespace)
+        else:
+            self.current_table=self.namespaces[self.current_namespace][name]
 
         return self
 
@@ -154,13 +159,35 @@ class Cog:
 
 
     def put_node(self, vertex1, predicate, vertex2):
+        """
+         Graph method
+        :param vertex1: string
+        :param predicate:
+        :param vertex2:
+        :return:
+
+        A - B
+        A - C
+        B - C
+        B - D
+        C - D
+        ======
+        A => [B,C]
+        B => [A,D]
+        C => [A,B,D]
+        D => [B]
+        """
+        # add to node set
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
+
         # out vertices
         out_ng_vertices = []
         record = self.get(out_nodes(vertex1))
         if record is not None: out_ng_vertices = ast.literal_eval(record[1][1])
         out_ng_vertices.append(vertex2)
         vertex = (out_nodes(vertex1), str(out_ng_vertices))
-        self.put(vertex)
+        self.use_table(predicate).put(vertex)
 
         # in vertices
         in_ng_vertices = []
@@ -168,21 +195,36 @@ class Cog:
         if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
         in_ng_vertices.append(vertex1)
         vertex = (in_nodes(vertex2), str(in_ng_vertices))
-        self.put(vertex)
+        self.use_table(predicate).put(vertex)
 
     def load_triples(self, graph_data_path, graph_name):
+        """
+        Graph method
+        :param graph_data_path:
+        :param graph_name:
+        :return:
+        """
         self.create_namespace(graph_name)
+        self.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(graph_data_path) as f:
             for line in f:
                 tokens = line.split()
                 this_vertex = tokens[0].strip()
                 predicate = tokens[1].strip()
                 other_vertex = tokens[2].strip()
-                self.create_or_load_table(predicate, graph_name)  # it wont create if it exists.
+                self.create_or_load_table(predicate, graph_name)
                 self.put_node(this_vertex, predicate, other_vertex)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
+        """
+        Graph method
+        :param edgelist_file_path:
+        :param graph_name:
+        :param predicate:
+        :return:
+        """
         self.create_namespace(graph_name)
+        self.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(edgelist_file_path) as f:
             for line in f:
                 tokens = line.split()
