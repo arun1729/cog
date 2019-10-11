@@ -13,6 +13,7 @@ class Vertex(object):
 
     def __init__(self, _id):
         self.id = _id
+        self.tags = {}
 
     def __str__(self):
         return json.dumps(self.__dict__)
@@ -35,6 +36,7 @@ class Graph:
         self.graph_name = graph_name
         self.cog_dir = cog_dir
         self.all_predicates = self.cog.list_tables()
+        self.last_visited_vertices = []
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
@@ -63,13 +65,13 @@ class Graph:
     def v(self, vertex=None):
         #TODO: need to check if node exists
         if vertex:
-            self.vertices = {NOTAG: [Vertex(vertex)]}
+            self.last_visited_vertices = [Vertex(vertex)]
         else:
-            self.vertices = {NOTAG: []}
+            self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             scanner = self.cog.scanner()
             for r in scanner:
-                self.vertices[NOTAG].append(Vertex(r))
+                self.last_visited_vertices.append(Vertex(r))
             # scan GRAPH_SET_TABLE and populate vertices
 
         return self
@@ -78,28 +80,29 @@ class Graph:
         self.__hop("out", predicates)
         return self
 
-    def inc(self, predicates=["none"]):
+    def inc(self, predicates=None):
         self.__hop("in", predicates)
         return self
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
-        print "direction: " + str(direction) + " predicates: "+str(predicates)
-        print "~~~vertices: "+ str(self.vertices[tag])
+        # print "direction: " + str(direction) + " predicates: "+str(predicates)
+        # print "~~~vertices: "+ str(self.last_visited_vertices)
         self.cog.use_namespace(self.graph_name)
         predicates = self.all_predicates if not predicates else predicates
+        traverse_vertex = []
         for predicate in predicates:
-            for v in self.vertices[tag]:
+            for v in self.last_visited_vertices:
                 if direction == "out":
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
+                # print "==? " + str(direction)+ " <> " + str(predicate) + " ::: " + str(in_nodes(v.id)) + " ==> " + str(record)
                 if record:
                     for v_adjacent in ast.literal_eval(record[1][1]):
-                        print "v_adjacent:" + str(v_adjacent)
-                        self.vertices[tag].append(Vertex(v_adjacent))
-                        # visit_verts[v_hop].update(meta)
-
-        # discard other vertices and keep only visited verts - why?
+                        v_adjacent_obj = Vertex(v_adjacent)
+                        v_adjacent_obj.tags.update(v.tags)
+                        traverse_vertex.append(v_adjacent_obj)
+        self.last_visited_vertices = traverse_vertex
 
     def tag(self, tag_name):
         '''
@@ -108,13 +111,12 @@ class Graph:
         :param tag_name:
         :return:
         '''
-        self.vertices[tag_name] = []
-        for v in self.vertices:
-            self.vertices[tag_name].append(v)
+        for v in self.last_visited_vertices:
+            v.tags[tag_name] = v.id
         return self
 
     def count(self):
-        return len(self.vertices)
+        return len(self.last_visited_vertices)
 
     def all(self):
         """
@@ -123,8 +125,10 @@ class Graph:
         :return:
         """
         result = []
-        for v in self.vertices:
-            print "all:: tag: " + v + " vertex:"+ str(self.vertices[v])
-            result.append(v)
+        for v in self.last_visited_vertices:
+            #print "all:: tag: " + v + " vertex:"+ str(self.last_visited_vertices[v])
+            item = {"id":v.id}
+            item.update(v.tags)
+            result.append(item)
         return {"result": result}
 

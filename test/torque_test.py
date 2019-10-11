@@ -56,47 +56,41 @@ class TorqueTest(unittest.TestCase):
         self.assertEqual(1, TorqueTest.g.v("<alice>").out().count())
 
     def test_torque_2(self):
-        expected = {'result': ['<fred>', '"cool_person"']}
+        expected = {'result': [{'source': '"cool_person"', 'id': '"cool_person"'}, {'source': '<fred>', 'id': '<fred>'}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").all()
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_3(self):
-        print "test3"
         expected = {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").out().tag("target").all()
-        print "<<"+str(actual)
         self.assertTrue(ordered(expected) == ordered(actual))
 
-    # def test_torque_4(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "\"cool_person\"", "id": "<greg>", "target": "<greg>"}, {"source": "\"cool_person\"", "id": "<dani>", "target": "<dani>"}, {"source": "<fred>", "id": "<emily>", "target": "<emily>"}, {"source": "<fred>", "id": "<bob>", "target": "<bob>"}]}')
-    #     actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # def test_torque_5(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<greg>", "id": "<dani>", "target": "<dani>"}, {"source": "<greg>", "id": "<fred>", "target": "<fred>"}]}')
-    #     actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # def test_torque_6(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<greg>", "id": "<dani>", "target": "<dani>"}, {"source": "<greg>", "id": "<fred>", "target": "<fred>"}]}')
-    #     actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # # repeat loops are not included, it seems to be there in cayley db in the following
-    # def test_torque_7(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
-    #     actual = TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # def test_torque_8(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<greg>", "id": "<greg>", "target": "<greg>"}, {"source": "<greg>", "id": "<bob>", "target": "<bob>"}, {"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
-    #     actual = TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
+    def test_torque_4(self):
+        expected = {'result': [{'source': '"cool_person"', 'id': '<bob>', 'target': '<bob>'}, {'source': '"cool_person"', 'id': '<dani>', 'target': '<dani>'}, {'source': '"cool_person"', 'id': '<greg>', 'target': '<greg>'}, {'source': '<fred>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<fred>', 'id': '<emily>', 'target': '<emily>'}]}
+        actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_5(self):
+        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
+        actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_6(self):
+        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
+        actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_7(self):
+        expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}]}
+        actual = TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_8(self):
+        expected = json.dumps(
+            r'{"result": [{"source": "<greg>", "id": "<greg>", "target": "<greg>"}, {"source": "<greg>", "id": "<bob>", "target": "<bob>"}, {"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
+        actual = TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all()
+        print actual
+        self.assertTrue(ordered(expected) == ordered(actual))
     #
     # def test_torque_9(self):
     #     expected = json.dumps(
