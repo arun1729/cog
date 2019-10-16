@@ -183,15 +183,17 @@ class Cog:
 
         # out vertices
         out_ng_vertices = []
-        record = self.get(out_nodes(vertex1))
-        if record is not None: out_ng_vertices = ast.literal_eval(record[1][1])
+        record = self.use_table(predicate).get(out_nodes(vertex1))
+        if record is not None:
+            out_ng_vertices = ast.literal_eval(record[1][1])
         out_ng_vertices.append(vertex2)
         vertex = (out_nodes(vertex1), str(out_ng_vertices))
+        #print "-> v1 " + str(vertex1) + " predicate: "+ predicate + " v2 " + str(vertex2) + " out_vert: "+ str(vertex)
         self.use_table(predicate).put(vertex)
 
         # in vertices
         in_ng_vertices = []
-        record = self.get(in_nodes(vertex2))
+        record = self.use_table(predicate).get(in_nodes(vertex2))
         if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
         in_ng_vertices.append(vertex1)
         vertex = (in_nodes(vertex2), str(in_ng_vertices))

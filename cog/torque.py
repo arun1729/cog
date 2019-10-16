@@ -36,7 +36,7 @@ class Graph:
         self.graph_name = graph_name
         self.cog_dir = cog_dir
         self.all_predicates = self.cog.list_tables()
-        self.last_visited_vertices = []
+        self.last_visited_vertices = None
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
@@ -67,13 +67,12 @@ class Graph:
         if vertex:
             self.last_visited_vertices = [Vertex(vertex)]
         else:
-            self.last_visited_vertices = []
-            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
-            scanner = self.cog.scanner()
-            for r in scanner:
-                self.last_visited_vertices.append(Vertex(r))
-            # scan GRAPH_SET_TABLE and populate vertices
-
+            if not self.last_visited_vertices:
+                self.last_visited_vertices = []
+                self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+                scanner = self.cog.scanner()
+                for r in scanner:
+                    self.last_visited_vertices.append(Vertex(r))
         return self
 
     def out(self, predicates=None):
@@ -86,7 +85,7 @@ class Graph:
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
         # print "direction: " + str(direction) + " predicates: "+str(predicates)
-        # print "~~~vertices: "+ str(self.last_visited_vertices)
+        # print "hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices))
         self.cog.use_namespace(self.graph_name)
         predicates = self.all_predicates if not predicates else predicates
         traverse_vertex = []
@@ -96,7 +95,7 @@ class Graph:
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
-                # print "==? " + str(direction)+ " <> " + str(predicate) + " ::: " + str(in_nodes(v.id)) + " ==> " + str(record)
+                #print "==? " + str(direction)+ " <> " + str(predicate) + " ::: " + str(v.id) + " ==> " + str(record)
                 if record:
                     for v_adjacent in ast.literal_eval(record[1][1]):
                         v_adjacent_obj = Vertex(v_adjacent)

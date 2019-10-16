@@ -86,31 +86,26 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_8(self):
-        expected = json.dumps(
-            r'{"result": [{"source": "<greg>", "id": "<greg>", "target": "<greg>"}, {"source": "<greg>", "id": "<bob>", "target": "<bob>"}, {"source": "<greg>", "id": "\"cool_person\"", "target": "\"cool_person\""}]}')
+        expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}, {'source': '<greg>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_9(self):
+        expected = {'result': [{'source': '<fred>', 'id': '<fred>'}]}
+        actual = TorqueTest.g.v("<bob>").out(["<follows>"]).tag("source").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_10(self):
+        expected = {'result': [{'source': '<fred>', 'id': '<fred>'}, {'source': '"cool_person"', 'id': '"cool_person"'}]}
+        actual = TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag("source").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    # bad predicates, should not break test
+    def test_torque_11(self):
+        expected = {'result': []}
+        actual = TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
         print actual
         self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # def test_torque_9(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<fred>", "id": "<fred>"}]}')
-    #     actual = TorqueTest.g.v("<bob>").out(["<follows>"]).tag("source").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # def test_torque_10(self):
-    #     expected = json.dumps(
-    #         r'{"result": [{"source": "<fred>", "id": "<fred>"}, {"source": "\"cool_person\"", "id": "\"cool_person\""}]}')
-    #     actual = TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag("source").all()
-    #     print actual
-    #     self.assertTrue(ordered(expected) == ordered(actual))
-    #
-    # # bad predicates, should not break test
-    # def test_torque_11(self):
-    #     expected = json.dumps(
-    #         r'{"result": []}')
-    #     actual = TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
-    #     self.assertTrue(ordered(expected) == ordered(actual))
 
     @classmethod
     def tearDownClass(cls):
