@@ -37,6 +37,8 @@ class Graph:
         self.cog_dir = cog_dir
         self.all_predicates = self.cog.list_tables()
         self.last_visited_vertices = None
+        self.cog.create_namespace(self.graph_name)
+        self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
@@ -47,7 +49,8 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def put(self, vertex1, predicate, vertex2):
-        self.cog.use_table(predicate, self.graph_name)
+        self.cog.create_or_load_table(predicate, self.graph_name)
+        self.cog.use_namespace(self.graph_name).use_table(predicate)
         self.cog.put_node(vertex1, predicate, vertex2)
         self.all_predicates = self.cog.list_tables()
         return self
@@ -76,6 +79,13 @@ class Graph:
         return self
 
     def out(self, predicates=None):
+        '''
+        List of string predicates
+        :param predicates:
+        :return:
+        '''
+        if predicates:
+            assert type(predicates) == list
         self.__hop("out", predicates)
         return self
 
@@ -84,10 +94,10 @@ class Graph:
         return self
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
-        # print "direction: " + str(direction) + " predicates: "+str(predicates)
-        # print "hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices))
         self.cog.use_namespace(self.graph_name)
         predicates = self.all_predicates if not predicates else predicates
+        #print "hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices))
+        #print "direction: " + str(direction) + " predicates: "+str(self.all_predicates)
         traverse_vertex = []
         for predicate in predicates:
             for v in self.last_visited_vertices:
