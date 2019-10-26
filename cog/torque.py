@@ -45,6 +45,12 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def load_triples(self, graph_data_path, graph_name):
+        '''
+        Loads a list of triples
+        :param graph_data_path:
+        :param graph_name:
+        :return:
+        '''
         self.cog.load_triples(graph_data_path, graph_name)
         self.all_predicates = self.cog.list_tables()
 

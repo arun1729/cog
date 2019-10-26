@@ -18,66 +18,44 @@ Cog stores graph as triples:
 
   ```vertex <predicate> vertex```
   
-### Sample data
-```
-alice follows bob
-bob follows fred
-bob status cool_person
-charlie follows bob
-charlie follows dani
-dani follows bob
-dani follows greg
-dani status cool_person
-emily follows fred
-fred follows greg
-greg status cool_person
-```
-### Loading triples:
+## Torque examples
 
-```python
-from cog.torque import Loader
-from cog.torque import Graph
+### Creating a graph
 
-loader = Loader('path/to/dbdir')
-loader.load_triples('path/to/triple_file', "graph_name")
-
-```
-
-### Loading edge list:
-
-```python
-from cog.torque import Loader
-from cog.torque import Graph
-loader = Loader('path/to/dbdir')
-loader.load_edgelist('path/to/edgelist', "graph_name")
-```
-
-## Torque query examples
-
-### starting from a vertex, follow all outgoing edges and list all vertices
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g.put("alice","follows","bob")
+g.put("bob","follows","fred")
+g.put("bob","status","cool_person")
+g.put("charlie","follows","bob")
+g.put("charlie","follows","dani")
+g.put("dani","follows","bob")
+g.put("dani","follows","greg")
+g.put("dani","status","cool_person")
+g.put("emily","follows","fred")
+g.put("fred","follows","greg")
+g.put("greg","status","cool_person")
+```
+
+### Querying a graph
+
+#### Starting from a vertex, follow all outgoing edges and list all vertices
+```python
 g.v("bob").out().all()
 ```
 > {"result": [{"id": "greg", "id": "alice"}]}
 
 ### starting from a vertex, follow all outgoing edges and count vertices
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").out().count()
-
 ```
 > '2'
 
 ### starting from a vertex, follow all out going edges and tag them
 
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").out().tag("source").out().tag("target").all()
-
 ```
 > {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
 
@@ -85,8 +63,6 @@ By tagging the vertices 'source' and 'target', the resulting graph can be visual
 
 ### starting from a vertex, follow all incoming edges and list all vertices
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").inc().all()
 ```
 > {"result": [{"id": "alice", "id": "dani"}]}
@@ -94,17 +70,23 @@ g.v("bob").inc().all()
 ### Adding vertices
 
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
-g.put("A","letters","B").put("B","letters","C").put("C","letters","D")
-g.put("Z","letters","D")
 g.v("A").out(["letters"]).out().out().inc().all()
-
 ```
 Query makes multiple hops on outgoing edges.
 
 > {"result": [{"id": "C"}, {"id": "Z"}]}'
 
+## Loading data from a file
+
+### Triples file
+```python
+g.load_triples("/path/to/triples.nq", "people")
+```
+
+### Edgelist file
+```python
+g.load_edgelist("/path/to/edgelist", "people")
+```
 
 ## Low level key-value store API:
 Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 
