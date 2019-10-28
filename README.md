@@ -1,7 +1,7 @@
 [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Python 2.7](https://img.shields.io/badge/python-2.7-blue.svg)](https://www.python.org/downloads/release/python-270)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
-# Cog - A pure Python Graph Database
+# Cog - Embedded Graph Database
 # ![ScreenShot](/cog-logo.png)
 
 
@@ -9,7 +9,7 @@
 ```
 pip install cogdb
 ```
-Cog is a graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
+Cog is an embedded graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
 
 Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It is written purely in Python so it has no dependencies other than Python standard library.
 

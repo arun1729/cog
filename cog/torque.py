@@ -76,12 +76,11 @@ class Graph:
         if vertex:
             self.last_visited_vertices = [Vertex(vertex)]
         else:
-            if not self.last_visited_vertices:
-                self.last_visited_vertices = []
-                self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
-                scanner = self.cog.scanner()
-                for r in scanner:
-                    self.last_visited_vertices.append(Vertex(r))
+            self.last_visited_vertices = []
+            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+            scanner = self.cog.scanner()
+            for r in scanner:
+                self.last_visited_vertices.append(Vertex(r))
         return self
 
     def out(self, predicates=None):
