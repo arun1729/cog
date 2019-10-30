@@ -75,7 +75,7 @@ class Index:
         orig_position = self.get_index(key)
         probe_position = orig_position
         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
-        self.logger.debug("PUT: probe position: "+str(probe_position)+" value = "+data_at_prob_position)
+        self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + data_at_prob_position)
         looped_back=False
         while(data_at_prob_position != self.empty_block):
             if(looped_back):# Terminating condition
@@ -90,7 +90,6 @@ class Index:
                     continue
 
             record = store.read(int(data_at_prob_position))
-#             print "put store record check: "+str(record)
             if(record[1][0] == key):
                 self.logger.debug("PUT: Updating index: " + self.name)
                 break
@@ -304,7 +303,7 @@ class Indexer:
 
     def scanner(self, store):
         for idx in self.index_list:
-            self.logger.info("SCAN: index: "+idx.name)
+            self.logger.debug("SCAN: index: "+idx.name)
             for r in idx.scanner(store):
                 yield r
 

@@ -14,10 +14,16 @@ class TestDB2(unittest.TestCase):
         cogdb.create_or_load_table("new_db", "my_namespace")
 
         # put some data
-        cogdb.put(('key', 'val'))
+        cogdb.put(('A', 'val'))
+        cogdb.put(('B', 'val'))
+        # cogdb.put(('key3', 'val'))
+        # cogdb.put(('key3', 'val_updated'))
 
         # retrieve data
-        print cogdb.get('key')
+        #print cogdb.get('key')
+
+        for r in cogdb.scanner():
+            print r
 
     def test_zzz_after_all_tests(self):
         shutil.rmtree('/tmp/cogtestdb2')

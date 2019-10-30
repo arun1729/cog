@@ -100,14 +100,20 @@ class Cog:
         self.current_namespace = namespace
 
     def create_or_load_table(self, name, namespace):
-        table = Table(name, namespace, self.instance_id, self.config, self.logger)
-        self.current_namespace = namespace
-        self.current_table = table
-
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
-
-        self.namespaces[namespace][name] = table
+            table = Table(name, namespace, self.instance_id, self.config, self.logger)
+            self.current_namespace = namespace
+            self.current_table = table
+            self.namespaces[namespace][name] = table
+        elif namespace in self.namespaces and name not in self.namespaces[namespace]:
+            table = Table(name, namespace, self.instance_id, self.config, self.logger)
+            self.current_namespace = namespace
+            self.current_table = table
+            self.namespaces[namespace][name] = table
+        else:
+            self.current_namespace = namespace
+            self.current_table = self.namespaces[namespace][name]
 
     def list_tables(self):
         p = set(())
@@ -147,8 +153,8 @@ class Cog:
         return self.current_table.indexer.get(key, self.current_table.store)
 
     def scanner(self, sfilter=None):
-        scanner = self.current_table.indexer.scanner(self.current_table.store)
-        for r in scanner:
+        scan_itr = self.current_table.indexer.scanner(self.current_table.store)
+        for r in scan_itr:
             if sfilter:
                 yield sfilter.process(r[1][1])
             else:
@@ -178,6 +184,7 @@ class Cog:
         D => [B]
         """
         # add to node set
+        #print "-> v1 " + str(vertex1) + " predicate: "+ self.config.GRAPH_NODE_SET_TABLE_NAME + " v2 " + str(vertex2)
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
 

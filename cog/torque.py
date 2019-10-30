@@ -38,7 +38,7 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
         self.last_visited_vertices = None
         self.cog.create_namespace(self.graph_name)
-        self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
+        #self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
@@ -55,7 +55,7 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def put(self, vertex1, predicate, vertex2):
-        self.cog.create_or_load_table(predicate, self.graph_name)
+        #self.cog.create_or_load_table(predicate, self.graph_name)
         self.cog.use_namespace(self.graph_name).use_table(predicate)
         self.cog.put_node(vertex1, predicate, vertex2)
         self.all_predicates = self.cog.list_tables()
@@ -78,8 +78,7 @@ class Graph:
         else:
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
-            scanner = self.cog.scanner()
-            for r in scanner:
+            for r in self.cog.scanner():
                 self.last_visited_vertices.append(Vertex(r))
         return self
 

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='cogdb',
-      version='0.1.0',
+      version='0.1.1',
       description='Embedded Graph Database',
       url='http://github.com/arun1729/cog',
       author='Arun Mahendra',
