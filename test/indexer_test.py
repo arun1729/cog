@@ -1,6 +1,4 @@
-from cog.core import Store
 from cog.core import Table
-from cog.core import Indexer
 from cog import config
 import logging
 import os
@@ -15,22 +13,28 @@ DIR_NAME = "TestIndexer"
 
 class TestIndexer(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
-        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
-            os.mkdir("/tmp/" + DIR_NAME + "/")
-            os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
-
-        config.COG_HOME = DIR_NAME
+    @classmethod
+    def setUpClass(cls):
+        path = "/tmp/"+DIR_NAME+"/test_table/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
+        print "*** " + config.CUSTOM_COG_DB_PATH + "\n"
 
     def test_indexer_put_get(self):
+        if not os.path.exists("/tmp/"+DIR_NAME+"/test_table/"):
+            os.makedirs("/tmp/"+DIR_NAME+"/test_table/")
+
+        config.COG_HOME = DIR_NAME
+        print "*** " + config.COG_HOME + "\n"
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
-        table = Table("testdb","test_table","test_xcvzdfsadx")
+        table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
-        store = Store(table,config,logger)
-        indexer = Indexer(table,config,logger)
+        store = table.store
+        indexer = table.indexer.index_list[0]
 
         max_range=100
         for i in range(max_range):
@@ -52,7 +56,8 @@ class TestIndexer(unittest.TestCase):
             c += 1
         print "Total records scanned: " + str(c)
 
-    def test_zzz_after_all_tests(self):
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME+"/")
         print "*** deleted test data: " + "/tmp/"+DIR_NAME
 

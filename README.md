@@ -1,15 +1,15 @@
 [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Python 2.7](https://img.shields.io/badge/python-2.7-blue.svg)](https://www.python.org/downloads/release/python-270)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
-# Cog - A pure Python Graph Database
+# Cog - Embedded Graph Database
 # ![ScreenShot](/cog-logo.png)
 
-
+> New release: 0.1.2
 ## Installing Cog
 ```
 pip install cogdb
 ```
-Cog is a graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
+Cog is an embedded graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
 
 Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It is written purely in Python so it has no dependencies other than Python standard library.
 
@@ -18,93 +18,67 @@ Cog stores graph as triples:
 
   ```vertex <predicate> vertex```
   
-### Sample data
-```
-alice follows bob
-bob follows fred
-bob status cool_person
-charlie follows bob
-charlie follows dani
-dani follows bob
-dani follows greg
-dani status cool_person
-emily follows fred
-fred follows greg
-greg status cool_person
-```
-### Loading triples:
+## Torque examples
+
+### Creating a graph
 
 ```python
-from cog.torque import Loader
 from cog.torque import Graph
-
-loader = Loader('path/to/dbdir')
-loader.load_triples('path/to/triple_file', "graph_name")
-
+g = Graph(graph_name="people", cog_dir='/tmp/people')
+g.put("alice","follows","bob")
+g.put("bob","follows","fred")
+g.put("bob","status","cool_person")
+g.put("charlie","follows","bob")
+g.put("charlie","follows","dani")
+g.put("dani","follows","bob")
+g.put("dani","follows","greg")
+g.put("dani","status","cool_person")
+g.put("emily","follows","fred")
+g.put("fred","follows","greg")
+g.put("greg","status","cool_person")
 ```
 
-### Loading edge list:
+### Querying a graph
 
+#### Starting from a vertex, follow all outgoing edges and list all vertices
 ```python
-from cog.torque import Loader
-from cog.torque import Graph
-loader = Loader('path/to/dbdir')
-loader.load_edgelist('path/to/edgelist', "graph_name")
-```
-
-## Torque query examples
-
-### starting from a vertex, follow all outgoing edges and list all vertices
-```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").out().all()
 ```
-> {"result": [{"id": "greg", "id": "alice"}]}
+> {'result': [{'id': 'cool_person'}, {'id': 'fred'}]}
 
 ### starting from a vertex, follow all outgoing edges and count vertices
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").out().count()
-
 ```
 > '2'
 
 ### starting from a vertex, follow all out going edges and tag them
 
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").out().tag("source").out().tag("target").all()
-
 ```
-> {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
+> {'result': [{'source': 'fred', 'id': 'greg', 'target': 'greg'}]}
 
 By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
 
 ### starting from a vertex, follow all incoming edges and list all vertices
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
 g.v("bob").inc().all()
 ```
-> {"result": [{"id": "alice", "id": "dani"}]}
+> {'result': [{'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
 
-### Adding vertices
 
+## Loading data from a file
+
+### Triples file
 ```python
-from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
-g.put("A","letters","B").put("B","letters","C").put("C","letters","D")
-g.put("Z","letters","D")
-g.v("A").out(["letters"]).out().out().inc().all()
-
+g.load_triples("/path/to/triples.nq", "people")
 ```
-Query makes multiple hops on outgoing edges.
 
-> {"result": [{"id": "C"}, {"id": "Z"}]}'
-
+### Edgelist file
+```python
+g.load_edgelist("/path/to/edgelist", "people")
+```
 
 ## Low level key-value store API:
 Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 

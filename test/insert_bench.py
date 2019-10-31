@@ -22,7 +22,8 @@ DIR_NAME = "TestIndexerPerf"
 
 class TestIndexerPerf(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
+    @classmethod
+    def setUpClass(cls):
         if not os.path.exists("/tmp/"+DIR_NAME+"/"):
             os.mkdir("/tmp/" + DIR_NAME + "/")
             os.mkdir("/tmp/"+DIR_NAME+"/perf_ns/")
@@ -65,7 +66,8 @@ class TestIndexerPerf(unittest.TestCase):
         plt.savefig("test.png")
         print "ops/s: "+str(max_range/total_seconds)
 
-    def test_zzz_after_all_tests(self):
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
 

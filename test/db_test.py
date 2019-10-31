@@ -17,7 +17,8 @@ DIR_NAME = "TestDB"
 
 class TestDB(unittest.TestCase):
 
-    def test_aaa_before_all_tests(self):
+    @classmethod
+    def setUpClass(cls):
         if not os.path.exists("/tmp/"+DIR_NAME+"/"):
             os.mkdir("/tmp/" + DIR_NAME + "/")
             os.mkdir("/tmp/"+DIR_NAME+"/test_table/")
@@ -28,15 +29,27 @@ class TestDB(unittest.TestCase):
         data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config=config)
         cogdb.create_namespace("test")
-        cogdb.create_table("db_test", "test")
+        cogdb.create_or_load_table("db_test", "test")
         cogdb.put(data)
         scanner = cogdb.scanner()
         for r in scanner:
-            print r
+            res = r
+        self.assertEqual(res, ('user100', '{"firstname":"Hari","lastname":"seldon"}'))
 
-    def test_zzz_after_all_tests(self):
+    def test_list_tables(self):
+        cogdb = Cog(config=config)
+        cogdb.create_namespace("test_ns")
+        cogdb.create_or_load_table("table1", "test_ns")
+        cogdb.create_or_load_table("table2", "test_ns")
+        cogdb.create_or_load_table("table3", "test_ns")
+        self.assertEquals(cogdb.list_tables(), ['table2', 'table3', 'table1'])
+
+
+    @classmethod
+    def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
         print "*** deleted test data."
+
 
 if __name__ == '__main__':
     unittest.main()

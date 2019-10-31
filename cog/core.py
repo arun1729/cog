@@ -6,22 +6,38 @@ import os.path
 import sys
 
 
+class TableMeta:
+
+    def __init__(self, name, namespace, db_instance_id, column_mode):
+        self.name = name
+        self.namespace = namespace
+        self.db_instance_id = db_instance_id
+        self.column_mode = column_mode
+
+
 class Table:
 
-    def __init__(self, name, db_name, db_instance_id, column_mode=False):
-        self.column_mode=column_mode
-        self.name = name
-        self.db_name = db_name
-        self.db_instance_id = db_instance_id
+    def __init__(self, name, namespace, db_instance_id, config, logger=None, column_mode=False):
+        self.logger = logger
+        self.config = config
+        self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
+        self.indexer = self.__create_indexer()
+        self.store = self.__create_store()
+
+    def __create_indexer(self):
+        return Indexer(self.table_meta, self.config, self.logger)
+
+    def __create_store(self):
+        return Store(self.table_meta, self.config, self.logger)
 
 
 class Index:
 
-    def __init__(self, table, config, logger, index_id=0):
+    def __init__(self, table_meta, config, logger, index_id=0):
         self.logger = logger
-        self.table = table
+        self.table = table_meta
         self.config = config
-        self.name = self.config.cog_index(table.db_name, table.name, table.db_instance_id, index_id)
+        self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
@@ -59,12 +75,12 @@ class Index:
         orig_position = self.get_index(key)
         probe_position = orig_position
         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
-        self.logger.debug("PUT: probe position: "+str(probe_position)+" value = "+data_at_prob_position)
+        self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + data_at_prob_position)
         looped_back=False
         while(data_at_prob_position != self.empty_block):
             if(looped_back):# Terminating condition
                 if(probe_position >= orig_position or data_at_prob_position == ''):
-                    self.logger.warn("Unable to index data. Index capacity reached!: "+self.name)
+                    self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
                     return None
             if(data_at_prob_position == ''):#check if EOF reached.
                     probe_position=0
@@ -74,7 +90,6 @@ class Index:
                     continue
 
             record = store.read(int(data_at_prob_position))
-#             print "put store record check: "+str(record)
             if(record[1][0] == key):
                 self.logger.debug("PUT: Updating index: " + self.name)
                 break
@@ -185,12 +200,12 @@ class Index:
 
 class Store:
 
-    def __init__(self, table, config, logger):
+    def __init__(self, tablemeta, config, logger):
         self.logger = logger
-        self.table = table
+        self.tablemeta = tablemeta
         self.config = config
         self.store = self.config.cog_store(
-            table.db_name, table.name, table.db_instance_id)
+            tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
@@ -234,24 +249,24 @@ class Indexer:
     Provides same get/put/del method as single index but over multuple files.
     '''
 
-    def __init__(self, table, config, logger):
-        self.table = table
+    def __init__(self, tablemeta, config, logger):
+        self.tablemeta = tablemeta
         self.config = config
         self.logger = logger
         self.index_list = []
         self.index_id = 0
         self.load_indexes()
         #if no index currenlty exist, create new live index.
-        if(len(self.index_list) == 0 ):
-            self.index_list.append(Index(table, config, logger, self.index_id))
+        if(len(self.index_list) == 0):
+            self.index_list.append(Index(tablemeta, config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
 
     def load_indexes(self):
-        for f in os.listdir(self.config.cog_data_dir(self.table.db_name)):
+        for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):
             if(self.config.INDEX in f):
                 self.logger.info("Loading index "+f)
                 id = self.config.index_id(f)
-                index = Index(self.table, self.config, self.logger, id)
+                index = Index(self.tablemeta, self.config, self.logger, id)
                 self.index_list.append(index)
                 #make the latest index the live index.
                 if(id >= self.index_id):
@@ -265,7 +280,7 @@ class Indexer:
                 self.live_index.flush()
                 self.index_id += 1
                 self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
-                self.index_list.append(Index(self.table, self.config, self.logger, self.index_id))
+                self.index_list.append(Index(self.tablemeta, self.config, self.logger, self.index_id))
                 self.live_index = self.index_list[self.index_id]
                 self.live_index_usage = self.live_index.get_load()
 
@@ -283,12 +298,12 @@ class Indexer:
             if(record):
                 return record
 
-        self.logger.warn("Key: "+key+ " not found in any index!")
+        self.logger.info("Key: "+key+ " not found in any index!")
         return None
 
     def scanner(self, store):
         for idx in self.index_list:
-            self.logger.info("SCAN: index: "+idx.name)
+            self.logger.debug("SCAN: index: "+idx.name)
             for r in idx.scanner(store):
                 yield r
 
