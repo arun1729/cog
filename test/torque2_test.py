@@ -24,15 +24,15 @@ class TorqueTest2(unittest.TestCase):
     def test_torque_2(self):
         TorqueTest2.g = Graph(graph_name="better_graph", cog_dir="/tmp/" + DIR_NAME)
         TorqueTest2.g.put("A", "is better than", "B")\
-            # .put("B", "is better than", "C")\
-            # .put("A", "is better than", "D")\
-            # .put("Z", "is better than", "D")\
-            # .put("D", "is smaller than", "F")
+            .put("B", "is better than", "C")\
+            .put("A", "is better than", "D")\
+            .put("Z", "is better than", "D")\
+            .put("D", "is smaller than", "F")
         expected = {'result': [{'id': 'B'}, {'id': 'D'}]}
-        # actual = TorqueTest2.g.v("A").out(["is better than"]).all()
-        # self.assertTrue(ordered(expected) == ordered(actual))
-        # self.assertTrue(TorqueTest2.g.v("A").out(["is better than"]).count() == 2)
-        print TorqueTest2.g.v().count()
+        actual = TorqueTest2.g.v("A").out(["is better than"]).all()
+        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertTrue(TorqueTest2.g.v("A").out(["is better than"]).count() == 2)
+        self.assertTrue(TorqueTest2.g.v().count() == 6)
 
 
     @classmethod

@@ -4,7 +4,7 @@
 # Cog - Embedded Graph Database
 # ![ScreenShot](/cog-logo.png)
 
-
+> New release: 0.1.2
 ## Installing Cog
 ```
 pip install cogdb
@@ -24,7 +24,7 @@ Cog stores graph as triples:
 
 ```python
 from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='path/to/dbdir')
+g = Graph(graph_name="people", cog_dir='/tmp/people')
 g.put("alice","follows","bob")
 g.put("bob","follows","fred")
 g.put("bob","status","cool_person")
@@ -44,7 +44,7 @@ g.put("greg","status","cool_person")
 ```python
 g.v("bob").out().all()
 ```
-> {"result": [{"id": "greg", "id": "alice"}]}
+> {'result': [{'id': 'cool_person'}, {'id': 'fred'}]}
 
 ### starting from a vertex, follow all outgoing edges and count vertices
 ```python
@@ -57,7 +57,7 @@ g.v("bob").out().count()
 ```python
 g.v("bob").out().tag("source").out().tag("target").all()
 ```
-> {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
+> {'result': [{'source': 'fred', 'id': 'greg', 'target': 'greg'}]}
 
 By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
 
@@ -65,16 +65,8 @@ By tagging the vertices 'source' and 'target', the resulting graph can be visual
 ```python
 g.v("bob").inc().all()
 ```
-> {"result": [{"id": "alice", "id": "dani"}]}
+> {'result': [{'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
 
-### Adding vertices
-
-```python
-g.v("A").out(["letters"]).out().out().inc().all()
-```
-Query makes multiple hops on outgoing edges.
-
-> {"result": [{"id": "C"}, {"id": "Z"}]}'
 
 ## Loading data from a file
 
