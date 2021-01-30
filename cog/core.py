@@ -61,7 +61,7 @@ class Index:
         self.db_mem.seek(0)
         current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
         #computes current load on index file.
-        while(current_block != ''):
+        while len(current_block) != 0:
             if(current_block != self.empty_block):
                 self.load += 1
             current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
@@ -79,10 +79,10 @@ class Index:
         looped_back=False
         while(data_at_prob_position != self.empty_block):
             if(looped_back):# Terminating condition
-                if(probe_position >= orig_position or data_at_prob_position == ''):
+                if probe_position >= orig_position or len(data_at_prob_position) == 0:
                     self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
                     return None
-            if(data_at_prob_position == ''):#check if EOF reached.
+            if len(data_at_prob_position) == 0:#check if EOF reached.
                     probe_position=0
                     data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
                     looped_back=True
@@ -123,7 +123,7 @@ class Index:
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
             self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
 
-            if(data_at_probe_position == ''):#EOF index
+            if len(data_at_probe_position) == 0:#EOF index
                 if(not looped_back):
                     probe_position = 0
                     data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
@@ -140,7 +140,7 @@ class Index:
 
             record = store.read(int(data_at_probe_position))
 
-            if(record == ''):#EOF store
+            if len(record) == 0:#EOF store
                 self.logger.error("Store EOF reached! Indexed record not found.")
                 return None
 
@@ -156,7 +156,7 @@ class Index:
         scan_cursor = 0
         while(True):
             data_at_position = self.db_mem[scan_cursor:scan_cursor + self.config.INDEX_BLOCK_LEN]
-            if(data_at_position == ''):#EOF index
+            if len(data_at_position) == 0:#EOF index
                 self.logger.info("Index EOF reached! Scan terminated.")
                 raise StopIteration
             if(data_at_position == self.empty_block):
@@ -164,7 +164,7 @@ class Index:
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
             record = store.read(int(data_at_position))
-            if(record == ''):#EOF store
+            if len(record) == 0:#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
                 raise StopIteration
             yield record
@@ -182,11 +182,11 @@ class Index:
         while(key != record[1][0]):
             index_position += self.config.INDEX_BLOCK_LEN
             current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-            if(current_store_position == ''):
+            if len(current_store_position) == 0:
                 self.logger.info("Index EOF reached! Key not found.")
                 return False
             record = store.read(int(current_store_position))
-            if(record == ''):
+            if len(record) == 0:
                 self.logger.info("Store EOF reached! Record not found.")
                 return False
 
@@ -233,7 +233,7 @@ class Store:
         while(c != '\x1F'):
             data.append(c)
             c = self.store_file.read(1)
-            if(c == ''):
+            if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
 
