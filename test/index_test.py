@@ -57,6 +57,9 @@ class TestIndex2(unittest.TestCase):
             c += 1
         print("Total records scanned: " + str(c))
 
+        index.close()
+        store.close()
+
     @classmethod
     def tearDownClass(cls):
         path = "/tmp/"+DIR_NAME

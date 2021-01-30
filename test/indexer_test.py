@@ -56,6 +56,10 @@ class TestIndexer(unittest.TestCase):
             c += 1
         print("Total records scanned: " + str(c))
 
+        indexer.close()
+        store.close()
+        table.close()
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME+"/")

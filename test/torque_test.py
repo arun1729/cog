@@ -109,6 +109,7 @@ class TorqueTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        TorqueTest.g.close()
         shutil.rmtree("/tmp/"+DIR_NAME)
         print("*** deleted test data.")
 

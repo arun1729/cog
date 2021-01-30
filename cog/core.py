@@ -30,6 +30,10 @@ class Table:
     def __create_store(self):
         return Store(self.table_meta, self.config, self.logger)
 
+    def close(self):
+        self.indexer.close()
+        self.store.close()
+
 
 class Index:
 
@@ -67,6 +71,9 @@ class Index:
             current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
 
         # self.db_mem.seek(0)
+
+    def close(self):
+        self.db.close()
 
     def get_load(self):
         return self.load
@@ -211,6 +218,9 @@ class Store:
         self.store_file = open(self.store, 'rb+')
         logger.info("Store for file init: " + self.store)
 
+    def close(self):
+        self.store_file.close()
+
     def save(self, kv):
         """Store data"""
         self.store_file.seek(0, 2)
@@ -260,6 +270,10 @@ class Indexer:
         if(len(self.index_list) == 0):
             self.index_list.append(Index(tablemeta, config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
+
+    def close(self):
+        for idx in self.index_list:
+            idx.close()
 
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):

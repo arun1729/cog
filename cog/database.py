@@ -62,7 +62,9 @@ class Cog:
         self.create_or_load_table("default", self.config.COG_DEFAULT_NAMESPACE)
 
         '''Load all table names but lazy load actual tables on request.'''
-        self.namespaces.update(dict.fromkeys(self.list_tables(), None))
+        for name in self.list_tables():
+            if name not in self.namespaces:
+                self.namespaces[name] = None
 
 
     def init_instance(self, namespace):
@@ -114,6 +116,13 @@ class Cog:
         else:
             self.current_namespace = namespace
             self.current_table = self.namespaces[namespace][name]
+
+    def close(self):
+        for name, space in self.namespaces.items():
+            if space is None:
+                continue
+            for name, table in space.items():
+                table.close()
 
     def list_tables(self):
         p = set(())

@@ -42,6 +42,9 @@ class TestCore(unittest.TestCase):
         print("retrieved data: "+str(returned_data))
         self.assertEqual(expected_data, returned_data[1])
 
+        index.close()
+        store.close()
+
     def test_delete(self):
 
         dictConfig(config.logging_config)
@@ -66,6 +69,9 @@ class TestCore(unittest.TestCase):
         print("retrieved data: "+str(returned_data))
         self.assertEqual(None, returned_data)
 
+        index.close()
+        store.close()
+
     def test_indexer(self):
 
         dictConfig(config.logging_config)
@@ -89,6 +95,9 @@ class TestCore(unittest.TestCase):
         returned_data=indexer.get(expected_data[0], store)
         print("indexer retrieved data: "+str(returned_data))
         self.assertEqual(None, returned_data)
+
+        indexer.close()
+        store.close()
 
     @classmethod
     def tearDownClass(cls):

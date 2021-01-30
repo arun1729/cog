@@ -20,7 +20,8 @@ class TestLib(unittest.TestCase):
         cogdb.create_namespace("test")
         cogdb.create_or_load_table("db_test", "test")
         cogdb.put(data)
-        self.assertEqual(cogdb.get("testKey"), (b'0', ('testKey', 'testVal')))\
+        self.assertEqual(cogdb.get("testKey"), (b'0', ('testKey', 'testVal')))
+        cogdb.close()
 
     @classmethod
     def tearDownClass(cls):

@@ -33,6 +33,7 @@ class TorqueTest2(unittest.TestCase):
         self.assertTrue(ordered(expected) == ordered(actual))
         self.assertTrue(TorqueTest2.g.v("A").out(["is better than"]).count() == 2)
         self.assertTrue(TorqueTest2.g.v().count() == 6)
+        TorqueTest2.g.close()
 
 
     @classmethod
