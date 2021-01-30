@@ -7,7 +7,7 @@ DIR_NAME = "TorqueTest2"
 
 def ordered(obj):
     if isinstance(obj, dict):
-        return sorted((k, ordered(v)) for k, v in obj.items())
+        return sorted((k, ordered(v)) for k, v in list(obj.items()))
     if isinstance(obj, list):
         return sorted(ordered(x) for x in obj)
     else:
@@ -38,7 +38,7 @@ class TorqueTest2(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

@@ -64,12 +64,12 @@ class TestIndexerPerf(unittest.TestCase):
         plt.ylabel("ms")
         plt.plot(insert_perf)
         plt.savefig("test.png")
-        print "ops/s: "+str(max_range/total_seconds)
+        print("ops/s: "+str(max_range/total_seconds))
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

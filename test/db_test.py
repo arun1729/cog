@@ -42,13 +42,13 @@ class TestDB(unittest.TestCase):
         cogdb.create_or_load_table("table1", "test_ns")
         cogdb.create_or_load_table("table2", "test_ns")
         cogdb.create_or_load_table("table3", "test_ns")
-        self.assertEquals(cogdb.list_tables(), ['table2', 'table3', 'table1'])
+        self.assertEqual(cogdb.list_tables(), ['table2', 'table3', 'table1'])
 
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ DIR_NAME = "TorqueTest"
 
 def ordered(obj):
     if isinstance(obj, dict):
-        return sorted((k, ordered(v)) for k, v in obj.items())
+        return sorted((k, ordered(v)) for k, v in list(obj.items()))
     if isinstance(obj, list):
         return sorted(ordered(x) for x in obj)
     else:
@@ -50,7 +50,7 @@ class TorqueTest(unittest.TestCase):
         TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
         TorqueTest.g.load_triples(data_dir, "people")
         #print TorqueTest.g.v().all()
-        print ">>> test setup complete.\n"
+        print(">>> test setup complete.\n")
 
     def test_torque_1(self):
         self.assertEqual(1, TorqueTest.g.v("<alice>").out().count())
@@ -104,13 +104,13 @@ class TorqueTest(unittest.TestCase):
     def test_torque_11(self):
         expected = {'result': []}
         actual = TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
-        print actual
+        print(actual)
         self.assertTrue(ordered(expected) == ordered(actual))
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

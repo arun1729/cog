@@ -15,8 +15,8 @@ import ast
 import pickle
 import socket
 import uuid
-from core import Table
-import config as cfg
+from .core import Table
+from . import config as cfg
 
 
 # class Compaction:

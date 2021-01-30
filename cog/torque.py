@@ -1,6 +1,6 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes
-import config as cfg
+from . import config as cfg
 import json
 import ast
 from os import listdir

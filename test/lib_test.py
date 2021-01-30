@@ -25,7 +25,7 @@ class TestLib(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':
