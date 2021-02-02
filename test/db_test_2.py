@@ -21,7 +21,9 @@ class TestDB2(unittest.TestCase):
 
         self.assertEqual(cogdb.get('key3')[1][1], 'val_updated')
 
+        cogdb.close()
+
 
     def test_zzz_after_all_tests(self):
         shutil.rmtree('/tmp/cogtestdb2')
-        print "*** deleted test data."
+        print("*** deleted test data.")

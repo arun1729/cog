@@ -35,6 +35,7 @@ class TestDB(unittest.TestCase):
         for r in scanner:
             res = r
         self.assertEqual(res, ('user100', '{"firstname":"Hari","lastname":"seldon"}'))
+        cogdb.close()
 
     def test_list_tables(self):
         cogdb = Cog(config=config)
@@ -42,13 +43,14 @@ class TestDB(unittest.TestCase):
         cogdb.create_or_load_table("table1", "test_ns")
         cogdb.create_or_load_table("table2", "test_ns")
         cogdb.create_or_load_table("table3", "test_ns")
-        self.assertEquals(cogdb.list_tables(), ['table2', 'table3', 'table1'])
+        self.assertEqual(set(cogdb.list_tables()), {'table2', 'table3', 'table1'})
+        cogdb.close()
 
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

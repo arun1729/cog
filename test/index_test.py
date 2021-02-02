@@ -23,7 +23,7 @@ class TestIndex2(unittest.TestCase):
         if not os.path.exists(path):
             os.makedirs(path)
         config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
-        print "*** created: "+path
+        print("*** created: "+path)
 
     def test_put_get(self):
 
@@ -37,7 +37,7 @@ class TestIndex2(unittest.TestCase):
         index = Index(tablemeta, config, logger, 0)
 
         for i in range(30):
-            print "Index load: "+str(index.get_load())
+            print("Index load: "+str(index.get_load()))
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = (key, value)
@@ -47,21 +47,24 @@ class TestIndex2(unittest.TestCase):
                 returned_data=index.get(expected_data[0], store)
                 self.assertEqual(expected_data, returned_data[1])
             else:
-                print "Index has reached its capacity."
+                print("Index has reached its capacity.")
                 break
 
         c = 0
         scanner = index.scanner(store)
         for r in scanner:
-            print r
+            print(r)
             c += 1
-        print "Total records scanned: " + str(c)
+        print("Total records scanned: " + str(c))
+
+        index.close()
+        store.close()
 
     @classmethod
     def tearDownClass(cls):
         path = "/tmp/"+DIR_NAME
         shutil.rmtree(path)
-        print "*** deleted test data." + path
+        print("*** deleted test data." + path)
 
 
 if __name__ == '__main__':

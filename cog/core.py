@@ -30,6 +30,10 @@ class Table:
     def __create_store(self):
         return Store(self.table_meta, self.config, self.logger)
 
+    def close(self):
+        self.indexer.close()
+        self.store.close()
+
 
 class Index:
 
@@ -38,7 +42,7 @@ class Index:
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
-        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN)
+        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
             f = open(self.name, 'wb+')
@@ -61,12 +65,15 @@ class Index:
         self.db_mem.seek(0)
         current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
         #computes current load on index file.
-        while(current_block != ''):
+        while len(current_block) != 0:
             if(current_block != self.empty_block):
                 self.load += 1
             current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
 
         # self.db_mem.seek(0)
+
+    def close(self):
+        self.db.close()
 
     def get_load(self):
         return self.load
@@ -75,18 +82,18 @@ class Index:
         orig_position = self.get_index(key)
         probe_position = orig_position
         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
-        self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + data_at_prob_position)
+        self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + str(data_at_prob_position))
         looped_back=False
         while(data_at_prob_position != self.empty_block):
             if(looped_back):# Terminating condition
-                if(probe_position >= orig_position or data_at_prob_position == ''):
+                if probe_position >= orig_position or len(data_at_prob_position) == 0:
                     self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
                     return None
-            if(data_at_prob_position == ''):#check if EOF reached.
+            if len(data_at_prob_position) == 0:#check if EOF reached.
                     probe_position=0
                     data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
                     looped_back=True
-                    self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+data_at_prob_position)
+                    self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+str(data_at_prob_position))
                     continue
 
             record = store.read(int(data_at_prob_position))
@@ -96,9 +103,9 @@ class Index:
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+data_at_prob_position)
+                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
         # if an free index block is found, then write key to at that position.
-        self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = str(store_position).rjust(self.config.INDEX_BLOCK_LEN)
+        self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = str(store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
         self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position))
         self.load += 1
         return probe_position
@@ -121,13 +128,13 @@ class Index:
 
         while(True):
             data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-            self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+data_at_probe_position)
+            self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+str(data_at_probe_position))
 
-            if(data_at_probe_position == ''):#EOF index
+            if len(data_at_probe_position) == 0:#EOF index
                 if(not looped_back):
                     probe_position = 0
                     data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                    self.logger.debug("GET: LOOP BACK: "+str(probe_position)+" value = "+data_at_probe_position)
+                    self.logger.debug("GET: LOOP BACK: "+str(probe_position)+" value = "+str(data_at_probe_position))
                     looped_back = True
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
@@ -140,7 +147,7 @@ class Index:
 
             record = store.read(int(data_at_probe_position))
 
-            if(record == ''):#EOF store
+            if record is None or len(record) == 0:#EOF store
                 self.logger.error("Store EOF reached! Indexed record not found.")
                 return None
 
@@ -156,17 +163,17 @@ class Index:
         scan_cursor = 0
         while(True):
             data_at_position = self.db_mem[scan_cursor:scan_cursor + self.config.INDEX_BLOCK_LEN]
-            if(data_at_position == ''):#EOF index
+            if len(data_at_position) == 0:#EOF index
                 self.logger.info("Index EOF reached! Scan terminated.")
-                raise StopIteration
+                return
             if(data_at_position == self.empty_block):
                 scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
             record = store.read(int(data_at_position))
-            if(record == ''):#EOF store
+            if len(record) == 0:#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
-                raise StopIteration
+                return
             yield record
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
@@ -182,11 +189,11 @@ class Index:
         while(key != record[1][0]):
             index_position += self.config.INDEX_BLOCK_LEN
             current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-            if(current_store_position == ''):
+            if len(current_store_position) == 0:
                 self.logger.info("Index EOF reached! Key not found.")
                 return False
             record = store.read(int(current_store_position))
-            if(record == ''):
+            if len(record) == 0:
                 self.logger.info("Store EOF reached! Record not found.")
                 return False
 
@@ -211,6 +218,9 @@ class Store:
         self.store_file = open(self.store, 'rb+')
         logger.info("Store for file init: " + self.store)
 
+    def close(self):
+        self.store_file.close()
+
     def save(self, kv):
         """Store data"""
         self.store_file.seek(0, 2)
@@ -218,9 +228,9 @@ class Store:
         record = marshal.dumps(kv)
         length = str(len(record))
         self.store_file.seek(0, 2)
-        self.store_file.write("0")  # delete bit
-        self.store_file.write(length)
-        self.store_file.write('\x1F')  # unit seperator
+        self.store_file.write(b'0')  # delete bit
+        self.store_file.write(length.encode())
+        self.store_file.write(b'\x1F')  # unit seperator
         self.store_file.write(record)
         self.store_file.flush()
         return store_position
@@ -230,14 +240,14 @@ class Store:
         tombstone = self.store_file.read(1)
         c = self.store_file.read(1)
         data = [c]
-        while(c != '\x1F'):
+        while(c != b'\x1F'):
             data.append(c)
             c = self.store_file.read(1)
-            if(c == ''):
+            if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
 
-        length = int("".join(data))
+        length = int(b''.join(data).decode())
         record = marshal.loads(self.store_file.read(length))
         return (tombstone, record)
 
@@ -260,6 +270,10 @@ class Indexer:
         if(len(self.index_list) == 0):
             self.index_list.append(Index(tablemeta, config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
+
+    def close(self):
+        for idx in self.index_list:
+            idx.close()
 
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):

@@ -1,4 +1,4 @@
-from context import cog
+from .context import cog
 from cog.core import Table
 from cog import config
 import logging
@@ -27,20 +27,23 @@ class TestCore(unittest.TestCase):
         expected_data = ("new super data","super new old stuff")
 
         table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
-        print config.COG_HOME
+        print(config.COG_HOME)
         store = table.store
         index = table.indexer.index_list[0]
 
         position=store.save(expected_data)
-        print "stored"
+        print("stored")
 
         index.put(expected_data[0],position,store)
-        print "indexed"
+        print("indexed")
 
 
         returned_data=index.get(expected_data[0], store)
-        print "retrieved data: "+str(returned_data)
+        print("retrieved data: "+str(returned_data))
         self.assertEqual(expected_data, returned_data[1])
+
+        index.close()
+        store.close()
 
     def test_delete(self):
 
@@ -55,16 +58,19 @@ class TestCore(unittest.TestCase):
         index = table.indexer.index_list[0]
 
         position=store.save(expected_data)
-        print "stored"
+        print("stored")
 
         index.put(expected_data[0],position,store)
-        print "indexed"
+        print("indexed")
 
         index.delete(expected_data[0],store)
 
         returned_data=index.get(expected_data[0], store)
-        print "retrieved data: "+str(returned_data)
+        print("retrieved data: "+str(returned_data))
         self.assertEqual(None, returned_data)
+
+        index.close()
+        store.close()
 
     def test_indexer(self):
 
@@ -79,21 +85,24 @@ class TestCore(unittest.TestCase):
         indexer = table.indexer
 
         position=store.save(expected_data)
-        print "stored"
+        print("stored")
 
         indexer.put(expected_data[0],position,store)
-        print "indexed by indexer"
+        print("indexed by indexer")
 
         indexer.delete(expected_data[0],store)
 
         returned_data=indexer.get(expected_data[0], store)
-        print "indexer retrieved data: "+str(returned_data)
+        print("indexer retrieved data: "+str(returned_data))
         self.assertEqual(None, returned_data)
+
+        indexer.close()
+        store.close()
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/"+DIR_NAME)
-        print "*** deleted test data."
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':

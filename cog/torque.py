@@ -1,6 +1,6 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes
-import config as cfg
+from . import config as cfg
 import json
 import ast
 from os import listdir
@@ -53,6 +53,9 @@ class Graph:
         '''
         self.cog.load_triples(graph_data_path, graph_name)
         self.all_predicates = self.cog.list_tables()
+
+    def close(self):
+        self.cog.close()
 
     def put(self, vertex1, predicate, vertex2):
         #self.cog.create_or_load_table(predicate, self.graph_name)
