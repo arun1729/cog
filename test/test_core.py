@@ -1,4 +1,3 @@
-from .context import cog
 from cog.core import Table
 from cog import config
 import logging
