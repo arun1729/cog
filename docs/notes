@@ -1,7 +1,7 @@
 python 2.7:
 from cog root dir, run:
 python -m unittest discover test
-coverage run -m unittest discover -s test/ -p '*_test.py'
+coverage run -m unittest discover -s test/
 coverage report -m
 
 python 3:

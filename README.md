@@ -1,10 +1,10 @@
-[![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [![Python 2.7](https://img.shields.io/badge/python-2.7-blue.svg)](https://www.python.org/downloads/release/python-270)
+[![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) [!Python 3.8](https://img.shields.io/badge/python-3.8-blue.svg) [![Python 2.7](https://img.shields.io/badge/python-2.7-blue.svg)](https://www.python.org/downloads/release/python-270)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
-# Cog - Embedded Graph Database
+# Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
 
-> New release: 0.1.2
+> New release: 2.0.0, Python3 support!
 ## Installing Cog
 ```
 pip install cogdb
