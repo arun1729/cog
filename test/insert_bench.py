@@ -24,24 +24,21 @@ class TestIndexerPerf(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not os.path.exists("/tmp/"+DIR_NAME+"/"):
-            os.mkdir("/tmp/" + DIR_NAME + "/")
-            os.mkdir("/tmp/"+DIR_NAME+"/perf_ns/")
-
-        config.COG_HOME = DIR_NAME
-        config.INDEX_CAPACITY = 100000
+        path = "/tmp/"+DIR_NAME+"/test_table/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
+        print("*** " + config.CUSTOM_COG_DB_PATH + "\n")
 
     def test_indexer(self):
 
         dictConfig(config.logging_config)
+
         logger = logging.getLogger()
-
-        table = Table("perf_table","perf_ns","instance_1")
-
-        store = Store(table,config,logger)
-        indexer = Indexer(table,config,logger)
-
-        max_range=1000000
+        table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
+        store = table.store
+        indexer = table.indexer.index_list[0]
+        max_range=10000
 
         insert_perf=[]
         overall_start_time = timeit.default_timer()
@@ -57,7 +54,7 @@ class TestIndexerPerf(unittest.TestCase):
             elapsed = timeit.default_timer() - start_time
             insert_perf.append(elapsed*1000.0) #to ms
             total_seconds += elapsed
-            #print "Test progress: "+str(i*100.0/max_range)
+            print("Test progress: "+str(i*100.0/max_range))
         plt.xlim([-1,max_range])
         plt.ylim([0,2])
         plt.xlabel("put call")
@@ -65,6 +62,7 @@ class TestIndexerPerf(unittest.TestCase):
         plt.plot(insert_perf)
         plt.savefig("test.png")
         print("ops/s: "+str(max_range/total_seconds))
+        table.close()
 
     @classmethod
     def tearDownClass(cls):
