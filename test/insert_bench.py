@@ -37,8 +37,8 @@ class TestIndexerPerf(unittest.TestCase):
         logger = logging.getLogger()
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
-        indexer = table.indexer.index_list[0]
-        max_range=10000
+        indexer = table.indexer
+        max_range=100
 
         insert_perf=[]
         overall_start_time = timeit.default_timer()
@@ -61,6 +61,7 @@ class TestIndexerPerf(unittest.TestCase):
         plt.ylabel("ms")
         plt.plot(insert_perf)
         plt.savefig("test.png")
+        print("total index files: " + str(len(indexer.index_list)))
         print("ops/s: "+str(max_range/total_seconds))
         table.close()
 
