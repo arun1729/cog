@@ -4,7 +4,7 @@ import mmap
 import os
 import os.path
 import sys
-
+from profilehooks import profile
 
 class TableMeta:
 
@@ -119,6 +119,7 @@ class Index:
         logging.debug("offset : " + key + " : " + str(index))
         return index
 
+    @profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         orig_position = self.get_index(key)
