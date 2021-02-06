@@ -7,3 +7,39 @@ coverage report -m
 python 3:
 from cog root dir, run:
 python3 -m unittest
+
+------
+performance:
+get requests
+10K keys
+total index files: 3
+ops/s: 19.74615986943963
+
+*** PROFILER RESULTS ***
+get (/home/arun/git/cog/cog/core.py:122)
+function called 17991 times
+
+         1140854803 function calls in 504.429 seconds
+
+   Ordered by: cumulative time, internal time, call count
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    17991  104.575    0.006  504.427    0.028 core.py:122(get)
+ 48028981  134.616    0.000  345.666    0.000 core.py:239(read)
+288173886  121.488    0.000  121.488    0.000 {method 'read' of '_io.BufferedRandom' objects}
+ 48028981   46.633    0.000   46.633    0.000 {method 'seek' of '_io.BufferedRandom' objects}
+ 72045643   17.382    0.000   46.283    0.000 __init__.py:1286(debug)
+ 72053634   19.599    0.000   28.904    0.000 __init__.py:1544(isEnabledFor)
+252162230   15.850    0.000   15.850    0.000 {built-in method builtins.len}
+ 48028981   11.640    0.000   11.640    0.000 {built-in method marshal.loads}
+144086943    9.639    0.000    9.639    0.000 {method 'append' of 'list' objects}
+ 72053634    9.304    0.000    9.304    0.000 __init__.py:1530(getEffectiveLevel)
+ 48028981    7.053    0.000    7.053    0.000 {method 'decode' of 'bytes' objects}
+ 48028981    6.398    0.000    6.398    0.000 {method 'join' of 'bytes' objects}
+    17991    0.133    0.000    0.296    0.000 core.py:113(get_index)
+    35982    0.098    0.000    0.148    0.000 __init__.py:1904(debug)
+    17991    0.010    0.000    0.010    0.000 {built-in method builtins.max}
+     7991    0.002    0.000    0.005    0.000 __init__.py:1298(info)
+    17991    0.005    0.000    0.005    0.000 {built-in method builtins.hash}
+    17991    0.002    0.000    0.002    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        0    0.000             0.000          profile:0(profiler)

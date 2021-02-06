@@ -78,10 +78,16 @@ class Index:
     def get_load(self):
         return self.load
 
+    def get_key_bit(self, block_data):
+        return int(block_data[self.config.INDEX_BLOCK_BASE_LEN: self.config.INDEX_BLOCK_LEN])
+
+    def get_store_bit(self, block_data):
+        return int(block_data[:self.config.INDEX_BLOCK_BASE_LEN])
+
     def put(self, key, store_position, store):
         orig_position, orig_hash = self.get_index(key)
         probe_position = orig_position
-        data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
+        data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
         self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + str(data_at_prob_position))
         looped_back=False
 
@@ -92,15 +98,17 @@ class Index:
                     return None
             if len(data_at_prob_position) == 0:#check if EOF reached.
                     probe_position=0
-                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN].strip()
+                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
                     looped_back=True
                     self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+str(data_at_prob_position))
                     continue
-
-            record = store.read(int(data_at_prob_position))
-            if record[1][0] == key:
-                self.logger.debug("PUT: Updating index: " + self.name)
-                break
+            key_bit = self.get_key_bit(data_at_prob_position)
+            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+            if (orig_bit == key_bit):
+                record = store.read(self.get_store_bit(data_at_prob_position))
+                if record[1][0] == key:
+                    self.logger.debug("PUT: Updating index: " + self.name)
+                    break
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
@@ -108,9 +116,11 @@ class Index:
 
         # if a free index block is found, then write key to that position.
         store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
-        key_bit = str(orig_hash % self.config.INDEX_BLOCK_KEYBIT_LEN).encode().rjust(self.config.INDEX_BLOCK_LEN)
+        key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
+        self.logger.debug("store_position_bit: "+str(store_position_bit)+" key_bit: " + str(key_bit))
+        #if store position is greater that index block length, thrwo execption: maxium address length reachde, and link to github error notes for help.
         self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = store_position_bit + key_bit
-        self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position) + " : key bit :" + key_bit)
+        self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position) + " : key bit :" + str(key_bit))
         self.load += 1
         return probe_position
 
@@ -149,14 +159,17 @@ class Index:
                 self.logger.debug("GET: skipping empty block")
                 continue
 
-            record = store.read(int(data_at_probe_position))
+            key_bit = self.get_key_bit(data_at_probe_position)
+            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+            if(orig_bit == key_bit):
+                record = store.read(self.get_store_bit(data_at_probe_position))
 
-            if record is None or len(record) == 0:#EOF store
-                self.logger.error("Store EOF reached! Indexed record not found.")
-                return None
+                if record is None or len(record) == 0:#EOF store
+                    self.logger.error("Store EOF reached! Indexed record not found.")
+                    return None
 
-            if record is not None and key == record[1][0]:# found record!
-                return record
+                if record is not None and key == record[1][0]:# found record!
+                    return record
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -174,7 +187,7 @@ class Index:
                 scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
-            record = store.read(int(data_at_position))
+            record = store.read(self.get_store_bit(data_at_position))
             if len(record) == 0:#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
                 return
@@ -186,7 +199,8 @@ class Index:
         current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
         if current_store_position == self.empty_block:
             return False
-        record = store.read(int(current_store_position))
+
+        record = store.read(self.get_store_bit(current_store_position))
         if record is None:
             self.logger.info("Store EOF reached! Record not found.")
             return False
@@ -196,10 +210,14 @@ class Index:
             if len(current_store_position) == 0:
                 self.logger.info("Index EOF reached! Key not found.")
                 return False
-            record = store.read(int(current_store_position))
-            if len(record) == 0:
-                self.logger.info("Store EOF reached! Record not found.")
-                return False
+
+            key_bit = self.get_key_bit(current_store_position)
+            orig_bit = index_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+            if (orig_bit == key_bit):
+                record = store.read(self.get_store_bit(current_store_position))
+                if len(record) == 0:
+                    self.logger.info("Store EOF reached! Record not found.")
+                    return False
 
         self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
         self.load -= 1

@@ -51,6 +51,7 @@ class TestIndexerPerf(unittest.TestCase):
             position=store.save(expected_data)
             indexer.put(expected_data[0],position,store)
             print("load: "+str(i*100.0/max_range))
+        print("total index files: " + str(len(indexer.index_list)))
 
         overall_start_time = timeit.default_timer()
         total_seconds=0.0
@@ -70,7 +71,6 @@ class TestIndexerPerf(unittest.TestCase):
         plt.ylabel("ms")
         plt.plot(insert_perf)
         plt.savefig("get_bench.png")
-        print("total index files: " + str(len(indexer.index_list)))
         print("ops/s: "+str(max_range/total_seconds))
         table.close()
 
