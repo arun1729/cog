@@ -25,8 +25,9 @@ class TestIndexerPerf(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         path = "/tmp/"+DIR_NAME+"/test_table/"
-        if not os.path.exists(path):
-            os.makedirs(path)
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        os.makedirs(path)
         config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
         print("*** " + config.CUSTOM_COG_DB_PATH + "\n")
 
@@ -38,7 +39,7 @@ class TestIndexerPerf(unittest.TestCase):
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=1000
+        max_range=10000
 
         insert_perf=[]
 

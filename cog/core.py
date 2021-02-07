@@ -109,11 +109,18 @@ class Index:
                 if record[1][0] == key:
                     self.logger.debug("PUT: Updating index: " + self.name)
                     break
+                else:
+                    #key bit collision
+                    probe_position += self.config.INDEX_BLOCK_LEN
+                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
+                    self.logger.debug("PUT: key bit collision, probing next position: " + str(probe_position) + " value = " + str(data_at_prob_position))
             else:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
                 self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
 
+        if len(str(abs(store_position))) > self.config.INDEX_BLOCK_BASE_LEN:
+            raise Exception('Store address exceeds index block size. Database is full. Please reconfigure database and reload data.')
         # if a free index block is found, then write key to that position.
         store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
         key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
@@ -169,7 +176,9 @@ class Index:
                     return None
 
                 if record is not None and key == record[1][0]:# found record!
+                    self.logger.info("found key in index."+self.name)
                     return record
+                self.logger.info("found key but collision in index."+self.name)
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -327,6 +336,8 @@ class Indexer:
                 break
 
     def get(self, key, store):
+        if len(self.index_list) > 1:
+            self.logger.info("multiple index: " + str(len(self.index_list)))
         for idx in self.index_list:
             self.logger.info("GET: looking in index: "+idx.name)
             record=idx.get(key, store)
