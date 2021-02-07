@@ -335,6 +335,7 @@ class Indexer:
                 self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
                 break
 
+    @profile
     def get(self, key, store):
         if len(self.index_list) > 1:
             self.logger.info("multiple index: " + str(len(self.index_list)))

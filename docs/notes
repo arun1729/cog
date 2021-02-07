@@ -9,6 +9,7 @@ from cog root dir, run:
 python3 -m unittest
 
 ------
+base performance:
 performance:
 get requests
 10K keys
@@ -42,4 +43,72 @@ function called 17991 times
      7991    0.002    0.000    0.005    0.000 __init__.py:1298(info)
     17991    0.005    0.000    0.005    0.000 {built-in method builtins.hash}
     17991    0.002    0.000    0.002    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        0    0.000             0.000          profile:0(profiler)
+
+r-2.0.1
+
+*** PROFILER RESULTS ***
+get (/home/arun/git/cog2/cog-dev-2/cog/core.py:143)
+function called 17982 times
+
+         371785345 function calls in 153.919 seconds
+
+   Ordered by: cumulative time, internal time, call count
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    17982   83.802    0.005  153.917    0.009 core.py:143(get)
+ 71835399   14.555    0.000   39.691    0.000 __init__.py:1286(debug)
+ 71858232   16.971    0.000   25.149    0.000 __init__.py:1544(isEnabledFor)
+ 47950367   15.175    0.000   15.175    0.000 core.py:81(get_key_bit)
+ 47950367   11.720    0.000   11.720    0.000 {built-in method builtins.pow}
+ 71858232    8.178    0.000    8.178    0.000 __init__.py:1530(getEffectiveLevel)
+ 59961276    3.060    0.000    3.060    0.000 {built-in method builtins.len}
+    17982    0.160    0.000    0.274    0.000 core.py:134(get_index)
+    14851    0.123    0.000    0.207    0.000 core.py:269(read)
+    35964    0.061    0.000    0.101    0.000 __init__.py:1904(debug)
+    89106    0.039    0.000    0.039    0.000 {method 'read' of '_io.BufferedRandom' objects}
+    22833    0.008    0.000    0.020    0.000 __init__.py:1298(info)
+    14851    0.018    0.000    0.018    0.000 {method 'seek' of '_io.BufferedRandom' objects}
+    14851    0.011    0.000    0.011    0.000 core.py:84(get_store_bit)
+    14851    0.010    0.000    0.010    0.000 {built-in method marshal.loads}
+    17982    0.009    0.000    0.009    0.000 {built-in method builtins.max}
+    44553    0.005    0.000    0.005    0.000 {method 'append' of 'list' objects}
+    14851    0.004    0.000    0.004    0.000 {method 'join' of 'bytes' objects}
+    14851    0.004    0.000    0.004    0.000 {method 'decode' of 'bytes' objects}
+    17982    0.003    0.000    0.003    0.000 {built-in method builtins.hash}
+    17982    0.002    0.000    0.002    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        0    0.000             0.000          profile:0(profiler)
+
+---
+partial test
+
+get (/home/arun/git/cog2/cog-dev-2/cog/core.py:143)
+function called 9157 times
+
+         119630809 function calls in 49.508 seconds
+
+   Ordered by: cumulative time, internal time, call count
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     9157   26.900    0.003   49.507    0.005 core.py:143(get)
+ 23093442    4.768    0.000   12.796    0.000 __init__.py:1286(debug)
+ 23104164    5.384    0.000    8.034    0.000 __init__.py:1544(isEnabledFor)
+ 15419250    4.797    0.000    4.797    0.000 core.py:81(get_key_bit)
+ 15419250    3.747    0.000    3.747    0.000 {built-in method builtins.pow}
+ 23104164    2.650    0.000    2.650    0.000 __init__.py:1530(getEffectiveLevel)
+ 19293513    1.020    0.000    1.020    0.000 {built-in method builtins.len}
+     9157    0.084    0.000    0.144    0.000 core.py:134(get_index)
+     8147    0.069    0.000    0.111    0.000 core.py:269(read)
+    18314    0.029    0.000    0.052    0.000 __init__.py:1904(debug)
+    48882    0.019    0.000    0.019    0.000 {method 'read' of '_io.BufferedRandom' objects}
+    10722    0.004    0.000    0.010    0.000 __init__.py:1298(info)
+     8147    0.008    0.000    0.008    0.000 {method 'seek' of '_io.BufferedRandom' objects}
+     8147    0.007    0.000    0.007    0.000 core.py:84(get_store_bit)
+     8147    0.006    0.000    0.006    0.000 {built-in method marshal.loads}
+     9157    0.005    0.000    0.005    0.000 {built-in method builtins.max}
+    24441    0.003    0.000    0.003    0.000 {method 'append' of 'list' objects}
+     8147    0.003    0.000    0.003    0.000 {method 'join' of 'bytes' objects}
+     8147    0.002    0.000    0.002    0.000 {method 'decode' of 'bytes' objects}
+     9157    0.002    0.000    0.002    0.000 {built-in method builtins.hash}
+     9157    0.001    0.000    0.001    0.000 {method 'disable' of '_lsprof.Profiler' objects}
         0    0.000             0.000          profile:0(profiler)
