@@ -112,3 +112,53 @@ function called 9157 times
      9157    0.002    0.000    0.002    0.000 {built-in method builtins.hash}
      9157    0.001    0.000    0.001    0.000 {method 'disable' of '_lsprof.Profiler' objects}
         0    0.000             0.000          profile:0(profiler)
+
+-----
+
+*** PROFILER RESULTS ***
+get (/home/arun/git/cog2/cog-dev-2/cog/core.py:338)
+function called 16098 times
+
+         1135828692 function calls in 466.318 seconds
+
+   Ordered by: cumulative time, internal time, call count
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    16098    0.119    0.000  466.316    0.029 core.py:338(get)
+    40428    0.039    0.000  466.138    0.012 profilehooks.py:257(new_fn)
+    40428    0.161    0.000  466.099    0.012 profilehooks.py:348(__call__)
+    40428  254.285    0.006  465.938    0.012 core.py:143(get)
+219617770   43.292    0.000  119.359    0.000 __init__.py:1286(debug)
+219729222   50.996    0.000   76.129    0.000 __init__.py:1544(isEnabledFor)
+146337115   45.863    0.000   45.863    0.000 core.py:81(get_key_bit)
+146337115   36.014    0.000   36.014    0.000 {built-in method builtins.pow}
+219729222   25.133    0.000   25.133    0.000 __init__.py:1530(getEffectiveLevel)
+183152236    9.658    0.000    9.658    0.000 {built-in method builtins.len}
+    30596    0.211    0.000    0.400    0.000 core.py:269(read)
+    40428    0.194    0.000    0.371    0.000 core.py:134(get_index)
+    80856    0.077    0.000    0.139    0.000 __init__.py:1904(debug)
+   111452    0.034    0.000    0.095    0.000 __init__.py:1298(info)
+   183576    0.093    0.000    0.093    0.000 {method 'read' of '_io.BufferedRandom' objects}
+    30596    0.043    0.000    0.043    0.000 {method 'seek' of '_io.BufferedRandom' objects}
+    40428    0.030    0.000    0.030    0.000 {built-in method builtins.max}
+    30596    0.019    0.000    0.019    0.000 {built-in method marshal.loads}
+    30596    0.018    0.000    0.018    0.000 core.py:84(get_store_bit)
+    91788    0.011    0.000    0.011    0.000 {method 'append' of 'list' objects}
+    30596    0.010    0.000    0.010    0.000 {method 'join' of 'bytes' objects}
+    30596    0.008    0.000    0.008    0.000 {method 'decode' of 'bytes' objects}
+    40428    0.007    0.000    0.007    0.000 {built-in method builtins.hash}
+    16098    0.002    0.000    0.002    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        0    0.000             0.000          profile:0(profiler)
+
+
+
+*** PROFILER RESULTS ***
+get (/home/arun/git/cog2/cog-dev-2/cog/core.py:143)
+function called 40428 times
+
+         0 function calls in 0.000 seconds
+
+   Ordered by: cumulative time, internal time, call count
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        0    0.000             0.000          profile:0(profiler)
