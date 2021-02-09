@@ -119,10 +119,11 @@ class Index:
                 data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
                 self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
 
-        if len(str(abs(store_position))) > self.config.INDEX_BLOCK_BASE_LEN:
-            raise Exception('Store address exceeds index block size. Database is full. Please reconfigure database and reload data.')
         # if a free index block is found, then write key to that position.
         store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
+        if len(store_position_bit) > self.config.INDEX_BLOCK_BASE_LEN:
+            raise Exception('Store address '+str(len(store_position_bit))+' exceeds index block size '+str(self.config.INDEX_BLOCK_BASE_LEN)+'. Database is full. Please reconfigure database and reload data.')
+
         key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
         self.logger.debug("store_position_bit: "+str(store_position_bit)+" key_bit: " + str(key_bit))
         #if store position is greater that index block length, thrwo execption: maxium address length reachde, and link to github error notes for help.

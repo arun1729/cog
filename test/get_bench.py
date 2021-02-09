@@ -20,7 +20,6 @@ import pkg_resources
 DIR_NAME = "TestIndexerPerf"
 COG_VERSION = '2.0.1'
 
-
 class TestIndexerPerf(unittest.TestCase):
 
     @classmethod
@@ -75,6 +74,7 @@ class TestIndexerPerf(unittest.TestCase):
         plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
         plt.savefig("get_bench.png")
         print("ops/s: "+str(max_range/total_seconds))
+        print('num index files: '+str(len(table.indexer.index_list)))
         table.close()
 
     @classmethod
