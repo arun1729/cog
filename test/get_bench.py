@@ -11,13 +11,14 @@ import random
 import timeit
 import unittest
 import matplotlib.pyplot as plt
-
+import pkg_resources
 
 #!!! clean namespace before running test.
 #need OPS/s
 #read, ops/s: 16784.0337416
 
 DIR_NAME = "TestIndexerPerf"
+COG_VERSION = '2.0.1'
 
 
 class TestIndexerPerf(unittest.TestCase):
@@ -39,7 +40,7 @@ class TestIndexerPerf(unittest.TestCase):
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=10000
+        max_range=100
 
         insert_perf=[]
 
@@ -68,9 +69,10 @@ class TestIndexerPerf(unittest.TestCase):
 
         plt.xlim([-1,max_range])
         plt.ylim([0,2])
-        plt.xlabel("put call")
+        plt.xlabel("get call")
         plt.ylabel("ms")
         plt.plot(insert_perf)
+        plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
         plt.savefig("get_bench.png")
         print("ops/s: "+str(max_range/total_seconds))
         table.close()
