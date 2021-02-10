@@ -4,7 +4,7 @@ import mmap
 import os
 import os.path
 import sys
-from profilehooks import profile
+# from profilehooks import profile
 
 class TableMeta:
 
@@ -141,7 +141,7 @@ class Index:
         logging.debug("offset : " + key + " : " + str(index))
         return index, num
 
-    @profile
+    #@profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         orig_position, orig_hash = self.get_index(key)
@@ -336,7 +336,7 @@ class Indexer:
                 self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
                 break
 
-    @profile
+    #@profile
     def get(self, key, store):
         if len(self.index_list) > 1:
             self.logger.info("multiple index: " + str(len(self.index_list)))

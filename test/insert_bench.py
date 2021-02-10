@@ -33,12 +33,12 @@ class TestIndexerPerf(unittest.TestCase):
     def test_indexer(self):
 
         dictConfig(config.logging_config)
-
+        config.INDEX_CAPACITY=1000000
         logger = logging.getLogger()
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=100
+        max_range=100000
 
         insert_perf=[]
         overall_start_time = timeit.default_timer()
@@ -54,15 +54,15 @@ class TestIndexerPerf(unittest.TestCase):
             elapsed = timeit.default_timer() - start_time
             insert_perf.append(elapsed*1000.0) #to ms
             total_seconds += elapsed
-            print("Test progress: "+str(i*100.0/max_range))
+            print("Test progress: "+str(i*100.0/max_range) + "%", end="\r")
         plt.xlim([-1,max_range])
         plt.ylim([0,2])
         plt.xlabel("put call")
         plt.ylabel("ms")
         plt.plot(insert_perf)
-        plt.savefig("test.png")
-        print("total index files: " + str(len(indexer.index_list)))
-        print("ops/s: "+str(max_range/total_seconds))
+        plt.savefig("insert_bench.png")
+        print("\n total index files: " + str(len(indexer.index_list)))
+        print("\n ops/s: "+str(max_range/total_seconds))
         table.close()
 
     @classmethod

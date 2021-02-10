@@ -36,10 +36,11 @@ class TestIndexerPerf(unittest.TestCase):
         dictConfig(config.logging_config)
 
         logger = logging.getLogger()
+        config.INDEX_CAPACITY = 1000000
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=100
+        max_range=100000
 
         insert_perf=[]
 
@@ -51,10 +52,10 @@ class TestIndexerPerf(unittest.TestCase):
             key_list.append(key)
             position=store.save(expected_data)
             indexer.put(expected_data[0],position,store)
-            print("load: "+str(i*100.0/max_range))
-        print("total index files: " + str(len(indexer.index_list)))
+            print("Loading data progress: " + str(i * 100.0 / max_range) + "%", end="\r")
+        print("\n total index files: " + str(len(indexer.index_list)))
 
-        overall_start_time = timeit.default_timer()
+
         total_seconds=0.0
         i = 0
         for key in key_list:
@@ -63,7 +64,7 @@ class TestIndexerPerf(unittest.TestCase):
             elapsed = timeit.default_timer() - start_time
             insert_perf.append(elapsed*1000.0) #to ms
             total_seconds += elapsed
-            print("test progress: " + str(i * 100.0 / max_range))
+            print("get test progress: " + str(i * 100.0 / max_range) + "%", end="\r")
             i += 1
 
         plt.xlim([-1,max_range])
@@ -73,8 +74,8 @@ class TestIndexerPerf(unittest.TestCase):
         plt.plot(insert_perf)
         plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
         plt.savefig("get_bench.png")
-        print("ops/s: "+str(max_range/total_seconds))
-        print('num index files: '+str(len(table.indexer.index_list)))
+        print("\n ops/s: "+str(max_range/total_seconds))
+        print('\n num index files: '+str(len(table.indexer.index_list)))
         table.close()
 
     @classmethod
