@@ -4,7 +4,14 @@
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
 
-> New release: 2.0.0, Python3 support!
+> Pre-release: 2.0.1-alpha, Performance update!!
+
+```
+pip3 install cogdb==2.0.1a0
+```
+
+> Stable release: 2.0.0, Python3 support!
+
 ## Installing Cog
 ```
 pip install cogdb
