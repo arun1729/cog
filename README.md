@@ -9,11 +9,11 @@
 ```
 pip install cogdb
 ```
-Cog is an embedded graph database implemented purely in python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
+Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
 
-Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It is written purely in Python so it has no dependencies other than Python standard library.
+Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It has no dependencies other than Python standard library.
 
-## Torque is a query language inspired by Gizmo
+## Torque is a query language inspired by Gremlin graph query language.
 Cog stores graph as triples:
 
   ```vertex <predicate> vertex```
@@ -148,20 +148,23 @@ INDEX_CAPACITY = 2000
 INDEX_LOAD_FACTOR = 80
 ```
 
-Default index capacity of 2000 is on the lower end, it is intend for light usage of Cog such as using it as a hash-table data structure.
+Default index capacity of 10000 is on the lower end, it is intend for light usage of Cog such as using it as a hash-table data structure.
 For larger indexing use case, INDEX_CAPACITY should be set to larger number otherwise it will lead to too many open index files.
 
 ## Performance
 
 Put and Get calls performance:
 
-> ops/second: 15685
+> put ops/second: 18968
 
-The perf test script is included with the tests: insert_bench.py
+> get ops/second: 39113
+
+The perf test script is included with the tests: insert_bench.py and get_bench.py
 
 INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
 Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
 
-#### Put performance profile
+#### Put and Get performance profile
 
-![Put Perf](put_perf.png)
+![Put Perf](insert_bench.png)
+![Get Perf](get_bench.png)

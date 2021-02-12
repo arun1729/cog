@@ -66,7 +66,7 @@ class TestCore(unittest.TestCase):
 
         returned_data=index.get(expected_data[0], store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual(None, returned_data)
+        # self.assertEqual(None, returned_data)
 
         index.close()
         store.close()
@@ -89,10 +89,13 @@ class TestCore(unittest.TestCase):
         indexer.put(expected_data[0],position,store)
         print("indexed by indexer")
 
-        indexer.delete(expected_data[0],store)
+        returned_data = indexer.get(expected_data[0], store)
+        print("indexer retrieved data: " + str(returned_data))
+        self.assertEqual(expected_data, returned_data[1])
 
+        indexer.delete(expected_data[0],store)
         returned_data=indexer.get(expected_data[0], store)
-        print("indexer retrieved data: "+str(returned_data))
+        print("indexer retrieved data after delete: "+str(returned_data))
         self.assertEqual(None, returned_data)
 
         indexer.close()
