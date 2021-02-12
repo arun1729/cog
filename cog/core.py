@@ -105,7 +105,7 @@ class Index:
             key_bit = self.get_key_bit(data_at_prob_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
             if orig_bit == key_bit:
-                self.logger.debug("PUT: key_bit match! for: "+orig_bit)
+                self.logger.debug("PUT: key_bit match! for: "+str(orig_bit))
                 record = store.read(self.get_store_bit(data_at_prob_position))
                 if record[1][0] == key:
                     self.logger.debug("PUT: Updating index: " + self.name)
@@ -147,6 +147,7 @@ class Index:
         self.logger.debug("GET: Reading index: " + self.name)
         orig_position, orig_hash = self.get_index(key)
         probe_position = orig_position
+        record = None
         looped_back=False
 
         while True:
@@ -165,11 +166,12 @@ class Index:
 
             if data_at_probe_position == self.empty_block:
                 probe_position += self.config.INDEX_BLOCK_LEN
-                self.logger.debug("GET: skipping empty block")
-                continue
+                self.logger.debug("GET: found empty block, terminating get.")
+                return None
 
             key_bit = self.get_key_bit(data_at_probe_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+            #record = None
             if(orig_bit == key_bit):
                 record = store.read(self.get_store_bit(data_at_probe_position))
 
@@ -180,7 +182,8 @@ class Index:
                 if record is not None and key == record[1][0]:# found record!
                     self.logger.info("found key in index."+self.name)
                     return record
-                self.logger.info("found key but collision in index."+self.name)
+
+            self.logger.info("found key but collision in index."+self.name)
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -206,15 +209,23 @@ class Index:
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
-        index_position, index_hash = self.get_index(key)
-        current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if current_store_position == self.empty_block:
+        index_position, orig_hash = self.get_index(key)
+        data_at_probe_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
+
+        if data_at_probe_position == self.empty_block:
             return False
 
-        record = store.read(self.get_store_bit(current_store_position))
-        if record is None:
-            self.logger.info("Store EOF reached! Record not found.")
-            return False
+        key_bit = self.get_key_bit(data_at_probe_position)
+        orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+
+        record = None
+        if (orig_bit == key_bit):
+            record = store.read(self.get_store_bit(data_at_probe_position))
+
+            if record is None:
+                self.logger.info("Store EOF reached! Record not found.")
+                return False
+
         while key != record[1][0]:
             index_position += self.config.INDEX_BLOCK_LEN
             current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
@@ -223,7 +234,7 @@ class Index:
                 return False
 
             key_bit = self.get_key_bit(current_store_position)
-            orig_bit = index_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
             if (orig_bit == key_bit):
                 record = store.read(self.get_store_bit(current_store_position))
                 if len(record) == 0:
@@ -231,6 +242,7 @@ class Index:
                     return False
 
         self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+        self.logger.debug("deleted :"+str(data_at_probe_position))
         self.load -= 1
         return True
 

@@ -1,17 +1,16 @@
-from cog.core import Store
-from cog.core import Table
-from cog.core import Indexer
-from cog import config
 import logging
 import os
-import shutil
-from logging.config import dictConfig
-import string
 import random
+import shutil
+import string
 import timeit
 import unittest
+from logging.config import dictConfig
+
 import matplotlib.pyplot as plt
 
+from cog import config
+from cog.core import Table
 
 #!!! clean namespace before running test.
 #need OPS/s
