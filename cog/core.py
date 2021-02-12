@@ -104,7 +104,8 @@ class Index:
                     continue
             key_bit = self.get_key_bit(data_at_prob_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-            if (orig_bit == key_bit):
+            if orig_bit == key_bit:
+                self.logger.debug("PUT: key_bit match! for: "+orig_bit)
                 record = store.read(self.get_store_bit(data_at_prob_position))
                 if record[1][0] == key:
                     self.logger.debug("PUT: Updating index: " + self.name)
