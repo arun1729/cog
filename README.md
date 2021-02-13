@@ -16,13 +16,14 @@ pip3 install cogdb==2.0.1a0
 ```
 pip install cogdb
 ```
-Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast key-value store.
+Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast persistent key-value store.
 
 Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It has no dependencies other than Python standard library.
 
 Cog can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
 
-In essence an RDF triple looks like the following:
+In short, an N-Triple is sequence of subject, predicate and object in a single line that defines a connection between two vertices:
+
   ```vertex <predicate> vertex```
 
 [Learn more about RDF triples](https://www.w3.org/TR/rdf-concepts/#:~:text=An%20RDF%20triple%20contains%20three,literal%20or%20a%20blank%20node)
