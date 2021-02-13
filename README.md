@@ -20,12 +20,13 @@ Cog is a persistent embedded graph database implemented purely in Python. Torque
 
 Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It has no dependencies other than Python standard library.
 
-## Torque is a query language inspired by Gremlin graph query language.
-Cog stores graph as triples:
+Cog can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
 
+In essence an RDF triple looks like the following:
   ```vertex <predicate> vertex```
-  
-## Torque examples
+
+[Learn more about RDF triples](https://www.w3.org/TR/rdf-concepts/#:~:text=An%20RDF%20triple%20contains%20three,literal%20or%20a%20blank%20node)
+
 
 ### Creating a graph
 
@@ -45,7 +46,7 @@ g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
 ```
 
-### Querying a graph
+### Querying a graph using Torque
 
 #### Starting from a vertex, follow all outgoing edges and list all vertices
 ```python
@@ -79,7 +80,7 @@ g.v("bob").inc().all()
 
 ### Triples file
 ```python
-g.load_triples("/path/to/triples.nq", "people")
+g.load_triples("/path/to/triples.nt", "people")
 ```
 
 ### Edgelist file
