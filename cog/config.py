@@ -63,11 +63,19 @@ logging_config = dict(
         },
     handlers = {
         'h': {'class': 'logging.StreamHandler',
-              'formatter': 'f',
-              'level': logging.WARN}
+              'formatter': 'f'
+              }
         },
     root = {
         'handlers': ['h'],
-        'level': logging.WARN,
+        'level': logging.DEBUG,
         },
+    core = {
+        'handlers': ['h'],
+        'level': logging.DEBUG,
+        },
+    torque = {
+        'handlers': ['h'],
+        'level': logging.DEBUG
+        }
 )

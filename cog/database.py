@@ -17,7 +17,7 @@ import socket
 import uuid
 from .core import Table
 from . import config as cfg
-
+import sys
 
 # class Compaction:
 
@@ -27,6 +27,8 @@ def out_nodes(v):
 def in_nodes(v):
     return (v + "__:in:__")
 
+def hash_predicate(predicate):
+    return "p"+str(hash(predicate) % ((sys.maxsize + 1) * 2))
 
 class Cog:
     """
@@ -34,7 +36,7 @@ class Cog:
     """
 
     def __init__(self, db_path=None, config=cfg):
-        if db_path is not None:
+        if db_path:
             db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
             try:
                 os.makedirs(db_path)
@@ -43,7 +45,7 @@ class Cog:
                     raise
             config.CUSTOM_COG_DB_PATH = db_path
         dictConfig(config.logging_config)
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger('core')
         self.config = config
         self.logger.info("Cog init.")
         self.namespaces = {}
@@ -153,8 +155,8 @@ class Cog:
         return self
 
     def put(self, data):
-        assert type(data[0]) is str, "Only string type is supported supported."
-        assert type(data[1]) is str, "Only string type is supported supported."
+        assert type(data[0]) is str, "Only string type is supported."
+        assert type(data[1]) is str, "Only string type is supported."
         position = self.current_table.store.save(data)
         self.current_table.indexer.put(data[0], position, self.current_table.store)
 
@@ -194,6 +196,7 @@ class Cog:
         """
         # add to node set
         #print "-> v1 " + str(vertex1) + " predicate: "+ self.config.GRAPH_NODE_SET_TABLE_NAME + " v2 " + str(vertex2)
+        predicate = predicate
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
 
@@ -227,11 +230,14 @@ class Cog:
         with open(graph_data_path) as f:
             for line in f:
                 tokens = line.split()
-                this_vertex = tokens[0].strip()
-                predicate = tokens[1].strip()
-                other_vertex = tokens[2].strip()
+                subject = tokens[0].strip()
+                predicate = hash_predicate(tokens[1].strip())
+                self.logger.debug("predicate hash: " + predicate)
+                object = tokens[2].strip()
+                if len(tokens) > 3: #nQuad
+                    context = tokens[3].strip()
                 self.create_or_load_table(predicate, graph_name)
-                self.put_node(this_vertex, predicate, other_vertex)
+                self.put_node(subject, predicate, object)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         """

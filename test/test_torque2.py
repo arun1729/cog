@@ -1,4 +1,5 @@
 from cog.torque import Graph
+from cog.database import Cog
 import unittest
 import os
 import shutil
@@ -22,7 +23,7 @@ class TorqueTest2(unittest.TestCase):
 
 
     def test_torque_2(self):
-        TorqueTest2.g = Graph(graph_name="better_graph", cog_dir="/tmp/" + DIR_NAME)
+        TorqueTest2.g = Graph(graph_name="better_graph", cog_home=DIR_NAME)
         TorqueTest2.g.put("A", "is better than", "B")\
             .put("B", "is better than", "C")\
             .put("A", "is better than", "D")\
@@ -34,6 +35,11 @@ class TorqueTest2(unittest.TestCase):
         self.assertTrue(TorqueTest2.g.v("A").out(["is better than"]).count() == 2)
         self.assertTrue(TorqueTest2.g.v().count() == 6)
         TorqueTest2.g.close()
+
+
+    def test_torque_3(self):
+        cogdb = Cog('/tmp/'+DIR_NAME)
+        cogdb.load_triples('/Users/arun/Downloads/30kmoviedata.nq', 'movies')
 
 
     @classmethod
