@@ -36,16 +36,21 @@ class Graph:
         '''
         self.config = cfg
         self.config.COG_HOME = cog_home
+        self.graph_name = graph_name
+
         self.cog_dir = self.config.cog_db_path()
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
-        self.logger.setLevel(logging.DEBUG)
+        #self.logger.setLevel(logging.DEBUG)
+        self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
+
         self.cog = Cog(db_path=self.cog_dir, config=cfg)
-        self.graph_name = graph_name
-        self.all_predicates = self.cog.list_tables()
-        self.logger.debug("Torque init : graph: "+graph_name + " predicates: " + str(self.all_predicates))
-        self.last_visited_vertices = None
         self.cog.create_namespace(self.graph_name)
+        self.all_predicates = self.cog.list_tables()
+
+        self.logger.debug("predicates: " + str(self.all_predicates))
+
+        self.last_visited_vertices = None
         #self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
@@ -84,9 +89,11 @@ class Graph:
 
     def v(self, vertex=None):
         #TODO: need to check if node exists
-        if vertex:
+        if vertex is not None:
+            print("~~~~ 1")
             self.last_visited_vertices = [Vertex(vertex)]
         else:
+            print("~~~~~ 2")
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             for r in self.cog.scanner():
@@ -106,7 +113,7 @@ class Graph:
         else:
             predicates = self.all_predicates
 
-        self.logger.debug("out")
+        self.logger.debug("OUT: predicates: "+str(predicates))
         self.__hop("out", predicates)
         return self
 
@@ -122,7 +129,7 @@ class Graph:
         return self
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
-        self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates))
+        self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates) + " graph name: "+self.graph_name)
         self.cog.use_namespace(self.graph_name)
         self.logger.debug("hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices)))
         self.logger.debug("direction: " + str(direction) + " predicates: "+str(self.all_predicates))

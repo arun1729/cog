@@ -18,6 +18,7 @@ import uuid
 from .core import Table
 from . import config as cfg
 import sys
+from . import config as cfg
 
 # class Compaction:
 
@@ -28,7 +29,7 @@ def in_nodes(v):
     return (v + "__:in:__")
 
 def hash_predicate(predicate):
-    return "p"+str(hash(predicate) % ((sys.maxsize + 1) * 2))
+    return "p"+predicate #str(hash(predicate) % ((sys.maxsize + 1) * 2))
 
 class Cog:
     """
@@ -44,8 +45,7 @@ class Cog:
                 if not os.path.isdir(db_path):
                     raise
             config.CUSTOM_COG_DB_PATH = db_path
-        dictConfig(config.logging_config)
-        self.logger = logging.getLogger('core')
+        self.logger = logging.getLogger('database')
         self.config = config
         self.logger.info("Cog init.")
         self.namespaces = {}
@@ -61,7 +61,7 @@ class Cog:
 
         '''Create default namespace and table.'''
         self.create_namespace(self.config.COG_DEFAULT_NAMESPACE)
-        self.create_or_load_table("default", self.config.COG_DEFAULT_NAMESPACE)
+        #self.create_or_load_table("default", self.config.COG_DEFAULT_NAMESPACE)
 
         '''Load all table names but lazy load actual tables on request.'''
         for name in self.list_tables():
@@ -101,23 +101,46 @@ class Cog:
             self.namespaces[namespace] = {}
         else:
             self.logger.info("Using existing namespace: "+self.config.cog_data_dir(namespace))
+            self.load_namespace(namespace)
+
         self.current_namespace = namespace
 
-    def create_or_load_table(self, name, namespace):
-        if namespace not in self.namespaces:
+    def load_namespace(self, namespace):
+        for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
+            table_names = set()
+            if self.config.INDEX in index_file_name:
+                id = self.config.index_id(index_file_name)
+                table_name = cfg.get_table_name(index_file_name)
+                if table_name not in table_names:
+                    table_names.add(table_name)
+                    self.logger.debug("loading index: id: {}, table name: {}".format(id, table_name))
+                    self.load_table(table_name, namespace)
+        self.current_namespace = namespace
+
+
+    def load_table(self, name, namespace):
+        if not namespace in self.namespaces:
             self.namespaces[namespace] = {}
-            table = Table(name, namespace, self.instance_id, self.config, self.logger)
-            self.current_namespace = namespace
-            self.current_table = table
-            self.namespaces[namespace][name] = table
-        elif namespace in self.namespaces and name not in self.namespaces[namespace]:
-            table = Table(name, namespace, self.instance_id, self.config, self.logger)
-            self.current_namespace = namespace
-            self.current_table = table
-            self.namespaces[namespace][name] = table
-        else:
-            self.current_namespace = namespace
-            self.current_table = self.namespaces[namespace][name]
+        self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, self.logger)
+        self.current_table = self.namespaces[namespace][name]
+        self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
+
+    # def create_or_load_table(self, name, namespace):
+    #     if namespace not in self.namespaces:
+    #         self.namespaces[namespace] = {}
+    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
+    #         self.current_namespace = namespace
+    #         self.current_table = table
+    #         self.namespaces[namespace][name] = table
+    #     elif namespace in self.namespaces and name not in self.namespaces[namespace]:
+    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
+    #         self.current_namespace = namespace
+    #         self.current_table = table
+    #         self.namespaces[namespace][name] = table
+    #     else:
+    #         self.current_namespace = namespace
+    #         self.current_table = self.namespaces[namespace][name]
+    #         self.logger.info("loaded namespace {0} and table {1} ".format(self.current_namespace, self.current_table))
 
     def close(self):
         for name, space in self.namespaces.items():
@@ -128,6 +151,7 @@ class Cog:
 
     def list_tables(self):
         p = set(())
+        self.logger.debug("LIST TABLES, current namespace: "+str(self.current_namespace))
         path = self.config.cog_data_dir(self.current_namespace)
         if not os.path.exists(path):
             return p
@@ -148,7 +172,7 @@ class Cog:
         '''
 
         if name not in self.namespaces[self.current_namespace] or self.namespaces[self.current_namespace][name]:
-            self.create_or_load_table(name, self.current_namespace)
+            self.load_table(name, self.current_namespace)
         else:
             self.current_table=self.namespaces[self.current_namespace][name]
 
@@ -226,7 +250,7 @@ class Cog:
         :return:
         """
         self.create_namespace(graph_name)
-        self.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(graph_data_path) as f:
             for line in f:
                 tokens = line.split()
@@ -234,9 +258,11 @@ class Cog:
                 predicate = hash_predicate(tokens[1].strip())
                 self.logger.debug("predicate hash: " + predicate)
                 object = tokens[2].strip()
+
                 if len(tokens) > 3: #nQuad
-                    context = tokens[3].strip()
-                self.create_or_load_table(predicate, graph_name)
+                    context = tokens[3].strip() #not used currently
+
+                self.load_table(predicate, graph_name)
                 self.put_node(subject, predicate, object)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):

@@ -1,10 +1,17 @@
-import logging
 import marshal
 import mmap
 import os
 import os.path
 import sys
+import logging
 # from profilehooks import profile
+
+def cog_hash(string):
+    char_sum = 0
+    for s in string:
+        char_sum += ord(s)
+    return char_sum % 13
+
 
 class TableMeta:
 
@@ -18,7 +25,7 @@ class TableMeta:
 class Table:
 
     def __init__(self, name, namespace, db_instance_id, config, logger=None, column_mode=False):
-        self.logger = logger
+        self.logger = logging.getLogger('table')
         self.config = config
         self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
         self.indexer = self.__create_indexer()
@@ -38,7 +45,7 @@ class Table:
 class Index:
 
     def __init__(self, table_meta, config, logger, index_id=0):
-        self.logger = logger
+        self.logger = logging.getLogger('index')
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
@@ -56,7 +63,7 @@ class Index:
             f.close()
             self.logger.info("new index with capacity" + str(config.INDEX_CAPACITY) + "created: " + self.name)
         else:
-            logger.info("Index: "+self.name+" already exists.")
+            self.logger.info("Index: "+self.name+" already exists.")
 
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
@@ -134,12 +141,12 @@ class Index:
         return probe_position
 
     def get_index(self, key):
-        num = hash(key) % ((sys.maxsize + 1) * 2)
-        logging.debug("hash for: " + key + " : " + str(num))
+        num = cog_hash(key) % ((sys.maxsize + 1) * 2)
+        self.logger.debug("hash for: " + key + " : " + str(num))
         # there may be diff when using mem slice vs write (+1 needed)
         index = (self.config.INDEX_BLOCK_LEN *
                  (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
-        logging.debug("offset : " + key + " : " + str(index))
+        self.logger.debug("offset : " + key + " : " + str(index))
         return index, num
 
     #@profile
@@ -253,7 +260,7 @@ class Index:
 class Store:
 
     def __init__(self, tablemeta, config, logger):
-        self.logger = logger
+        self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
         self.store = self.config.cog_store(
@@ -307,7 +314,7 @@ class Indexer:
     def __init__(self, tablemeta, config, logger):
         self.tablemeta = tablemeta
         self.config = config
-        self.logger = logger
+        self.logger = logging.getLogger('indexer')
         self.index_list = []
         self.index_id = 0
         self.load_indexes()
@@ -323,14 +330,15 @@ class Indexer:
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):
             if self.config.INDEX in f:
-                self.logger.info("Loading index "+f)
-                id = self.config.index_id(f)
-                index = Index(self.tablemeta, self.config, self.logger, id)
-                self.index_list.append(index)
-                #make the latest index the live index.
-                if id >= self.index_id:
-                    self.index_id = id
-                    self.live_index = index
+                if self.tablemeta.name == self.config.get_table_name(f):
+                    self.logger.info("loading index file: "+f)
+                    id = self.config.index_id(f)
+                    index = Index(self.tablemeta, self.config, self.logger, id)
+                    self.index_list.append(index)
+                    #make the latest index the live index.
+                    if id >= self.index_id:
+                        self.index_id = id
+                        self.live_index = index
 
     def put(self, key, store_position, store):
 
@@ -354,12 +362,12 @@ class Indexer:
         if len(self.index_list) > 1:
             self.logger.info("multiple index: " + str(len(self.index_list)))
         for idx in self.index_list:
-            self.logger.info("GET: looking in index: "+idx.name)
+            self.logger.info("GET: looking in index: "+idx.name + " for key: "+key)
             record=idx.get(key, store)
             if record:
                 return record
 
-        self.logger.info("Key: "+key+ " not found in any index!")
+        self.logger.info("Key: "+key+ " not found in table: "+self.tablemeta.name)
         return None
 
     def scanner(self, store):
