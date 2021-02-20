@@ -9,7 +9,7 @@ INDEX="-index-"
 INDEX_BLOCK_BASE_LEN = 20 #max store address length
 INDEX_BLOCK_KEYBIT_LEN = int(INDEX_BLOCK_BASE_LEN/2)
 INDEX_BLOCK_LEN = INDEX_BLOCK_BASE_LEN + INDEX_BLOCK_KEYBIT_LEN
-INDEX_CAPACITY = 100000
+INDEX_CAPACITY = 100003 # must be a prime number
 INDEX_LOAD_FACTOR = 80
 
 ''' TORQUE '''
@@ -70,14 +70,6 @@ logging_config = dict(
         },
     root = {
         'handlers': ['h'],
-        'level': logging.DEBUG,
-        },
-    core = {
-        'handlers': ['h'],
-        'level': logging.DEBUG,
-        },
-    torque = {
-        'handlers': ['h'],
-        'level': logging.DEBUG
+        'level': logging.WARN,
         }
 )

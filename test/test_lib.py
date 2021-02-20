@@ -18,7 +18,7 @@ class TestLib(unittest.TestCase):
         data = ('testKey','testVal')
         cogdb = Cog("/tmp/"+DIR_NAME+"/test")
         cogdb.create_namespace("test")
-        cogdb.create_or_load_table("db_test", "test")
+        cogdb.create_table("db_test", "test")
         cogdb.put(data)
         self.assertEqual(cogdb.get("testKey"), (b'0', ('testKey', 'testVal')))
         cogdb.close()

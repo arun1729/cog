@@ -5,13 +5,7 @@ import os.path
 import sys
 import logging
 # from profilehooks import profile
-
-def cog_hash(string):
-    char_sum = 0
-    for s in string:
-        char_sum += ord(s)
-    return char_sum % 13
-
+import xxhash
 
 class TableMeta:
 
@@ -141,13 +135,20 @@ class Index:
         return probe_position
 
     def get_index(self, key):
-        num = cog_hash(key) % ((sys.maxsize + 1) * 2)
+        num = self.cog_hash(key) % ((sys.maxsize + 1) * 2)
         self.logger.debug("hash for: " + key + " : " + str(num))
         # there may be diff when using mem slice vs write (+1 needed)
         index = (self.config.INDEX_BLOCK_LEN *
                  (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
         self.logger.debug("offset : " + key + " : " + str(index))
         return index, num
+
+    def cog_hash(self, string):
+        return xxhash.xxh32('d',seed=2).intdigest()
+
+    # def cog_hash(self, string):
+    #     return sum(bytearray(string, 'utf-8')) % self.config.INDEX_CAPACITY
+    #     #return xxhash.xxh32('d',seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     #@profile
     def get(self, key, store):

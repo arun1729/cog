@@ -105,6 +105,13 @@ class Cog:
 
         self.current_namespace = namespace
 
+    def create_table(self, table_name, namespace):
+        table = Table(table_name, namespace, self.instance_id, self.config, self.logger)
+        self.current_namespace = namespace
+        self.current_table = table
+        self.namespaces[namespace][table_name] = table
+
+
     def load_namespace(self, namespace):
         for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
             table_names = set()
