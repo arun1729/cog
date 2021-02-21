@@ -34,6 +34,7 @@ class Table:
     def close(self):
         self.indexer.close()
         self.store.close()
+        self.logger.info("closed table: "+self.table_meta.name)
 
 
 class Index:
@@ -144,7 +145,7 @@ class Index:
         return index, num
 
     def cog_hash(self, string):
-        return xxhash.xxh32('d',seed=2).intdigest()
+        return xxhash.xxh32(string,seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     # def cog_hash(self, string):
     #     return sum(bytearray(string, 'utf-8')) % self.config.INDEX_CAPACITY

@@ -68,6 +68,7 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def close(self):
+        print("CLOSE")
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2):
@@ -90,10 +91,8 @@ class Graph:
     def v(self, vertex=None):
         #TODO: need to check if node exists
         if vertex is not None:
-            print("~~~~ 1")
             self.last_visited_vertices = [Vertex(vertex)]
         else:
-            print("~~~~~ 2")
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             for r in self.cog.scanner():

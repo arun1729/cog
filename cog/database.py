@@ -5,7 +5,6 @@ Created on Nov 25, 2017
 '''
 
 import logging
-from logging.config import dictConfig
 import os
 import os.path
 from os import listdir
@@ -17,8 +16,8 @@ import socket
 import uuid
 from .core import Table
 from . import config as cfg
+import xxhash
 import sys
-from . import config as cfg
 
 # class Compaction:
 
@@ -29,7 +28,8 @@ def in_nodes(v):
     return (v + "__:in:__")
 
 def hash_predicate(predicate):
-    return "p"+predicate #str(hash(predicate) % ((sys.maxsize + 1) * 2))
+    return str(xxhash.xxh32(predicate,seed=2).intdigest())
+    #return str(hash(predicate) % ((sys.maxsize + 1) * 2))
 
 class Cog:
     """
@@ -49,6 +49,7 @@ class Cog:
         self.config = config
         self.logger.info("Cog init.")
         self.namespaces = {}
+        self.current_table = None
         '''creates Cog instance files.'''
         if os.path.exists(self.config.cog_instance_sys_file()):
             f=open(self.config.cog_instance_sys_file(),"rb")
@@ -129,6 +130,8 @@ class Cog:
         if not namespace in self.namespaces:
             self.namespaces[namespace] = {}
         self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, self.logger)
+        if self.current_table:
+            self.logger.debug("LOAD TABLE:: previous table: "+str(self.current_table.table_meta.name))
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
 
@@ -154,6 +157,7 @@ class Cog:
             if space is None:
                 continue
             for name, table in space.items():
+                self.logger.info("closing.. : "+table.table_meta.name)
                 table.close()
 
     def list_tables(self):
@@ -227,7 +231,7 @@ class Cog:
         """
         # add to node set
         #print "-> v1 " + str(vertex1) + " predicate: "+ self.config.GRAPH_NODE_SET_TABLE_NAME + " v2 " + str(vertex2)
-        predicate = predicate
+        predicate = hash_predicate(predicate)
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
 
@@ -262,8 +266,7 @@ class Cog:
             for line in f:
                 tokens = line.split()
                 subject = tokens[0].strip()
-                predicate = hash_predicate(tokens[1].strip())
-                self.logger.debug("predicate hash: " + predicate)
+                predicate = tokens[1].strip()
                 object = tokens[2].strip()
 
                 if len(tokens) > 3: #nQuad

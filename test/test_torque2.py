@@ -39,15 +39,15 @@ class TorqueTest2(unittest.TestCase):
     def test_graph_db_load(self):
         data_dir = "test/test-data/test.nq"
         # choose appropriate path based on where the test is called from.
-        if os.path.exists("test-data/test.nq"):
-            data_dir = "test-data/test.nq"
-
-        g2 = Graph(graph_name="people", cog_home=DIR_NAME)
+        # if os.path.exists("test-data/test.nq"):
+        #     data_dir = "test-data/test.nq"
+        #
+        # g2 = Graph(graph_name="people", cog_home=DIR_NAME)
         #g2.load_triples(data_dir, "people")
         #put() ] indexed <alice> @: 1642200 : store position: 0 : key bit :b'8301954741'
         #g2 = Graph(graph_name="people", cog_home=DIR_NAME)
-        count = g2.v("<alice>").out().count()
-        print(count)
+        # count = g2.v("<alice>").out().count()
+        # print(count)
         #g = Graph(graph_name="movies", cog_home='graphtest4')
         #g.v("<name>").out().count()
         #cogdb = Cog('/tmp/'+DIR_NAME)
@@ -56,9 +56,9 @@ class TorqueTest2(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        pass
-        # shutil.rmtree("/tmp/"+DIR_NAME)
-        # print("*** deleted test data.")
+        # pass
+        shutil.rmtree("/tmp/"+DIR_NAME)
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':
