@@ -8,4 +8,5 @@ setup(name='cogdb',
       author_email='arunm3.141@gmail.com',
       license='MIT',
       packages=['cog'],
+      install_requires=['xxhash==2.0.0'],
       zip_safe=False)
