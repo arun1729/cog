@@ -29,7 +29,7 @@ class TestDB(unittest.TestCase):
         data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config=config)
         cogdb.create_namespace("test")
-        cogdb.create_or_load_table("db_test", "test")
+        cogdb.create_table("db_test", "test")
         cogdb.put(data)
         scanner = cogdb.scanner()
         for r in scanner:
@@ -40,9 +40,9 @@ class TestDB(unittest.TestCase):
     def test_list_tables(self):
         cogdb = Cog(config=config)
         cogdb.create_namespace("test_ns")
-        cogdb.create_or_load_table("table1", "test_ns")
-        cogdb.create_or_load_table("table2", "test_ns")
-        cogdb.create_or_load_table("table3", "test_ns")
+        cogdb.create_table("table1", "test_ns")
+        cogdb.create_table("table2", "test_ns")
+        cogdb.create_table("table3", "test_ns")
         self.assertEqual(set(cogdb.list_tables()), {'table2', 'table3', 'table1'})
         cogdb.close()
 

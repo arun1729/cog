@@ -47,7 +47,7 @@ class TorqueTest(unittest.TestCase):
         if os.path.exists("test-data/test.nq"):
             data_dir = "test-data/test.nq"
 
-        TorqueTest.g = Graph(graph_name="people", cog_dir="/tmp/" + DIR_NAME)
+        TorqueTest.g = Graph(graph_name="people", cog_home=DIR_NAME)
         TorqueTest.g.load_triples(data_dir, "people")
         #print TorqueTest.g.v().all()
         print(">>> test setup complete.\n")
@@ -83,6 +83,7 @@ class TorqueTest(unittest.TestCase):
     def test_torque_7(self):
         expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all()
+        print(ordered(actual))
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_8(self):
@@ -104,8 +105,12 @@ class TorqueTest(unittest.TestCase):
     def test_torque_11(self):
         expected = {'result': []}
         actual = TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
-        print(actual)
         self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_12(self):
+        expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<emily>'}, {'id': '"cool_person"'}, {'id': '<greg>'}, {'id': '<fred>'}, {'id': '<alice>'}, {'id': '<charlie>'}]}
+        actual = TorqueTest.g.scan(3)
+        self.assertTrue(3 == len(actual['result']))
 
     @classmethod
     def tearDownClass(cls):

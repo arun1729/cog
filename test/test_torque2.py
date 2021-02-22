@@ -20,9 +20,8 @@ class TorqueTest2(unittest.TestCase):
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
-
     def test_torque_2(self):
-        TorqueTest2.g = Graph(graph_name="better_graph", cog_dir="/tmp/" + DIR_NAME)
+        TorqueTest2.g = Graph(graph_name="better_graph", cog_home=DIR_NAME)
         TorqueTest2.g.put("A", "is better than", "B")\
             .put("B", "is better than", "C")\
             .put("A", "is better than", "D")\
@@ -35,9 +34,9 @@ class TorqueTest2(unittest.TestCase):
         self.assertTrue(TorqueTest2.g.v().count() == 6)
         TorqueTest2.g.close()
 
-
     @classmethod
     def tearDownClass(cls):
+        # pass
         shutil.rmtree("/tmp/"+DIR_NAME)
         print("*** deleted test data.")
 

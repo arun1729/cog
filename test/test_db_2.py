@@ -11,7 +11,7 @@ class TestDB2(unittest.TestCase):
         cogdb.create_namespace("my_namespace")
 
         # create new table
-        cogdb.create_or_load_table("new_db", "my_namespace")
+        cogdb.create_table("new_db", "my_namespace")
 
         # put some data
         cogdb.put(('A', 'val'))

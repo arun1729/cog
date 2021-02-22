@@ -1,11 +1,15 @@
 from cog.database import Cog
-from cog.database import in_nodes, out_nodes
+from cog.database import in_nodes, out_nodes, hash_predicate
 from . import config as cfg
 import json
 import ast
 from os import listdir
 from os.path import isfile, join
 import os
+import logging
+from logging.config import dictConfig
+from . import config as cfg
+
 
 NOTAG="NOTAG"
 
@@ -18,26 +22,35 @@ class Vertex(object):
     def __str__(self):
         return json.dumps(self.__dict__)
 
-
 class Graph:
     """
         https://www.w3.org/TR/WD-rdf-syntax-971002/
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
     """
 
-    def __init__(self, graph_name, cog_dir):
+    def __init__(self, graph_name, cog_home="cog_home"):
         '''
         :param graph_name:
         :param cog_dir:
         list of
         '''
         self.config = cfg
-        self.cog = Cog(db_path=cog_dir, config=cfg)
+        self.config.COG_HOME = cog_home
         self.graph_name = graph_name
-        self.cog_dir = cog_dir
-        self.all_predicates = self.cog.list_tables()
-        self.last_visited_vertices = None
+
+        self.cog_dir = self.config.cog_db_path()
+        dictConfig(self.config.logging_config)
+        self.logger = logging.getLogger("torque")
+        #self.logger.setLevel(logging.DEBUG)
+        self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
+
+        self.cog = Cog(db_path=self.cog_dir, config=cfg)
         self.cog.create_namespace(self.graph_name)
+        self.all_predicates = self.cog.list_tables()
+
+        self.logger.debug("predicates: " + str(self.all_predicates))
+
+        self.last_visited_vertices = None
         #self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
@@ -55,6 +68,7 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def close(self):
+        self.logger.info("closing graph: "+self.graph_name)
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2):
@@ -76,7 +90,7 @@ class Graph:
 
     def v(self, vertex=None):
         #TODO: need to check if node exists
-        if vertex:
+        if vertex is not None:
             self.last_visited_vertices = [Vertex(vertex)]
         else:
             self.last_visited_vertices = []
@@ -91,22 +105,49 @@ class Graph:
         :param predicates:
         :return:
         '''
-        if predicates:
-            assert type(predicates) == list
+        if predicates is not None:
+            if not isinstance(predicates, list):
+                predicates = [predicates]
+            predicates = map(hash_predicate, predicates)
+        else:
+            predicates = self.all_predicates
+
+        self.logger.debug("OUT: predicates: "+str(predicates))
         self.__hop("out", predicates)
         return self
 
     def inc(self, predicates=None):
+        if predicates is not None:
+            if not isinstance(predicates, list):
+                predicates = [predicates]
+            predicates = map(hash_predicate, predicates)
+        else:
+            predicates = self.all_predicates
+
         self.__hop("in", predicates)
         return self
 
+    def scan(self, limit = 10):
+        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+        result = []
+        for i, r in enumerate(self.cog.scanner()):
+            if i < limit:
+                v = Vertex(r[0])
+                item = {"id": v.id}
+                result.append(item)
+            else:
+                break
+        return {"result": result}
+
+
     def __hop(self, direction, predicates=None, tag=NOTAG):
+        self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates) + " graph name: "+self.graph_name)
         self.cog.use_namespace(self.graph_name)
-        predicates = self.all_predicates if not predicates else predicates
-        #print "hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices))
-        #print "direction: " + str(direction) + " predicates: "+str(self.all_predicates)
+        self.logger.debug("hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices)))
+        self.logger.debug("direction: " + str(direction) + " predicates: "+str(self.all_predicates))
         traverse_vertex = []
         for predicate in predicates:
+            self.logger.debug("__hop predicate: "+predicate + " of "+ str(predicates))
             for v in self.last_visited_vertices:
                 if direction == "out":
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
