@@ -105,8 +105,12 @@ class TorqueTest(unittest.TestCase):
     def test_torque_11(self):
         expected = {'result': []}
         actual = TorqueTest.g.v("<bob>").out(["<follows>zzz", "<status>zzz"]).tag("source").all()
-        print(actual)
         self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_12(self):
+        expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<emily>'}, {'id': '"cool_person"'}, {'id': '<greg>'}, {'id': '<fred>'}, {'id': '<alice>'}, {'id': '<charlie>'}]}
+        actual = TorqueTest.g.scan(3)
+        self.assertTrue(3 == len(actual['result']))
 
     @classmethod
     def tearDownClass(cls):

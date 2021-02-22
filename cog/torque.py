@@ -68,7 +68,7 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
 
     def close(self):
-        print("CLOSE")
+        self.logger.info("closing graph: "+self.graph_name)
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2):
@@ -126,6 +126,19 @@ class Graph:
 
         self.__hop("in", predicates)
         return self
+
+    def scan(self, limit = 10):
+        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+        result = []
+        for i, r in enumerate(self.cog.scanner()):
+            if i < limit:
+                v = Vertex(r[0])
+                item = {"id": v.id}
+                result.append(item)
+            else:
+                break
+        return {"result": result}
+
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
         self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates) + " graph name: "+self.graph_name)

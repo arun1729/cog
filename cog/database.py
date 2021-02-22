@@ -129,9 +129,11 @@ class Cog:
     def load_table(self, name, namespace):
         if not namespace in self.namespaces:
             self.namespaces[namespace] = {}
-        self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, self.logger)
-        if self.current_table:
-            self.logger.debug("LOAD TABLE:: previous table: "+str(self.current_table.table_meta.name))
+        self.logger.debug("loading table: "+name)
+        if name not in self.namespaces[namespace]:
+            self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, self.logger)
+            self.logger.debug("created new table: " + name)
+
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
 
@@ -272,7 +274,7 @@ class Cog:
                 if len(tokens) > 3: #nQuad
                     context = tokens[3].strip() #not used currently
 
-                self.load_table(predicate, graph_name)
+                self.load_table(hash_predicate(predicate), graph_name)
                 self.put_node(subject, predicate, object)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
