@@ -4,13 +4,7 @@
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
 
-> Pre-release: 2.0.1-alpha, Performance update!!
-
-```
-pip3 install cogdb==2.0.1a0
-```
-
-> Stable release: 2.0.0, Python3 support!
+> New release: 2.0.2, [performance update, scanner feature, bug fixes]
 
 ## Installing Cog
 ```
@@ -18,7 +12,7 @@ pip install cogdb
 ```
 Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast persistent key-value store.
 
-Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. It has no dependencies other than Python standard library.
+Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application.
 
 Cog can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
 
@@ -33,7 +27,7 @@ In short, an N-Triple is sequence of subject, predicate and object in a single l
 
 ```python
 from cog.torque import Graph
-g = Graph(graph_name="people", cog_dir='/tmp/people')
+g = Graph(graph_name="people")
 g.put("alice","follows","bob")
 g.put("bob","follows","fred")
 g.put("bob","status","cool_person")
@@ -47,7 +41,14 @@ g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
 ```
 
-### Querying a graph using Torque
+### Torque query examples
+
+### Scan vertices
+```python
+g.scan(3)
+```
+
+> {'result': [{'id': 'bob'}, {'id': 'emily'}, {'id': 'charlie'}]}
 
 #### Starting from a vertex, follow all outgoing edges and list all vertices
 ```python
@@ -81,11 +82,15 @@ g.v("bob").inc().all()
 
 ### Triples file
 ```python
+from cog.torque import Graph
+g = Graph(graph_name="people")
 g.load_triples("/path/to/triples.nt", "people")
 ```
 
 ### Edgelist file
 ```python
+from cog.torque import Graph
+g = Graph(graph_name="people")
 g.load_edgelist("/path/to/edgelist", "people")
 ```
 
