@@ -265,6 +265,7 @@ class Store:
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
+        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         temp = open(self.store, 'a')  # create if not exist
@@ -275,7 +276,7 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, kv):
+    def save(self, kv, next_pointer=None, c_type='s'):
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
@@ -283,15 +284,22 @@ class Store:
         length = str(len(record))
         self.store_file.seek(0, 2)
         self.store_file.write(b'0')  # delete bit
+        self.store_file.write(c_type.encode())  # type bit
         self.store_file.write(length.encode())
-        self.store_file.write(b'\x1F')  # unit seperator
+        self.store_file.write(b'\x1F') #content length end
         self.store_file.write(record)
+        if c_type == 'l':
+            if next_pointer is None:
+                self.store_file.write(self.empty_block)
+            else:
+                self.store_file.write(self.next_pointer)
         self.store_file.flush()
         return store_position
 
-    def read(self, position):
+    def read(self, position, c_list=None):
         self.store_file.seek(position)
         tombstone = self.store_file.read(1)
+        type_bit = self.store_file.read(1).decode()
         c = self.store_file.read(1)
         data = [c]
         while c != b'\x1F':
@@ -303,6 +311,17 @@ class Store:
 
         length = int(b''.join(data).decode())
         record = marshal.loads(self.store_file.read(length))
+        if type_bit == 'l':
+            next_position = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
+
+            if next_position == self.empty_block: # list returned here.
+                return tombstone, c_list
+            if c_list is None:
+                c_list = [record]
+            else:
+                c_list.append(record)
+            self.read(next_position, c_list)
+
         return tombstone, record
 
 
