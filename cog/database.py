@@ -17,7 +17,6 @@ import uuid
 from .core import Table
 from . import config as cfg
 import xxhash
-import sys
 
 # class Compaction:
 
@@ -136,23 +135,6 @@ class Cog:
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
-
-    # def create_or_load_table(self, name, namespace):
-    #     if namespace not in self.namespaces:
-    #         self.namespaces[namespace] = {}
-    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
-    #         self.current_namespace = namespace
-    #         self.current_table = table
-    #         self.namespaces[namespace][name] = table
-    #     elif namespace in self.namespaces and name not in self.namespaces[namespace]:
-    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
-    #         self.current_namespace = namespace
-    #         self.current_table = table
-    #         self.namespaces[namespace][name] = table
-    #     else:
-    #         self.current_namespace = namespace
-    #         self.current_table = self.namespaces[namespace][name]
-    #         self.logger.info("loaded namespace {0} and table {1} ".format(self.current_namespace, self.current_table))
 
     def close(self):
         for name, space in self.namespaces.items():
