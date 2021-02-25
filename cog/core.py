@@ -276,7 +276,8 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, kv, next_pointer=None, c_type='s'):
+    def save(self, kv, prev_pointer=None, c_type='s'):
+        print("<<<"+str(prev_pointer))
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
@@ -289,10 +290,10 @@ class Store:
         self.store_file.write(b'\x1F') #content length end
         self.store_file.write(record)
         if c_type == 'l':
-            if next_pointer is None:
+            if prev_pointer == None:
                 self.store_file.write(self.empty_block)
             else:
-                self.store_file.write(self.next_pointer)
+                self.store_file.write(self.prev_pointer)
         self.store_file.flush()
         return store_position
 
@@ -311,18 +312,20 @@ class Store:
 
         length = int(b''.join(data).decode())
         record = marshal.loads(self.store_file.read(length))
+        print("~~~" + str(record))
         if type_bit == 'l':
-            next_position = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
+            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
 
-            if next_position == self.empty_block: # list returned here.
-                return tombstone, c_list
-            if c_list is None:
-                c_list = [record]
+            if prev_pointer == self.empty_block or prev_pointer == '': # list returned here.
+                return tombstone, (record[1][0], c_list)
+            if c_list == None:
+                c_list = [record[1][1]]
             else:
                 c_list.append(record)
-            self.read(next_position, c_list)
-
-        return tombstone, record
+            print(">>>"+prev_pointer+".")
+            self.read(prev_pointer, c_list) #recursion limit of 1000!
+        else:
+            return tombstone, record
 
 
 class Indexer:

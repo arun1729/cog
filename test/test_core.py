@@ -19,7 +19,7 @@ class TestCore(unittest.TestCase):
             os.makedirs(path)
         config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
 
-    def test_put_get(self):
+    def test_put_get_string(self):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
@@ -43,6 +43,36 @@ class TestCore(unittest.TestCase):
 
         index.close()
         store.close()
+
+    def test_put_get_list(self):
+        dictConfig(config.logging_config)
+        logger = logging.getLogger()
+
+        fruits = (["apple", "orange", "banana", "pears", "cherry", "mango"])
+
+        table = Table("testdb2", "test_table", "test_xcvzdfsadx2", config, logger)
+        print(config.COG_HOME)
+        store = table.store
+        index = table.indexer.index_list[0]
+
+        for fruit in fruits:
+            r = ('fruits', fruit)
+            prev_pos = index.get(r[0], store)
+            position=store.save(r, prev_pos, 'l')
+            print("stored")
+
+            index.put(r[0],position,store)
+            print("indexed")
+
+
+        returned_data=index.get('fruits', store)
+        print("retrieved data: "+str(returned_data))
+        self.assertEqual(expected_data, returned_data[1])
+
+        index.close()
+        store.close()
+
+
 
     def test_delete(self):
 
