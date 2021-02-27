@@ -56,8 +56,10 @@ class TestCore(unittest.TestCase):
         index = table.indexer.index_list[0]
 
         for fruit in fruits:
+            print("storing :"+fruit)
             r = ('fruits', fruit)
-            prev_pos = index.get(r[0], store)
+            record, prev_pos = index.get(r[0], store)
+            print("prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
             position=store.save(r, prev_pos, 'l')
             print("stored")
 

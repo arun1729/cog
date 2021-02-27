@@ -145,11 +145,7 @@ class Index:
         return index, num
 
     def cog_hash(self, string):
-        return xxhash.xxh32(string,seed=2).intdigest() % self.config.INDEX_CAPACITY
-
-    # def cog_hash(self, string):
-    #     return sum(bytearray(string, 'utf-8')) % self.config.INDEX_CAPACITY
-    #     #return xxhash.xxh32('d',seed=2).intdigest() % self.config.INDEX_CAPACITY
+        return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     #@profile
     def get(self, key, store):
@@ -171,12 +167,12 @@ class Index:
                     looped_back = True
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
-                    return None
+                    return None, None
 
             if data_at_probe_position == self.empty_block:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: found empty block, terminating get.")
-                return None
+                return None, None
 
             key_bit = self.get_key_bit(data_at_probe_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
@@ -186,13 +182,13 @@ class Index:
 
                 if record is None or len(record) == 0:#EOF store
                     self.logger.error("Store EOF reached! Indexed record not found.")
-                    return None
+                    return None, None
 
                 if record is not None and key == record[1][0]:# found record!
                     self.logger.info("found key in index."+self.name)
-                    return record
+                    return record, probe_position
 
-            self.logger.info("found key but collision in index."+self.name)
+            self.logger.info("found key but collision in index."+self.name + " orig_bit: "+str(orig_bit) + " key_but: "+str(key_bit) + " record" + str(record))
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -277,7 +273,7 @@ class Store:
         self.store_file.close()
 
     def save(self, kv, prev_pointer=None, c_type='s'):
-        print("<<<"+str(prev_pointer))
+        print("saving: "+str(kv) + " prev pointer: "+str(prev_pointer))
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
@@ -312,14 +308,17 @@ class Store:
 
         length = int(b''.join(data).decode())
         record = marshal.loads(self.store_file.read(length))
-        print("~~~" + str(record))
-        if type_bit == 'l':
-            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
+        print("store read: " + str(record) + " type bit: "+type_bit)
 
+        if type_bit == 'l':
+
+            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
+            print("prev pointer: "+str(prev_pointer))
             if prev_pointer == self.empty_block or prev_pointer == '': # list returned here.
                 return tombstone, (record[1][0], c_list)
-            if c_list == None:
-                c_list = [record[1][1]]
+
+            if c_list is None:
+                c_list = [(tombstone, record[1][1])]
             else:
                 c_list.append(record)
             print(">>>"+prev_pointer+".")
