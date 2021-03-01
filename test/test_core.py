@@ -61,7 +61,7 @@ class TestCore(unittest.TestCase):
             record, prev_pos = index.get(r[0], store)
             print("prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
             position=store.save(r, prev_pos, 'l')
-            print("stored")
+            print("stored at: "+str(position))
 
             index.put(r[0],position,store)
             print("indexed")

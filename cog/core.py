@@ -185,10 +185,11 @@ class Index:
                     return None, None
 
                 if record is not None and key == record[1][0]:# found record!
+                    print(">>>> "+str(record))
                     self.logger.info("found key in index."+self.name)
-                    return record, probe_position
+                    return record, self.get_store_bit(data_at_probe_position)
 
-            self.logger.info("found key but collision in index."+self.name + " orig_bit: "+str(orig_bit) + " key_but: "+str(key_bit) + " record" + str(record))
+            self.logger.info("found key "+ key+" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record[1][0]))
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -273,12 +274,13 @@ class Store:
         self.store_file.close()
 
     def save(self, kv, prev_pointer=None, c_type='s'):
-        print("saving: "+str(kv) + " prev pointer: "+str(prev_pointer))
+        # print("saving: "+str(kv) + " prev pointer: "+str(prev_pointer))
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
         record = marshal.dumps(kv)
         length = str(len(record))
+        print(" save length: "+length + " save record: "+ str(record) + " type: "+c_type)
         self.store_file.seek(0, 2)
         self.store_file.write(b'0')  # delete bit
         self.store_file.write(c_type.encode())  # type bit
@@ -289,16 +291,22 @@ class Store:
             if prev_pointer == None:
                 self.store_file.write(self.empty_block)
             else:
-                self.store_file.write(self.prev_pointer)
+                prevp = str(prev_pointer).encode().rjust(self.config.INDEX_BLOCK_LEN)
+                print("-> writing previous pointer: "+str(prevp))
+                self.store_file.write(str(prevp).encode())
         self.store_file.flush()
         return store_position
 
     def read(self, position, c_list=None):
         self.store_file.seek(position)
+        print("~~~ begin " + str(self.store_file.tell()))
         tombstone = self.store_file.read(1)
+        print("~~~ 1 " + str(self.store_file.tell()))
         type_bit = self.store_file.read(1).decode()
+        print("~~~ 2 " + str(self.store_file.tell()))
         c = self.store_file.read(1)
-        data = [c]
+        data = []
+        print("~~~ mid " + str(self.store_file.tell()))
         while c != b'\x1F':
             data.append(c)
             c = self.store_file.read(1)
@@ -307,21 +315,22 @@ class Store:
                 return None
 
         length = int(b''.join(data).decode())
+        print(">len: "+str(length))
         record = marshal.loads(self.store_file.read(length))
         print("store read: " + str(record) + " type bit: "+type_bit)
 
         if type_bit == 'l':
-
-            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN).decode()
-            print("prev pointer: "+str(prev_pointer))
-            if prev_pointer == self.empty_block or prev_pointer == '': # list returned here.
-                return tombstone, (record[1][0], c_list)
-
+            print("~~~ start "+str(self.store_file.tell()))
+            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN)
+            print("~~~ end " + str(self.store_file.tell()))
             if c_list is None:
-                c_list = [(tombstone, record[1][1])]
+                c_list = [record[1]]
             else:
-                c_list.append(record)
-            print(">>>"+prev_pointer+".")
+                c_list.append(record[1])
+            print("@read look for prev pointer: "+str(prev_pointer))
+            if prev_pointer == self.empty_block or prev_pointer == '': # list returned here.
+                return tombstone, (record[0], c_list)
+            print(self.empty_block)
             self.read(prev_pointer, c_list) #recursion limit of 1000!
         else:
             return tombstone, record
