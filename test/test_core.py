@@ -1,4 +1,4 @@
-from cog.core import Table
+from cog.core import Table, Record
 from cog import config
 import logging
 import os
@@ -23,7 +23,7 @@ class TestCore(unittest.TestCase):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
-        expected_data = ("new super data","super new old stuff")
+        expected_data = Record("new super data","super new old stuff")
 
         table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
         print(config.COG_HOME)
@@ -33,13 +33,13 @@ class TestCore(unittest.TestCase):
         position=store.save(expected_data)
         print("stored")
 
-        index.put(expected_data[0],position,store)
+        index.put(expected_data.key,position,store)
         print("indexed")
 
 
-        returned_data=index.get(expected_data[0], store)
+        returned_data=index.get(expected_data.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual(expected_data, returned_data[1])
+        self.assertTrue(expected_data.is_equal_val(returned_data))
 
         index.close()
         store.close()
@@ -51,26 +51,24 @@ class TestCore(unittest.TestCase):
         fruits = (["apple", "orange", "banana", "pears", "cherry", "mango"])
 
         table = Table("testdb2", "test_table", "test_xcvzdfsadx2", config, logger)
-        print(config.COG_HOME)
         store = table.store
         index = table.indexer.index_list[0]
 
         for fruit in fruits:
             print("storing :"+fruit)
-            r = ('fruits', fruit)
+            r = Record('fruits', fruit)
             print("CHECK IF LIST EXISTS - - - ->")
-            record, prev_pos = index.get(r[0], store)
-            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
-            position=store.save(r, prev_pos, 'l')
+            record = index.get(r.key, store)
+            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(record.store_position))
+            position=store.save(r, record.store_position, 'l')
             print("stored new list value at store pos: "+str(position))
 
-            index.put(r[0], position, store)
+            index.put(r.key, position, store)
             print("indexed")
 
-
-        returned_data=index.get('fruits', store)
+        returned_data=index.get(r.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual(('fruits', ['mango', 'cherry', 'pears', 'banana', 'orange', 'apple']), returned_data[0][1])
+        self.assertTrue(returned_data.is_equal_val(Record('fruits', ['mango', 'cherry', 'pears', 'banana', 'orange', 'apple'])))
 
         index.close()
         store.close()

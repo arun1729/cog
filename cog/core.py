@@ -36,6 +36,25 @@ class Table:
         self.store.close()
         self.logger.info("closed table: "+self.table_meta.name)
 
+class Record:
+
+    def __init__(self, key, value, tombstone = None, store_position = None):
+        self.key = key
+        self.value = value
+        self.tombstone = tombstone
+        self.store_position = store_position
+
+    def is_equal_val(self, other_record):
+        return self.key == other_record.key and self.value == other_record.value
+
+    def get_kv_tuple(self):
+        return (self.key, self.value)
+
+    def serialize(self):
+        return marshal.dumps((self.key, self.value))
+
+    def __str__(self):
+        return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
 
 class Index:
 
@@ -167,12 +186,12 @@ class Index:
                     looped_back = True
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
-                    return None, None
+                    return Record(None, None, None, None)
 
             if data_at_probe_position == self.empty_block:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: found empty block, terminating get.")
-                return None, None
+                return Record(None, None, None, None)
 
             key_bit = self.get_key_bit(data_at_probe_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
@@ -182,11 +201,11 @@ class Index:
                 print("@@ READ BACK RECORD: "+str(record))
                 if record is None or len(record) == 0:#EOF store
                     self.logger.error("Store EOF reached! Indexed record not found.")
-                    return None, None
+                    Record(None, None, None, None)
 
                 if record is not None and key == record[1][0]:# found record!
                     self.logger.info("found key in index."+self.name)
-                    return record, self.get_store_bit(data_at_probe_position)
+                    return Record(record[1][0], record[1][1], record[0], self.get_store_bit(data_at_probe_position))
 
             self.logger.info("found key "+ key+" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record[1][0]))
 
@@ -272,12 +291,12 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, kv, prev_pointer=None, c_type='s'):
+    def save(self, record_obj, prev_pointer=None, c_type='s'):
         # print("saving: "+str(kv) + " prev pointer: "+str(prev_pointer))
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
-        record = marshal.dumps(kv)
+        record = record_obj.serialize()
         length = str(len(record))
         print(" save length: "+length + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
         self.store_file.seek(0, 2)
