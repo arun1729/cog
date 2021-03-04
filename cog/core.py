@@ -179,13 +179,12 @@ class Index:
             #record = None
             if(orig_bit == key_bit):
                 record = store.read(self.get_store_bit(data_at_probe_position))
-
+                print("@@ READ BACK RECORD: "+str(record))
                 if record is None or len(record) == 0:#EOF store
                     self.logger.error("Store EOF reached! Indexed record not found.")
                     return None, None
 
                 if record is not None and key == record[1][0]:# found record!
-                    print(">>>> "+str(record))
                     self.logger.info("found key in index."+self.name)
                     return record, self.get_store_bit(data_at_probe_position)
 
@@ -280,60 +279,57 @@ class Store:
         store_position = self.store_file.tell()
         record = marshal.dumps(kv)
         length = str(len(record))
-        print(" save length: "+length + " save record: "+ str(record) + " type: "+c_type)
+        print(" save length: "+length + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
         self.store_file.seek(0, 2)
         self.store_file.write(b'0')  # delete bit
         self.store_file.write(c_type.encode())  # type bit
         self.store_file.write(length.encode())
-        self.store_file.write(b'\x1F') #content length end
+        self.store_file.write(b'\x1F') #content length end - unit separator
         self.store_file.write(record)
-        if c_type == 'l':
-            if prev_pointer == None:
-                self.store_file.write(self.empty_block)
-            else:
-                prevp = str(prev_pointer).encode().rjust(self.config.INDEX_BLOCK_LEN)
-                print("-> writing previous pointer: "+str(prevp))
-                self.store_file.write(str(prevp).encode())
+        if c_type == 'l' and prev_pointer is not None:
+            prevp = str(prev_pointer).encode()
+            print("-> writing previous pointer: "+str(prevp))
+            self.store_file.write(prevp)
+        self.store_file.write(b'\x1E') # record separator
         self.store_file.flush()
         return store_position
 
     def read(self, position, c_list=None):
         self.store_file.seek(position)
-        print("~~~ begin " + str(self.store_file.tell()))
         tombstone = self.store_file.read(1)
-        print("~~~ 1 " + str(self.store_file.tell()))
         type_bit = self.store_file.read(1).decode()
-        print("~~~ 2 " + str(self.store_file.tell()))
-        c = self.store_file.read(1)
-        data = []
-        print("~~~ mid " + str(self.store_file.tell()))
-        while c != b'\x1F':
-            data.append(c)
-            c = self.store_file.read(1)
-            if len(c) == 0:
-                self.logger.debug("EOF store file! Data read error.")
-                return None
-
-        length = int(b''.join(data).decode())
+        data = self.__read_until(b'\x1F')
+        length = int(data)
         print(">len: "+str(length))
         record = marshal.loads(self.store_file.read(length))
         print("store read: " + str(record) + " type bit: "+type_bit)
 
         if type_bit == 'l':
-            print("~~~ start "+str(self.store_file.tell()))
-            prev_pointer = self.store_file.read(self.config.INDEX_BLOCK_LEN)
-            print("~~~ end " + str(self.store_file.tell()))
+            prev_pointer = self.__read_until(b'\x1E')
+            prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
             if c_list is None:
                 c_list = [record[1]]
             else:
                 c_list.append(record[1])
             print("@read look for prev pointer: "+str(prev_pointer))
-            if prev_pointer == self.empty_block or prev_pointer == '': # list returned here.
+            if prev_pointer < 0:
+                print("@list read terminating, returning: "+str((record[0], c_list)))
                 return tombstone, (record[0], c_list)
-            print(self.empty_block)
-            self.read(prev_pointer, c_list) #recursion limit of 1000!
+            return self.read(prev_pointer, c_list) #recursion limit of 1000!
         else:
             return tombstone, record
+
+    def __read_until(self, separator):
+        data = []
+        c = self.store_file.read(1)
+        while c != separator:
+            data.append(c)
+            c = self.store_file.read(1)
+            if len(c) == 0:
+                self.logger.debug("EOF store file! Data read error.")
+                return None
+        return b''.join(data).decode()
+
 
 
 class Indexer:

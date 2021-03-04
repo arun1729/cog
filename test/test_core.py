@@ -58,22 +58,53 @@ class TestCore(unittest.TestCase):
         for fruit in fruits:
             print("storing :"+fruit)
             r = ('fruits', fruit)
+            print("CHECK IF LIST EXISTS - - - ->")
             record, prev_pos = index.get(r[0], store)
-            print("prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
+            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
             position=store.save(r, prev_pos, 'l')
-            print("stored at: "+str(position))
+            print("stored new list value at store pos: "+str(position))
 
-            index.put(r[0],position,store)
+            index.put(r[0], position, store)
             print("indexed")
 
 
         returned_data=index.get('fruits', store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual(expected_data, returned_data[1])
+        self.assertEqual(('fruits', ['mango', 'cherry', 'pears', 'banana', 'orange', 'apple']), returned_data[0][1])
 
         index.close()
         store.close()
 
+    def test_delete_list(self):
+        dictConfig(config.logging_config)
+        logger = logging.getLogger()
+
+        fruits = (["apple", "orange", "banana", "pears", "cherry", "mango"])
+
+        table = Table("testdb2", "test_table", "test_xcvzdfsadx2", config, logger)
+        print(config.COG_HOME)
+        store = table.store
+        index = table.indexer.index_list[0]
+
+        for fruit in fruits:
+            print("storing :"+fruit)
+            r = ('fruits', fruit)
+            print("CHECK IF LIST EXISTS - - - ->")
+            record, prev_pos = index.get(r[0], store)
+            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
+            position=store.save(r, prev_pos, 'l')
+            print("stored new list value at store pos: "+str(position))
+
+            index.put(r[0], position, store)
+            print("indexed")
+
+        returned_data = index.delete('fruits', store)
+        returned_data=index.get('fruits', store)
+        print("retrieved data: "+str(returned_data))
+        self.assertEqual((None,None), returned_data)
+
+        index.close()
+        store.close()
 
 
     def test_delete(self):
@@ -94,11 +125,11 @@ class TestCore(unittest.TestCase):
         index.put(expected_data[0],position,store)
         print("indexed")
 
-        index.delete(expected_data[0],store)
+        index.delete(expected_data[0], store)
 
         returned_data=index.get(expected_data[0], store)
         print("retrieved data: "+str(returned_data))
-        # self.assertEqual(None, returned_data)
+        self.assertEqual((None,None), returned_data)
 
         index.close()
         store.close()

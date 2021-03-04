@@ -179,6 +179,17 @@ class Cog:
         position = self.current_table.store.save(data)
         self.current_table.indexer.put(data[0], position, self.current_table.store)
 
+    def put_list(self, data):
+        '''
+        TODO
+        :param data:
+        :return:
+        '''
+        assert type(data[0]) is str, "Only string type is supported."
+        assert type(data[1]) is str, "Only string type is supported."
+
+        pass
+
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)
 
