@@ -4,6 +4,7 @@ Created on Nov 25, 2017
 @author: arun
 '''
 
+from cog.core import Record
 import logging
 import os
 import os.path
@@ -181,14 +182,15 @@ class Cog:
 
     def put_list(self, data):
         '''
-        TODO
+        Creates or appends to a lits. If the key does now exist a new list is created, else it appends.
         :param data:
         :return:
         '''
-        assert type(data[0]) is str, "Only string type is supported."
-        assert type(data[1]) is str, "Only string type is supported."
-
-        pass
+        assert type(data.key) is str, "Only string type is supported."
+        assert type(data.value) is str, "Only string type is supported."
+        record = self.current_table.indexer.get(data.key, self.current_table.store)
+        position = self.current_table.store.save(data, record.store_position, 'l')
+        self.current_table.indexer.put(data.key, position, self.current_table.store)
 
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)
@@ -227,26 +229,28 @@ class Cog:
         # add to node set
         #print "-> v1 " + str(vertex1) + " predicate: "+ self.config.GRAPH_NODE_SET_TABLE_NAME + " v2 " + str(vertex2)
         predicate = hash_predicate(predicate)
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
-
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
+        self.use_table(predicate).put_list(Record(out_nodes(vertex1), vertex2))
+        self.use_table(predicate).put_list(Record(in_nodes(vertex2), vertex1))
         # out vertices
-        out_ng_vertices = []
-        record = self.use_table(predicate).get(out_nodes(vertex1))
-        if record is not None:
-            out_ng_vertices = ast.literal_eval(record[1][1])
-        out_ng_vertices.append(vertex2)
-        vertex = (out_nodes(vertex1), str(out_ng_vertices))
+        # out_ng_vertices = []
+        # out_ng_vertices = self.use_table(predicate).get(out_nodes(vertex1))?
+        # if not record.is_empty():
+        #     print(">>"+str(record))
+        #     out_ng_vertices = ast.literal_eval(record.value)
+        # out_ng_vertices.append(vertex2)
+        # vertex = (out_nodes(vertex1), str(out_ng_vertices))
         #print "-> v1 " + str(vertex1) + " predicate: "+ predicate + " v2 " + str(vertex2) + " out_vert: "+ str(vertex)
-        self.use_table(predicate).put(vertex)
+        # self.use_table(predicate).put(vertex)
 
         # in vertices
-        in_ng_vertices = []
-        record = self.use_table(predicate).get(in_nodes(vertex2))
-        if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
-        in_ng_vertices.append(vertex1)
-        vertex = (in_nodes(vertex2), str(in_ng_vertices))
-        self.use_table(predicate).put(vertex)
+        # in_ng_vertices = []
+        # record = self.use_table(predicate).get(in_nodes(vertex2))
+        # if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
+        # in_ng_vertices.append(vertex1)
+        # vertex = (in_nodes(vertex2), str(in_ng_vertices))
+        # self.use_table(predicate).put(vertex)
 
     def load_triples(self, graph_data_path, graph_name):
         """

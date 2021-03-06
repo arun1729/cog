@@ -1,4 +1,3 @@
-
 from cog.core import Record
 from cog.database import Cog
 from cog import config

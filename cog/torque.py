@@ -132,7 +132,7 @@ class Graph:
         result = []
         for i, r in enumerate(self.cog.scanner()):
             if i < limit:
-                v = Vertex(r[0])
+                v = Vertex(r.key)
                 item = {"id": v.id}
                 result.append(item)
             else:
@@ -154,8 +154,9 @@ class Graph:
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
                 #print "==? " + str(direction)+ " <> " + str(predicate) + " ::: " + str(v.id) + " ==> " + str(record)
-                if record:
-                    for v_adjacent in ast.literal_eval(record[1][1]):
+                if not record.is_empty():
+                    #ast.literal_eval(record[1][1]):
+                    for v_adjacent in record.value:
                         v_adjacent_obj = Vertex(v_adjacent)
                         v_adjacent_obj.tags.update(v.tags)
                         traverse_vertex.append(v_adjacent_obj)

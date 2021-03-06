@@ -1,4 +1,4 @@
-
+from cog.core import Record
 from cog.database import Cog
 import unittest
 import shutil
@@ -14,12 +14,12 @@ class TestDB2(unittest.TestCase):
         cogdb.create_table("new_db", "my_namespace")
 
         # put some data
-        cogdb.put(('A', 'val'))
-        cogdb.put(('B', 'val'))
-        cogdb.put(('key3', 'val'))
-        cogdb.put(('key3', 'val_updated'))
+        cogdb.put(Record('A', 'val'))
+        cogdb.put(Record('B', 'val'))
+        cogdb.put(Record('key3', 'val'))
+        cogdb.put(Record('key3', 'val_updated'))
 
-        self.assertEqual(cogdb.get('key3')[1][1], 'val_updated')
+        self.assertEqual(cogdb.get('key3').value, 'val_updated')
 
         cogdb.close()
 

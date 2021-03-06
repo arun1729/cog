@@ -1,3 +1,4 @@
+from cog.core import Record
 from cog.core import Index
 from cog.core import Store
 from cog.core import TableMeta
@@ -29,23 +30,20 @@ class TestIndex2(unittest.TestCase):
 
         dictConfig(config.logging_config)
         logger = logging.getLogger()
-
-        expected_data = ("new super data","super new old stuff")
-
         tablemeta = TableMeta("testdb", "test_table", "test_xcvzdfsadx", None)
         store = Store(tablemeta, config, logger)
         index = Index(tablemeta, config, logger, 0)
-
-        for i in range(30):
+        test_size = 30
+        for i in range(test_size):
             print("Index load: "+str(index.get_load()))
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
-            expected_data = (key, value)
+            expected_data = Record(key, value)
             position=store.save(expected_data)
-            status=index.put(expected_data[0],position,store)
-            if(status != None):
-                returned_data=index.get(expected_data[0], store)
-                self.assertEqual(expected_data, returned_data[1])
+            status=index.put(expected_data.key,position,store)
+            if(status is not None):
+                returned_data=index.get(expected_data.key, store)
+                self.assertTrue(expected_data.is_equal_val(returned_data))
             else:
                 print("Index has reached its capacity.")
                 break
@@ -55,7 +53,7 @@ class TestIndex2(unittest.TestCase):
         for r in scanner:
             print(r)
             c += 1
-        print("Total records scanned: " + str(c))
+        self.assertEqual(test_size, c)
 
         index.close()
         store.close()

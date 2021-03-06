@@ -1,3 +1,4 @@
+from cog.core import Record
 from cog.database import Cog
 import unittest
 import os
@@ -15,12 +16,12 @@ class TestLib(unittest.TestCase):
             os.mkdir("/tmp/"+DIR_NAME+"/test/")
 
     def test_db(self):
-        data = ('testKey','testVal')
+        data = Record('testKey','testVal')
         cogdb = Cog("/tmp/"+DIR_NAME+"/test")
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
-        self.assertEqual(cogdb.get("testKey"), (b'0', ('testKey', 'testVal')))
+        self.assertTrue(cogdb.get("testKey").is_equal_val(Record('testKey', 'testVal')))
         cogdb.close()
 
     @classmethod

@@ -1,3 +1,4 @@
+from cog.core import Record
 from cog.core import Table
 from cog import config
 import logging
@@ -40,21 +41,20 @@ class TestIndexer(unittest.TestCase):
         for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
-            expected_data = (key,value)
+            expected_data = Record(key,value)
 
             position=store.save(expected_data)
-            indexer.put(expected_data[0],position,store)
-            returned_data=indexer.get(expected_data[0], store)
+            indexer.put(expected_data.key,position,store)
+            returned_data=indexer.get(expected_data.key, store)
             print("indexer retrieved data: "+str(returned_data))
-            self.assertEqual(expected_data, returned_data[1])
+            self.assertTrue(expected_data.is_equal_val(returned_data))
             print("Test progress: "+str(i*100.0/max_range))
 
         c = 0
         scanner = indexer.scanner(store)
         for r in scanner:
-            # print r
             c += 1
-        print("Total records scanned: " + str(c))
+        self.assertEqual(max_range, c)
 
         indexer.close()
         store.close()

@@ -1,3 +1,4 @@
+from cog.core import Record
 from cog.torque import Graph
 import unittest
 import os
