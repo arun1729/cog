@@ -174,10 +174,10 @@ class Cog:
         return self
 
     def put(self, data):
-        assert type(data[0]) is str, "Only string type is supported."
-        assert type(data[1]) is str, "Only string type is supported."
+        assert type(data.key) is str, "Only string type is supported."
+        assert type(data.value) is str, "Only string type is supported."
         position = self.current_table.store.save(data)
-        self.current_table.indexer.put(data[0], position, self.current_table.store)
+        self.current_table.indexer.put(data.key, position, self.current_table.store)
 
     def put_list(self, data):
         '''
@@ -199,7 +199,7 @@ class Cog:
             if sfilter:
                 yield sfilter.process(r[1][1])
             else:
-                yield r[1]
+                yield r
 
     def delete(self, key):
         self.table.indexer.delete(key, self.current_table.store)

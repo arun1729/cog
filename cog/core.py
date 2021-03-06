@@ -38,7 +38,7 @@ class Table:
 
 class Record:
 
-    def __init__(self, key, value, tombstone = None, store_position = None):
+    def __init__(self, key, value, tombstone=None, store_position=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
@@ -48,7 +48,7 @@ class Record:
         return self.key == other_record.key and self.value == other_record.value
 
     def get_kv_tuple(self):
-        return (self.key, self.value)
+        return self.key, self.value
 
     def serialize(self):
         return marshal.dumps((self.key, self.value))
@@ -225,11 +225,11 @@ class Index:
                 scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
-            record = store.read(self.get_store_bit(data_at_position))
-            if len(record) == 0:#EOF store
+            tombstone, data = store.read(self.get_store_bit(data_at_position))
+            if len(data) == 0:#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
                 return
-            yield record
+            yield Record(data[0], data[1], tombstone)
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
