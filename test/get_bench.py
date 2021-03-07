@@ -1,6 +1,5 @@
-from cog.core import Store
+from cog.core import Table, Record
 from cog.core import Table
-from cog.core import Indexer
 from cog import config
 import logging
 import os
@@ -48,10 +47,10 @@ class TestIndexerPerf(unittest.TestCase):
         for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
-            expected_data = (key,value)
+            expected_data = Record(key,value)
             key_list.append(key)
             position=store.save(expected_data)
-            indexer.put(expected_data[0],position,store)
+            indexer.put(expected_data.key,position,store)
             print("Loading data progress: " + str(i * 100.0 / max_range) + "%", end="\r")
         print("\n total index files: " + str(len(indexer.index_list)))
 

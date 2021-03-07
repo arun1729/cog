@@ -1,8 +1,7 @@
+from cog.core import Table, Record
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate
-from . import config as cfg
 import json
-import ast
 from os import listdir
 from os.path import isfile, join
 import os

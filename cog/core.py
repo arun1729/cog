@@ -210,7 +210,7 @@ class Index:
                     self.logger.info("found key in index."+self.name)
                     return Record(record[1][0], record[1][1], record[0], self.get_store_bit(data_at_probe_position))
 
-            self.logger.info("found key "+ key+" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record[1][0]))
+            self.logger.info("found key "+ key +" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record))
 
             probe_position += self.config.INDEX_BLOCK_LEN
 

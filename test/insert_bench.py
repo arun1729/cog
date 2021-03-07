@@ -1,3 +1,4 @@
+from cog.core import Table, Record
 import logging
 import os
 import random
@@ -40,16 +41,15 @@ class TestIndexerPerf(unittest.TestCase):
         max_range=100000
 
         insert_perf=[]
-        overall_start_time = timeit.default_timer()
         total_seconds=0.0
         for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
-            expected_data = (key,value)
+            expected_data = Record(key,value)
 
             start_time = timeit.default_timer()
             position=store.save(expected_data)
-            indexer.put(expected_data[0],position,store)
+            indexer.put(expected_data.key,position,store)
             elapsed = timeit.default_timer() - start_time
             insert_perf.append(elapsed*1000.0) #to ms
             total_seconds += elapsed

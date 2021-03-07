@@ -233,37 +233,19 @@ class Cog:
         self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
         self.use_table(predicate).put_list(Record(out_nodes(vertex1), vertex2))
         self.use_table(predicate).put_list(Record(in_nodes(vertex2), vertex1))
-        # out vertices
-        # out_ng_vertices = []
-        # out_ng_vertices = self.use_table(predicate).get(out_nodes(vertex1))?
-        # if not record.is_empty():
-        #     print(">>"+str(record))
-        #     out_ng_vertices = ast.literal_eval(record.value)
-        # out_ng_vertices.append(vertex2)
-        # vertex = (out_nodes(vertex1), str(out_ng_vertices))
-        #print "-> v1 " + str(vertex1) + " predicate: "+ predicate + " v2 " + str(vertex2) + " out_vert: "+ str(vertex)
-        # self.use_table(predicate).put(vertex)
 
-        # in vertices
-        # in_ng_vertices = []
-        # record = self.use_table(predicate).get(in_nodes(vertex2))
-        # if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
-        # in_ng_vertices.append(vertex1)
-        # vertex = (in_nodes(vertex2), str(in_ng_vertices))
-        # self.use_table(predicate).put(vertex)
-
-    def load_triples(self, graph_data_path, graph_name):
-        """
-        Graph method
-        :param graph_data_path:
-        :param graph_name:
-        :return:
-        """
-        self.create_namespace(graph_name)
-        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
-        with open(graph_data_path) as f:
+    def load_triples(self, graph_data_path, graph_name, delimiter=None):
+       """
+       :param graph_data_path: 
+       :param graph_name: 
+       :param delim: 
+       :return: 
+       """
+       self.create_namespace(graph_name)
+       self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+       with open(graph_data_path) as f:
             for line in f:
-                tokens = line.split()
+                tokens = line.split(delimiter) if delimiter is not None else line.split()
                 subject = tokens[0].strip()
                 predicate = tokens[1].strip()
                 object = tokens[2].strip()
