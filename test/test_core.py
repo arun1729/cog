@@ -86,20 +86,20 @@ class TestCore(unittest.TestCase):
 
         for fruit in fruits:
             print("storing :"+fruit)
-            r = ('fruits', fruit)
+            r = Record('fruits', fruit)
             print("CHECK IF LIST EXISTS - - - ->")
-            record, prev_pos = index.get(r[0], store)
-            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(prev_pos))
-            position=store.save(r, prev_pos, 'l')
+            record = index.get(r.key, store)
+            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(record.store_position))
+            position=store.save(r, record.store_position, 'l')
             print("stored new list value at store pos: "+str(position))
 
-            index.put(r[0], position, store)
+            index.put(r.key, position, store)
             print("indexed")
 
-        returned_data = index.delete('fruits', store)
-        returned_data=index.get('fruits', store)
+        index.delete(r.key, store)
+        returned_data=index.get(r.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual((None,None), returned_data)
+        self.assertTrue(returned_data.is_empty())
 
         index.close()
         store.close()
@@ -110,7 +110,7 @@ class TestCore(unittest.TestCase):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
-        expected_data = ("new super data","super new old stuff")
+        expected_data = Record("new super data","super new old stuff")
 
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
@@ -120,14 +120,14 @@ class TestCore(unittest.TestCase):
         position=store.save(expected_data)
         print("stored")
 
-        index.put(expected_data[0],position,store)
+        index.put(expected_data.key,position,store)
         print("indexed")
 
-        index.delete(expected_data[0], store)
+        index.delete(expected_data.key, store)
 
-        returned_data=index.get(expected_data[0], store)
+        returned_data=index.get(expected_data.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertEqual((None,None), returned_data)
+        self.assertTrue(returned_data.is_empty())
 
         index.close()
         store.close()
@@ -137,7 +137,7 @@ class TestCore(unittest.TestCase):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
-        expected_data = ("new super data","super new old stuff")
+        expected_data = Record("new super data","super new old stuff")
 
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
@@ -147,17 +147,17 @@ class TestCore(unittest.TestCase):
         position=store.save(expected_data)
         print("stored")
 
-        indexer.put(expected_data[0],position,store)
+        indexer.put(expected_data.key,position,store)
         print("indexed by indexer")
 
-        returned_data = indexer.get(expected_data[0], store)
+        returned_data = indexer.get(expected_data.key, store)
         print("indexer retrieved data: " + str(returned_data))
-        self.assertEqual(expected_data, returned_data[1])
+        self.assertTrue(expected_data.is_equal_val(returned_data))
 
-        indexer.delete(expected_data[0],store)
-        returned_data=indexer.get(expected_data[0], store)
+        indexer.delete(expected_data.key,store)
+        returned_data=indexer.get(expected_data.key, store)
         print("indexer retrieved data after delete: "+str(returned_data))
-        self.assertEqual(None, returned_data)
+        self.assertTrue(returned_data.is_empty())
 
         indexer.close()
         store.close()
