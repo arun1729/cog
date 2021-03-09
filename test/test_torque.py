@@ -100,7 +100,6 @@ class TorqueTest(unittest.TestCase):
     def test_torque_10(self):
         expected = {'result': [{'source': '<fred>', 'id': '<fred>'}, {'source': '"cool_person"', 'id': '"cool_person"'}]}
         actual = TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag("source").all()
-        print(actual)
         self.assertTrue(ordered(expected) == ordered(actual))
 
     # bad predicates, should not break test

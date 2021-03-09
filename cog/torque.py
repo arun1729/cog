@@ -150,8 +150,7 @@ class Graph:
                     v = Vertex(r.key)
                 else:
                     v = Vertex(r.value)
-                item = {"id": v.id}
-                result.append(item)
+                result.append({"id": v.id})
             else:
                 break
         return {"result": result}
@@ -198,9 +197,9 @@ class Graph:
         """
         result = []
         for v in self.last_visited_vertices:
-            item = v.get_dict()
+            item = {"id":v.id}
             # item['edge'] = self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(item['edge']).value
-            # item.update(v.tags)
+            item.update(v.tags)
             result.append(item)
         return {"result": result}
 
