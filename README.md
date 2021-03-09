@@ -45,6 +45,14 @@ g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
 ```
 
+### Create a graph from CSV file
+
+```python
+from cog.torque import Graph
+g = Graph("books")
+g.load_csv('test/test-data/books.csv', "isbn")
+```
+
 ### Torque query examples
 
 ### Scan vertices
