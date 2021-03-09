@@ -4,20 +4,20 @@ Created on Nov 25, 2017
 @author: arun
 '''
 
+from cog.core import Record
 import logging
 import os
 import os.path
 from os import listdir
 from os.path import isfile
 from os.path import join
-import ast
 import pickle
 import socket
 import uuid
 from .core import Table
 from . import config as cfg
 import xxhash
-import sys
+import csv
 
 # class Compaction:
 
@@ -94,7 +94,7 @@ class Cog:
         self.logger.info("done.")
         return instance_id
 
-    def create_namespace(self,namespace):
+    def create_namespace(self, namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
             os.mkdir(self.config.cog_data_dir(namespace))
             self.logger.info("Created new namespace: "+self.config.cog_data_dir(namespace))
@@ -112,7 +112,6 @@ class Cog:
         self.current_table = table
         self.namespaces[namespace][table_name] = table
 
-
     def load_namespace(self, namespace):
         for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
             table_names = set()
@@ -125,9 +124,8 @@ class Cog:
                     self.load_table(table_name, namespace)
         self.current_namespace = namespace
 
-
     def load_table(self, name, namespace):
-        if not namespace in self.namespaces:
+        if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
         self.logger.debug("loading table: "+name)
         if name not in self.namespaces[namespace]:
@@ -136,23 +134,6 @@ class Cog:
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
-
-    # def create_or_load_table(self, name, namespace):
-    #     if namespace not in self.namespaces:
-    #         self.namespaces[namespace] = {}
-    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
-    #         self.current_namespace = namespace
-    #         self.current_table = table
-    #         self.namespaces[namespace][name] = table
-    #     elif namespace in self.namespaces and name not in self.namespaces[namespace]:
-    #         table = Table(name, namespace, self.instance_id, self.config, self.logger)
-    #         self.current_namespace = namespace
-    #         self.current_table = table
-    #         self.namespaces[namespace][name] = table
-    #     else:
-    #         self.current_namespace = namespace
-    #         self.current_table = self.namespaces[namespace][name]
-    #         self.logger.info("loaded namespace {0} and table {1} ".format(self.current_namespace, self.current_table))
 
     def close(self):
         for name, space in self.namespaces.items():
@@ -192,10 +173,41 @@ class Cog:
         return self
 
     def put(self, data):
-        assert type(data[0]) is str, "Only string type is supported."
-        assert type(data[1]) is str, "Only string type is supported."
+        assert type(data.key) is str, "Only string type is supported."
+        assert type(data.value) is str, "Only string type is supported."
         position = self.current_table.store.save(data)
-        self.current_table.indexer.put(data[0], position, self.current_table.store)
+        self.current_table.indexer.put(data.key, position, self.current_table.store)
+
+    def put_list(self, data):
+        '''
+        Creates or appends to a list. If the key does now exist a new list is created, else it appends.
+        :param data:
+        :return:
+        '''
+        assert type(data.key) is str, "Only string type is supported."
+        assert type(data.value) is str, "Only string type is supported."
+        record = self.current_table.indexer.get(data.key, self.current_table.store)
+        position = self.current_table.store.save(data, record.store_position, 'l')
+        self.current_table.indexer.put(data.key, position, self.current_table.store)
+
+    def put_set(self, data):
+        '''
+        Creates or appends to a set. If the key does now exist a new list is created, else it adds to the set.
+        :param data:
+        :return:
+        '''
+        assert type(data.key) is str, "Only string type is supported."
+        assert type(data.value) is str, "Only string type is supported."
+        record = self.current_table.indexer.get(data.key, self.current_table.store)
+        # skip insert into store-list if value already present.
+        if record.value is None:
+            position = self.current_table.store.save(data, record.store_position, 'l')
+            self.current_table.indexer.put(data.key, position, self.current_table.store)
+        else:
+            if data.value not in record.value:
+                position = self.current_table.store.save(data, record.store_position, 'l')
+                self.current_table.indexer.put(data.key, position, self.current_table.store)
+
 
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)
@@ -206,7 +218,7 @@ class Cog:
             if sfilter:
                 yield sfilter.process(r[1][1])
             else:
-                yield r[1]
+                yield r
 
     def delete(self, key):
         self.table.indexer.delete(key, self.current_table.store)
@@ -223,7 +235,7 @@ class Cog:
         A - B
         A - C
         B - C
-        B - D
+        B - Dput_node
         C - D
         ======
         A => [B,C]
@@ -232,41 +244,25 @@ class Cog:
         D => [B]
         """
         # add to node set
-        #print "-> v1 " + str(vertex1) + " predicate: "+ self.config.GRAPH_NODE_SET_TABLE_NAME + " v2 " + str(vertex2)
-        predicate = hash_predicate(predicate)
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex1, ""))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put((vertex2, ""))
+        predicate_hashed = hash_predicate(predicate)
+        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
+        self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), vertex2))
+        self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), vertex1))
 
-        # out vertices
-        out_ng_vertices = []
-        record = self.use_table(predicate).get(out_nodes(vertex1))
-        if record is not None:
-            out_ng_vertices = ast.literal_eval(record[1][1])
-        out_ng_vertices.append(vertex2)
-        vertex = (out_nodes(vertex1), str(out_ng_vertices))
-        #print "-> v1 " + str(vertex1) + " predicate: "+ predicate + " v2 " + str(vertex2) + " out_vert: "+ str(vertex)
-        self.use_table(predicate).put(vertex)
-
-        # in vertices
-        in_ng_vertices = []
-        record = self.use_table(predicate).get(in_nodes(vertex2))
-        if record is not None: in_ng_vertices = ast.literal_eval(record[1][1])
-        in_ng_vertices.append(vertex1)
-        vertex = (in_nodes(vertex2), str(in_ng_vertices))
-        self.use_table(predicate).put(vertex)
-
-    def load_triples(self, graph_data_path, graph_name):
-        """
-        Graph method
-        :param graph_data_path:
-        :param graph_name:
-        :return:
-        """
-        self.create_namespace(graph_name)
-        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
-        with open(graph_data_path) as f:
+    def load_triples(self, graph_data_path, graph_name, delimiter=None):
+       """
+       :param graph_data_path: 
+       :param graph_name: 
+       :param delimiter:
+       :return: 
+       """
+       self.create_namespace(graph_name)
+       self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+       with open(graph_data_path) as f:
             for line in f:
-                tokens = line.split()
+                tokens = line.split(delimiter) if delimiter is not None else line.split()
                 subject = tokens[0].strip()
                 predicate = tokens[1].strip()
                 object = tokens[2].strip()
@@ -295,3 +291,23 @@ class Cog:
                 self.create_or_load_table(predicate, graph_name)
                 self.put_node(v1, predicate, v2)
 
+    def load_csv(self, file_name, id_column_name, graph_name):
+        """
+        Load CSV into in graph, you must select on of the columns as ID.
+        :param file_name:
+        :param id_column_name:
+        :param graph_name
+        :return:
+        """
+        self.create_namespace(graph_name)
+        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+        with open(file_name) as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                for k in row:
+                    subject = row[id_column_name]
+                    predicate = k
+                    obj = row[k]
+                    self.load_table(hash_predicate(predicate), graph_name)
+                    self.put_node(subject, predicate, obj)
+                    self.logger.debug("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))

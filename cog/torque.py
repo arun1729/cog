@@ -1,8 +1,7 @@
+from cog.core import Table, Record
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate
-from . import config as cfg
 import json
-import ast
 from os import listdir
 from os.path import isfile, join
 import os
@@ -13,11 +12,20 @@ from . import config as cfg
 
 NOTAG="NOTAG"
 
+
 class Vertex(object):
 
     def __init__(self, _id):
         self.id = _id
         self.tags = {}
+        self.edge = None
+
+    def set_edge(self, edge):
+        self.edge = edge
+        return self
+
+    def get_dict(self):
+        return self.__dict__
 
     def __str__(self):
         return json.dumps(self.__dict__)
@@ -51,20 +59,34 @@ class Graph:
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
-        #self.cog.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, self.graph_name)
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
         self.all_predicates = self.cog.list_tables()
 
-    def load_triples(self, graph_data_path, graph_name):
+    def load_triples(self, graph_data_path, graph_name=None):
         '''
         Loads a list of triples
         :param graph_data_path:
         :param graph_name:
         :return:
         '''
+        graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_triples(graph_data_path, graph_name)
+        self.all_predicates = self.cog.list_tables()
+
+    def load_csv(self, csv_path, id_column_name, graph_name=None):
+        """
+        Loads CSV to a graph. One column must be designated as ID column
+        :param csv_path:
+        :param id_column_name:
+        :param graph_name:
+        :return:
+        """
+        if id_column_name is None:
+            raise Exception("id_column_name must not be None")
+        graph_name = self.graph_name if graph_name is None else graph_name
+        self.cog.load_csv(csv_path, id_column_name, graph_name)
         self.all_predicates = self.cog.list_tables()
 
     def close(self):
@@ -72,21 +94,10 @@ class Graph:
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2):
-        #self.cog.create_or_load_table(predicate, self.graph_name)
         self.cog.use_namespace(self.graph_name).use_table(predicate)
         self.cog.put_node(vertex1, predicate, vertex2)
         self.all_predicates = self.cog.list_tables()
         return self
-
-
-    def list_predicate_tables(self, cog_dir, graph_name):
-        p = set(())
-        path = "/".join([cog_dir, graph_name])
-        if not os.path.exists(path): return p
-        files = [f for f in listdir(path) if isfile(join(path, f))]
-        for f in files:
-            p.add(f.split("-")[0])
-        return p
 
     def v(self, vertex=None):
         #TODO: need to check if node exists
@@ -127,18 +138,23 @@ class Graph:
         self.__hop("in", predicates)
         return self
 
-    def scan(self, limit = 10):
-        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+    def scan(self, limit=10, scan_type='v'):
+        assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
+        if scan_type == 'e':
+            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
+        else:
+            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
         result = []
         for i, r in enumerate(self.cog.scanner()):
             if i < limit:
-                v = Vertex(r[0])
-                item = {"id": v.id}
-                result.append(item)
+                if scan_type == 'v':
+                    v = Vertex(r.key)
+                else:
+                    v = Vertex(r.value)
+                result.append({"id": v.id})
             else:
                 break
         return {"result": result}
-
 
     def __hop(self, direction, predicates=None, tag=NOTAG):
         self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates) + " graph name: "+self.graph_name)
@@ -153,10 +169,9 @@ class Graph:
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
-                #print "==? " + str(direction)+ " <> " + str(predicate) + " ::: " + str(v.id) + " ==> " + str(record)
-                if record:
-                    for v_adjacent in ast.literal_eval(record[1][1]):
-                        v_adjacent_obj = Vertex(v_adjacent)
+                if not record.is_empty():
+                    for v_adjacent in record.value:
+                        v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                         v_adjacent_obj.tags.update(v.tags)
                         traverse_vertex.append(v_adjacent_obj)
         self.last_visited_vertices = traverse_vertex
@@ -183,8 +198,8 @@ class Graph:
         """
         result = []
         for v in self.last_visited_vertices:
-            #print "all:: tag: " + v + " vertex:"+ str(self.last_visited_vertices[v])
             item = {"id":v.id}
+            # item['edge'] = self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(item['edge']).value
             item.update(v.tags)
             result.append(item)
         return {"result": result}

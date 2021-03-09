@@ -1,4 +1,4 @@
-
+from cog.core import Record
 from cog.database import Cog
 from cog import config
 import json
@@ -26,15 +26,17 @@ class TestDB(unittest.TestCase):
         config.COG_HOME = DIR_NAME
 
     def test_db(self):
-        data = ('user100','{"firstname":"Hari","lastname":"seldon"}')
+        data = Record('user100','{"firstname":"Hari","lastname":"seldon"}')
         cogdb = Cog(config=config)
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
         scanner = cogdb.scanner()
+        res = None
         for r in scanner:
             res = r
-        self.assertEqual(res, ('user100', '{"firstname":"Hari","lastname":"seldon"}'))
+        print(res)
+        self.assertTrue(data.is_equal_val(res))
         cogdb.close()
 
     def test_list_tables(self):

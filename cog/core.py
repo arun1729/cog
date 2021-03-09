@@ -36,6 +36,28 @@ class Table:
         self.store.close()
         self.logger.info("closed table: "+self.table_meta.name)
 
+class Record:
+
+    def __init__(self, key, value, tombstone=None, store_position=None):
+        self.key = key
+        self.value = value
+        self.tombstone = tombstone
+        self.store_position = store_position
+
+    def is_equal_val(self, other_record):
+        return self.key == other_record.key and self.value == other_record.value
+
+    def get_kv_tuple(self):
+        return self.key, self.value
+
+    def serialize(self):
+        return marshal.dumps((self.key, self.value))
+
+    def is_empty(self):
+        return self.key is None and self.value is None
+
+    def __str__(self):
+        return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
 
 class Index:
 
@@ -145,11 +167,7 @@ class Index:
         return index, num
 
     def cog_hash(self, string):
-        return xxhash.xxh32(string,seed=2).intdigest() % self.config.INDEX_CAPACITY
-
-    # def cog_hash(self, string):
-    #     return sum(bytearray(string, 'utf-8')) % self.config.INDEX_CAPACITY
-    #     #return xxhash.xxh32('d',seed=2).intdigest() % self.config.INDEX_CAPACITY
+        return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     #@profile
     def get(self, key, store):
@@ -171,28 +189,28 @@ class Index:
                     looped_back = True
                 else:
                     self.logger.info("Index EOF reached! Key not found.")
-                    return None
+                    return Record(None, None, None, None)
 
             if data_at_probe_position == self.empty_block:
                 probe_position += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: found empty block, terminating get.")
-                return None
+                return Record(None, None, None, None)
 
             key_bit = self.get_key_bit(data_at_probe_position)
             orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
             #record = None
             if(orig_bit == key_bit):
                 record = store.read(self.get_store_bit(data_at_probe_position))
-
+                self.logger.debug("GET: READ BACK RECORD: "+str(record))
                 if record is None or len(record) == 0:#EOF store
                     self.logger.error("Store EOF reached! Indexed record not found.")
-                    return None
+                    Record(None, None, None, None)
 
                 if record is not None and key == record[1][0]:# found record!
                     self.logger.info("found key in index."+self.name)
-                    return record
+                    return Record(record[1][0], record[1][1], record[0], self.get_store_bit(data_at_probe_position))
 
-            self.logger.info("found key but collision in index."+self.name)
+            self.logger.info("found key "+ key +" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record))
 
             probe_position += self.config.INDEX_BLOCK_LEN
 
@@ -210,11 +228,11 @@ class Index:
                 scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
-            record = store.read(self.get_store_bit(data_at_position))
-            if len(record) == 0:#EOF store
+            tombstone, data = store.read(self.get_store_bit(data_at_position))
+            if len(data) == 0:#EOF store
                 self.logger.error("Store EOF reached! Iteration terminated.")
                 return
-            yield record
+            yield Record(data[0], data[1], tombstone)
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
@@ -265,6 +283,7 @@ class Store:
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
+        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         temp = open(self.store, 'a')  # create if not exist
@@ -275,35 +294,62 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, kv):
+    def save(self, record_obj, prev_pointer=None, c_type='s'):
         """Store data"""
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
-        record = marshal.dumps(kv)
+        record = record_obj.serialize()
         length = str(len(record))
+        self.logger.debug("STORE SAVE: length: "+length + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
         self.store_file.seek(0, 2)
         self.store_file.write(b'0')  # delete bit
+        self.store_file.write(c_type.encode())  # type bit
         self.store_file.write(length.encode())
-        self.store_file.write(b'\x1F')  # unit seperator
+        self.store_file.write(b'\x1F') #content length end - unit separator
         self.store_file.write(record)
+        if c_type == 'l' and prev_pointer is not None:
+            prevp = str(prev_pointer).encode()
+            self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
+            self.store_file.write(prevp)
+        self.store_file.write(b'\x1E') # record separator
         self.store_file.flush()
         return store_position
 
-    def read(self, position):
+    def read(self, position, c_list=None):
         self.store_file.seek(position)
         tombstone = self.store_file.read(1)
+        type_bit = self.store_file.read(1).decode()
+        data = self.__read_until(b'\x1F')
+        length = int(data)
+        record = marshal.loads(self.store_file.read(length))
+        self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
+
+        if type_bit == 'l':
+            prev_pointer = self.__read_until(b'\x1E')
+            prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
+            if c_list is None:
+                c_list = [record[1]]
+            else:
+                c_list.append(record[1])
+            self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
+            if prev_pointer < 0:
+                self.logger.debug("STORE READ: list read terminating, returning: "+str((record[0], c_list)))
+                return tombstone, (record[0], c_list)
+            return self.read(prev_pointer, c_list) #recursion limit of 1000!
+        else:
+            return tombstone, record
+
+    def __read_until(self, separator):
+        data = []
         c = self.store_file.read(1)
-        data = [c]
-        while c != b'\x1F':
+        while c != separator:
             data.append(c)
             c = self.store_file.read(1)
             if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
+        return b''.join(data).decode()
 
-        length = int(b''.join(data).decode())
-        record = marshal.loads(self.store_file.read(length))
-        return tombstone, record
 
 
 class Indexer:
