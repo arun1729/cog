@@ -172,17 +172,6 @@ for r in scanner:
 
 ```
 
-### Advance config
-
-```
-INDEX_BLOCK_LEN = 10
-INDEX_CAPACITY = 2000
-INDEX_LOAD_FACTOR = 80
-```
-
-Default index capacity of 10000 is on the lower end, it is intend for light usage of Cog such as using it as a hash-table data structure.
-For larger indexing use case, INDEX_CAPACITY should be set to larger number otherwise it will lead to too many open index files.
-
 ## Performance
 
 Put and Get calls performance:
