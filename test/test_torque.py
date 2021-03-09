@@ -110,8 +110,10 @@ class TorqueTest(unittest.TestCase):
 
     def test_torque_12(self):
         expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<emily>'}, {'id': '"cool_person"'}, {'id': '<greg>'}, {'id': '<fred>'}, {'id': '<alice>'}, {'id': '<charlie>'}]}
-        actual = TorqueTest.g.scan('v', 3)
+        actual = TorqueTest.g.scan(3,'v')
         self.assertTrue(3 == len(actual['result']))
+        with self.assertRaises(AssertionError):
+            TorqueTest.g.scan('v',3)
 
     @classmethod
     def tearDownClass(cls):

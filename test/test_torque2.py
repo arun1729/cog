@@ -41,7 +41,7 @@ class TorqueTest2(unittest.TestCase):
         g = Graph(graph_name="books5")
         g.load_csv(csv_file, "isbn")
         # print(g.scan())
-        actual = g.scan('e',20)
+        actual = g.scan(20,'e')
         expected = {'result': [{'id': 'ratings_4'}, {'id': 'best_book_id'}, {'id': 'work_text_reviews_count'}, {'id': 'original_publication_year'}, {'id': 'average_rating'}, {'id': 'ratings_1'}, {'id': 'language_code'}, {'id': 'image_url'}, {'id': 'books_count'}, {'id': 'work_ratings_count'}, {'id': 'isbn13'}, {'id': 'title'}, {'id': 'ratings_5'}, {'id': 'ratings_3'}, {'id': 'small_image_url'}, {'id': 'ratings_count'}, {'id': 'isbn'}, {'id': 'book_id'}, {'id': 'authors'}, {'id': 'ratings_2'}]}
         self.assertTrue(actual == expected)
         self.assertTrue(ordered(g.v('Kathryn Stockett').inc().out("title").all())==ordered({'result': [{'id': 'The Help'}]}))

@@ -138,7 +138,8 @@ class Graph:
         self.__hop("in", predicates)
         return self
 
-    def scan(self, scan_type='v', limit=10):
+    def scan(self, limit=10, scan_type='v'):
+        assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
         else:
