@@ -317,11 +317,13 @@ class Store:
 
     def read(self, position):
         tombstone, type_bit, record = self.__read_block(position)
+
         if type_bit == 'l':
             prev_pointer = self.__read_until(b'\x1E')
             prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
             c_list = [record[1]]
             key = record[0]
+
             while prev_pointer > -1:
                 self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
                 tombstone, type_bit, record = self.__read_block(prev_pointer)

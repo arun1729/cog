@@ -4,7 +4,7 @@ import json
 import logging
 from logging.config import dictConfig
 from . import config as cfg
-
+from cog.view import graph_template, script_part1, script_part2
 
 NOTAG="NOTAG"
 
@@ -103,7 +103,7 @@ class Graph:
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             for r in self.cog.scanner():
-                self.last_visited_vertices.append(Vertex(r))
+                self.last_visited_vertices.append(Vertex(r.key))
         return self
 
     def out(self, predicates=None):
@@ -133,6 +133,10 @@ class Graph:
 
         self.__hop("in", predicates)
         return self
+
+    def has(self, predicate, object):
+        pass
+
 
     def scan(self, limit=10, scan_type='v'):
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
@@ -199,4 +203,24 @@ class Graph:
             item.update(v.tags)
             result.append(item)
         return {"result": result}
+
+    def view(self):
+        """
+            Returns html view of the graph
+            :return:
+        """
+        result = self.all()
+        self.current_view = script_part1 + graph_template.format(plot_data_insert=json.dumps(result)) + script_part2
+        return self.current_view
+
+    def render(self):
+        """
+             This feature only works on IPython
+             :return:
+        """
+        import IPython
+        IPython.display.HTML(self.current_view)
+
+
+
 
