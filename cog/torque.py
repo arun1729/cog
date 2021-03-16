@@ -208,6 +208,15 @@ class Graph:
             result.append(item)
         return {"result": result}
 
+    def view2(self):
+        """
+            Returns html view of the graph
+            :return:
+        """
+        result = self.all()
+        self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+        return self.current_view_html
+
     def view(self, view_name):
         """
             Returns html view of the graph
@@ -217,7 +226,7 @@ class Graph:
         result = self.all()
         self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
         self.current_view = self.views_dir+"/{0}.html".format(view_name)
-        f = open(self.current_view, "a")
+        f = open(self.current_view, "w")
         f.write(self.current_view_html)
         f.close()
         return self.current_view

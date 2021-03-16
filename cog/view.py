@@ -4,7 +4,8 @@ script_part1 = r"""
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Cog Graph View</title>
+    GRAPH
     <style>
         body {
             font-family: helvetica;
