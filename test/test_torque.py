@@ -126,8 +126,8 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
 
     def test_torque_15(self):
-        expected = {'result': [{'id': '<fred>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<alice>'}]}
-        actual = TorqueTest.g.v().inc(["<status>"]).inc("<follows>").view()
+        actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").view("bob_view")
+        print(actual)
 
     @classmethod
     def tearDownClass(cls):

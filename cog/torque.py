@@ -5,6 +5,7 @@ import logging
 from logging.config import dictConfig
 from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2
+import os
 
 NOTAG="NOTAG"
 
@@ -41,6 +42,9 @@ class Graph:
         self.config = cfg
         self.config.COG_HOME = cog_home
         self.graph_name = graph_name
+        self.views_dir = self.config.cog_db_path() + "/views"
+        if not os.path.exists(self.views_dir):
+            os.mkdir(self.views_dir)
 
         self.cog_dir = self.config.cog_db_path()
         dictConfig(self.config.logging_config)
@@ -204,13 +208,18 @@ class Graph:
             result.append(item)
         return {"result": result}
 
-    def view(self):
+    def view(self, view_name):
         """
             Returns html view of the graph
             :return:
         """
+        assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.all()
-        self.current_view = script_part1 + graph_template.format(plot_data_insert=json.dumps(result)) + script_part2
+        self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+        self.current_view = self.views_dir+"/{0}.html".format(view_name)
+        f = open(self.current_view, "a")
+        f.write(self.current_view_html)
+        f.close()
         return self.current_view
 
     def render(self):
@@ -218,8 +227,10 @@ class Graph:
              This feature only works on IPython
              :return:
         """
-        import IPython
-        IPython.display.HTML(self.current_view)
+        current_dir = os.getcwd()
+        os.symlink(self.current_view, current_dir+"/graph_view.html")
+        from IPython.display import IFrame, HTML
+        IFrame(src="./graph_view.html", width=700, height=600)
 
 
 

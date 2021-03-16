@@ -1,4 +1,4 @@
-script_part1 = """ 
+script_part1 = r""" 
 
 <!DOCTYPE html>
 <html lang="en">
@@ -30,12 +30,14 @@ script_part1 = """
         document.addEventListener('DOMContentLoaded', function() {
 """
 
-graph_template = """  results =  {plot_data_insert} """
+graph_template = r"""  results =  {plot_data_insert} ; """
 
-script_part2 = """        var g = {
+script_part2 = r"""     
+ 
+        var g = {
             nodes: [],
             edges: []
-        }
+        };
 
         function isEqual(a, b) {
             return JSON.stringify(a) === JSON.stringify(b);
@@ -90,7 +92,6 @@ script_part2 = """        var g = {
         });
     });
     </script>
-
     <script>
         /**
  * Copyright (c) 2016-2021, The Cytoscape Consortium.
@@ -145,6 +146,5 @@ d.solve(),b.forEach(function(b,c){return a[c].setYCentre(b.position())})}var r=t
     <div id="graph-container"></div>
 </body>
 </html>
-
 
 """
