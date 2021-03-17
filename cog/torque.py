@@ -208,14 +208,14 @@ class Graph:
             result.append(item)
         return {"result": result}
 
-    def view2(self):
-        """
-            Returns html view of the graph
-            :return:
-        """
-        result = self.all()
-        self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
-        return self.current_view_html
+    # def view2(self):
+    #     """
+    #         Returns html view of the graph
+    #         :return:
+    #     """
+    #     result = self.all()
+    #     self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+    #     return self.current_view_html
 
     def view(self, view_name):
         """
@@ -229,6 +229,11 @@ class Graph:
         f = open(self.current_view, "w")
         f.write(self.current_view_html)
         f.close()
+        current_dir = os.getcwd()
+        symlink = current_dir+"/graph_view.html"
+        if not os.path.islink(symlink):
+            os.remove(symlink)
+        os.symlink(self.current_view, symlink)
         return self.current_view
 
     def render(self):
@@ -236,8 +241,7 @@ class Graph:
              This feature only works on IPython
              :return:
         """
-        current_dir = os.getcwd()
-        os.symlink(self.current_view, current_dir+"/graph_view.html")
+
         from IPython.display import IFrame, HTML
         IFrame(src="./graph_view.html", width=700, height=600)
 
