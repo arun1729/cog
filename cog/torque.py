@@ -230,10 +230,10 @@ class Graph:
         f.write(self.current_view_html)
         f.close()
         current_dir = os.getcwd()
-        symlink = current_dir+"/graph_view.html"
-        if not os.path.islink(symlink):
-            os.remove(symlink)
-        os.symlink(self.current_view, symlink)
+        self.symlink = current_dir+"/graph_view.html"
+        if os.path.islink(self.symlink):
+            os.remove(self.symlink)
+        os.symlink(self.current_view, self.symlink)
         return self.current_view
 
     def render(self):
@@ -242,8 +242,10 @@ class Graph:
              :return:
         """
 
-        from IPython.display import IFrame, HTML
-        IFrame(src="./graph_view.html", width=700, height=600)
+        html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.current_view_html)
+        from IPython.core.display import display, HTML, Javascript
+        display(HTML(html))
+
 
 
 

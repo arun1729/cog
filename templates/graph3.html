@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Cog Graph</title>
+
+    <script
+      type="text/javascript"
+      src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"
+    ></script>
+
+    <style type="text/css">
+       body {
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      #cog-graph-view {
+        width: 1000px;
+        height: 700px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cog-graph-view"></div>
+
+    <script type="text/javascript">
+    results = [{"id": "Harry Potter and the Half-Blood Prince (Harry Potter, #6)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Half-Blood Prince (Harry Potter, #6)"}, {"id": "Harry Potter and the Deathly Hallows (Harry Potter, #7)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Deathly Hallows (Harry Potter, #7)"}, {"id": "Harry Potter and the Goblet of Fire (Harry Potter, #4)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Goblet of Fire (Harry Potter, #4)"}, {"id": "Harry Potter and the Chamber of Secrets (Harry Potter, #2)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Chamber of Secrets (Harry Potter, #2)"}, {"id": "Harry Potter and the Order of the Phoenix (Harry Potter, #5)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Order of the Phoenix (Harry Potter, #5)"}, {"id": "Harry Potter and the Sorcerer\'s Stone (Harry Potter, #1)", "from": "J.K. Rowling, Mary GrandPr\\u00e9", "to": "Harry Potter and the Sorcerer\'s Stone (Harry Potter, #1)"}, {"id": "4.54", "from": "Harry Potter and the Half-Blood Prince (Harry Potter, #6)", "to": "4.54"}, {"id": "4.61", "from": "Harry Potter and the Deathly Hallows (Harry Potter, #7)", "to": "4.61"}, {"id": "4.53", "from": "Harry Potter and the Goblet of Fire (Harry Potter, #4)", "to": "4.53"}, {"id": "4.37", "from": "Harry Potter and the Chamber of Secrets (Harry Potter, #2)", "to": "4.37"}, {"id": "4.46", "from": "Harry Potter and the Order of the Phoenix (Harry Potter, #5)", "to": "4.46"}, {"id": "4.44", "from": "Harry Potter and the Sorcerer\'s Stone (Harry Potter, #1)", "to": "4.44"}]
+
+    var nodes = new vis.DataSet();
+    var edges = new vis.DataSet();
+    for (let i = 0; i < results.length; i++) {
+        res = results[i];
+        nodes.update({
+            id: res.from,
+            label: res.from
+        });
+        nodes.update({
+            id: res.to,
+            label: res.to
+        });
+        edges.update({
+            from: res.from,
+            to: res.to
+        });
+
+    }
+
+    var container = document.getElementById("cog-graph-view");
+    var data = {
+        nodes: nodes,
+        edges: edges,
+    };
+    var options = {
+        nodes: {
+            font: {
+                size: 20,
+                color: 'black'
+            },
+            color: '#46944f',
+            shape: 'dot',
+            widthConstraint: 200,
+
+        },
+        edges: {
+            font: '12px arial #ff0000',
+            scaling: {
+                label: true,
+            },
+            shadow: true,
+            smooth: true,
+            arrows: { to: {enabled: true}}
+        },
+        physics: {
+            barnesHut: {
+                gravitationalConstant: -30000
+            },
+            stabilization: {
+                iterations: 1000
+            },
+        }
+
+    };
+    var network = new vis.Network(container, data, options);
+    </script>
+  </body>
+</html>
