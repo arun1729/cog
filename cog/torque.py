@@ -42,20 +42,18 @@ class Graph:
         self.config = cfg
         self.config.COG_HOME = cog_home
         self.graph_name = graph_name
-        self.views_dir = self.config.cog_db_path() + "/views"
-        if not os.path.exists(self.views_dir):
-            os.mkdir(self.views_dir)
 
-        self.cog_dir = self.config.cog_db_path()
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
         #self.logger.setLevel(logging.DEBUG)
         self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
 
-        self.cog = Cog(db_path=self.cog_dir, config=cfg)
+        self.cog = Cog()
         self.cog.create_namespace(self.graph_name)
         self.all_predicates = self.cog.list_tables()
-
+        self.views_dir = self.config.cog_views_dir()
+        if not os.path.exists(self.views_dir):
+            os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
@@ -205,17 +203,9 @@ class Graph:
             item = {"id":v.id}
             # item['edge'] = self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(item['edge']).value
             item.update(v.tags)
+
             result.append(item)
         return {"result": result}
-
-    # def view2(self):
-    #     """
-    #         Returns html view of the graph
-    #         :return:
-    #     """
-    #     result = self.all()
-    #     self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
-    #     return self.current_view_html
 
     def view(self, view_name):
         """
@@ -224,17 +214,18 @@ class Graph:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.all()
-        self.current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
-        self.current_view = self.views_dir+"/{0}.html".format(view_name)
-        f = open(self.current_view, "w")
-        f.write(self.current_view_html)
-        f.close()
-        current_dir = os.getcwd()
-        self.symlink = current_dir+"/graph_view.html"
-        if os.path.islink(self.symlink):
-            os.remove(self.symlink)
-        os.symlink(self.current_view, self.symlink)
-        return self.current_view
+        current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+        current_view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
+        view = View(current_view, current_view_html)
+        view.persist()
+        return view
+
+
+class View(object):
+
+    def __init__(self, url, html):
+        self.url = url
+        self.html = html
 
     def render(self):
         """
@@ -244,9 +235,14 @@ class Graph:
 
         html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.current_view_html)
         from IPython.core.display import display, HTML, Javascript
-        display(HTML(html))
+        display(HTML(self.html))
 
+    def persist(self):
+        f = open(self.url, "w")
+        f.write(self.html)
+        f.close()
 
-
+    def __str__(self):
+        return self.url
 
 

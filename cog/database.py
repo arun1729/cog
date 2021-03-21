@@ -37,7 +37,7 @@ class Cog:
     """
 
     def __init__(self, db_path=None, config=cfg):
-        if db_path:
+        if db_path: #create custom db path, else use default
             db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
             try:
                 os.makedirs(db_path)

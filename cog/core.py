@@ -312,7 +312,7 @@ class Store:
             self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
             self.store_file.write(prevp)
         self.store_file.write(b'\x1E') # record separator
-        self.store_file.flush()
+        # self.store_file.flush()
         return store_position
 
     def read(self, position):
@@ -356,8 +356,6 @@ class Store:
         record = marshal.loads(self.store_file.read(length))
         self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
         return tombstone, type_bit, record
-
-
 
 
 class Indexer:
