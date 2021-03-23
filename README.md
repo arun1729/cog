@@ -82,6 +82,7 @@ g.v("bob").out().count()
 
 ### See who is following who and create a view of that network
 #### Note: `render()` is supported only in IPython environment like Jupyter notebook otherwise use view(..).url.
+By tagging the vertices 'from' and 'to', the resulting graph can be visualized.
 ```python
 g.v().tag("from").out("follows").tag("to").view("follows").render()
 
@@ -109,11 +110,10 @@ g.getv('follows').render()
 ### starting from a vertex, follow all out going edges and tag them
 
 ```python
-g.v("bob").out().tag("source").out().tag("target").all()
+g.v("bob").out().tag("from").out().tag("to").all()
 ```
-> {'result': [{'source': 'fred', 'id': 'greg', 'target': 'greg'}]}
-
-By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
+> {'result': [{'from': 'fred', 'id': 'greg', 'to': 'greg'}]}
+> 
 
 ### starting from a vertex, follow all incoming edges and list all vertices
 ```python
