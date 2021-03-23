@@ -109,7 +109,7 @@ class Cog:
             table_names = set()
             if self.config.INDEX in index_file_name:
                 id = self.config.index_id(index_file_name)
-                table_name = cfg.get_table_name(index_file_name)
+                table_name = config.get_table_name(index_file_name)
                 if table_name not in table_names:
                     table_names.add(table_name)
                     self.logger.debug("loading index: id: {}, table name: {}".format(id, table_name))

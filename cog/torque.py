@@ -55,8 +55,6 @@ class Graph:
         self.cog.create_namespace(self.graph_name)
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
-        self.current_view = None
-        self.current_result = None
         if not os.path.exists(self.views_dir):
             os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
@@ -210,8 +208,8 @@ class Graph:
             item.update(v.tags)
 
             result.append(item)
-        self.current_result = result
-        return {"result": result}
+        res = {"result": result}
+        return res
 
     def view(self, view_name, js_src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"):
         """
@@ -220,18 +218,18 @@ class Graph:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.all()
-        # create a new view if one the conditions are met
-        if not self.current_view or self.current_view != view_name or self.current_result != result:
-            view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
-            view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
-            view = View(view, view_html)
-            view.persist()
-            self.current_view = view_name
-        else:
-            view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
-            with open(view, 'r') as f:
-                view_html = f.read()
-            view = View(view, view_html)
+        view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+        view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
+        view = View(view, view_html)
+        view.persist()
+        return view
+
+    def getv(self, view_name):
+        view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
+        assert os.path.isfile(view), "view not found, create a view by calling .view()"
+        with open(view, 'r') as f:
+            view_html = f.read()
+        view = View(view, view_html)
         return view
 
     def lsv(self):

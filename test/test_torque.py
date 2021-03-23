@@ -131,13 +131,13 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(view.url.endswith("bob_view.html"))
         self.assertEqual(['bob_view'], TorqueTest.g.lsv())
         view = TorqueTest.g.v("<dani>").tag("from").out().tag("to").view("dani_view")
-        print(view.url)
+        self.assertEqual(['bob_view', 'dani_view'], sorted(TorqueTest.g.lsv()))
 
-    # @classmethod
-    # def tearDownClass(cls):
-    #     TorqueTest.g.close()
-    #     shutil.rmtree("/tmp/"+DIR_NAME)
-    #     print("*** deleted test data.")
+    @classmethod
+    def tearDownClass(cls):
+        TorqueTest.g.close()
+        shutil.rmtree("/tmp/"+DIR_NAME)
+        print("*** deleted test data.")
 
 
 if __name__ == '__main__':
