@@ -8,6 +8,8 @@
 > - Graph visualizations!
 > - bug fixes
 
+![ScreenShot](docs/ex2.png)
+
 ## Installing Cog
 ```
 pip install cogdb
