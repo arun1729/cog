@@ -4,11 +4,11 @@
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
 
-> New release: 2.0.3, 
-> - Storage optimization
-> - CSV loader
-> - Edge scanner
+> New release: 2.0.4, 
+> - Graph visualizations!
 > - bug fixes
+
+![ScreenShot](docs/ex2.png)
 
 ## Installing Cog
 ```
@@ -16,7 +16,7 @@ pip install cogdb
 ```
 Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast persistent key-value store.
 
-Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application.
+Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. Cog be used interactively in an IPython environment like Jupyter notebooks.
 
 Cog can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
 
@@ -80,14 +80,40 @@ g.v("bob").out().count()
 ```
 > '2'
 
+### See who is following who and create a view of that network
+#### Note: `render()` is supported only in IPython environment like Jupyter notebook otherwise use view(..).url.
+By tagging the vertices 'from' and 'to', the resulting graph can be visualized.
+```python
+g.v().tag("from").out("follows").tag("to").view("follows").render()
+
+```
+
+# ![ScreenShot](docs/ex1.png)
+
+```python
+g.v().tag("from").out("follows").tag("to").view("follows").url
+
+```
+> file:///Path/to/your/cog_home/views/follows.html
+
+### List all views 
+```
+g.lsv()
+```
+> ['follows']
+
+### Load existing visualization
+```
+g.getv('follows').render()
+```
+
 ### starting from a vertex, follow all out going edges and tag them
 
 ```python
-g.v("bob").out().tag("source").out().tag("target").all()
+g.v("bob").out().tag("from").out().tag("to").all()
 ```
-> {'result': [{'source': 'fred', 'id': 'greg', 'target': 'greg'}]}
-
-By tagging the vertices 'source' and 'target', the resulting graph can be visualized using [Sigma JS](http://sigmajs.org/) 
+> {'result': [{'from': 'fred', 'id': 'greg', 'to': 'greg'}]}
+> 
 
 ### starting from a vertex, follow all incoming edges and list all vertices
 ```python

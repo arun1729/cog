@@ -4,6 +4,7 @@ COG_HOME = "cog-test"
 COG_SYS_DIR = "sys"
 COG_SYS_FILE = "cogsys.c"
 COG_DEFAULT_NAMESPACE = "default"
+VIEWS = 'views'
 STORE="-store-"
 INDEX="-index-"
 INDEX_BLOCK_BASE_LEN = 20 #max store address length
@@ -29,18 +30,17 @@ def cog_db_path():
 def cog_context():
     return [cog_db_path(), COG_SYS_DIR, COG_SYS_FILE]
 
-
 def cog_instance_sys_file():
     return "/".join(cog_context())
-
 
 def cog_instance_sys_dir():
     return "/".join(cog_context()[0:-1])
 
+def cog_views_dir():
+    return "/".join([cog_db_path(), VIEWS])
 
 def cog_data_dir(db_name):
     return "/".join(cog_context()[0:-2]+[db_name])
-
 
 def cog_index(db_name, table_name, instance_id, index_id):
     return "/".join(cog_context()[0:-2]+[db_name,table_name+INDEX+instance_id+"-"+str(index_id)])

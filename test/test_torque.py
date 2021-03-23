@@ -115,6 +115,24 @@ class TorqueTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             TorqueTest.g.scan('v',3)
 
+    def test_torque_13(self):
+        expected = {'result': [{'id': '<greg>'}, {'id': '<dani>'}, {'id': '<bob>'}]}
+        actual = TorqueTest.g.v().inc(["<status>"]).all()
+        self.assertTrue(expected == actual)
+
+    def test_torque_14(self):
+        expected = {'result': [{'id': '<fred>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<alice>'}]}
+        actual = TorqueTest.g.v().inc(["<status>"]).inc("<follows>").all()
+        self.assertTrue(expected == actual)
+
+    def test_torque_15(self):
+        view = TorqueTest.g.v("<bob>").out().tag("from").inc().tag("to").view("bob_view")
+        print(view.url)
+        self.assertTrue(view.url.endswith("bob_view.html"))
+        self.assertEqual(['bob_view'], TorqueTest.g.lsv())
+        view = TorqueTest.g.v("<dani>").tag("from").out().tag("to").view("dani_view")
+        self.assertEqual(['bob_view', 'dani_view'], sorted(TorqueTest.g.lsv()))
+
     @classmethod
     def tearDownClass(cls):
         TorqueTest.g.close()

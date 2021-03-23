@@ -15,7 +15,7 @@ import pickle
 import socket
 import uuid
 from .core import Table
-from . import config as cfg
+from . import config
 import xxhash
 import csv
 
@@ -36,15 +36,7 @@ class Cog:
         Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
     """
 
-    def __init__(self, db_path=None, config=cfg):
-        if db_path:
-            db_path = db_path + cfg.COG_ROOT if db_path.endswith("/") else db_path + "/" + cfg.COG_ROOT
-            try:
-                os.makedirs(db_path)
-            except OSError:
-                if not os.path.isdir(db_path):
-                    raise
-            config.CUSTOM_COG_DB_PATH = db_path
+    def __init__(self):
         self.logger = logging.getLogger('database')
         self.config = config
         self.logger.info("Cog init.")
@@ -117,7 +109,7 @@ class Cog:
             table_names = set()
             if self.config.INDEX in index_file_name:
                 id = self.config.index_id(index_file_name)
-                table_name = cfg.get_table_name(index_file_name)
+                table_name = config.get_table_name(index_file_name)
                 if table_name not in table_names:
                     table_names.add(table_name)
                     self.logger.debug("loading index: id: {}, table name: {}".format(id, table_name))

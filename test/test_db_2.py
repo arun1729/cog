@@ -2,10 +2,20 @@ from cog.core import Record
 from cog.database import Cog
 import unittest
 import shutil
+import os
+from cog import config
 
 class TestDB2(unittest.TestCase):
     def test_db(self):
-        cogdb = Cog('/tmp/cogtestdb2')
+        db_path = '/tmp/cogtestdb2'
+        try:
+            os.makedirs(db_path)
+        except OSError:
+            if not os.path.isdir(db_path):
+                raise
+        config.CUSTOM_COG_DB_PATH = db_path
+
+        cogdb = Cog()
 
         # create a namespace
         cogdb.create_namespace("my_namespace")

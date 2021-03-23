@@ -1,14 +1,12 @@
-from cog.core import Table, Record
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate
 import json
-from os import listdir
-from os.path import isfile, join
-import os
 import logging
 from logging.config import dictConfig
 from . import config as cfg
-
+from cog.view import graph_template, script_part1, script_part2, graph_lib_src
+import os
+from os import listdir
 
 NOTAG="NOTAG"
 
@@ -36,26 +34,29 @@ class Graph:
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
     """
 
-    def __init__(self, graph_name, cog_home="cog_home"):
+    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
         '''
         :param graph_name:
-        :param cog_dir:
-        list of
+        :param cog_home: Home directory name, for most use cases use the default
+        :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         '''
         self.config = cfg
         self.config.COG_HOME = cog_home
+        if cog_path_prefix:
+            self.config.COG_PATH_PREFIX = cog_path_prefix
         self.graph_name = graph_name
 
-        self.cog_dir = self.config.cog_db_path()
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
         #self.logger.setLevel(logging.DEBUG)
         self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
 
-        self.cog = Cog(db_path=self.cog_dir, config=cfg)
+        self.cog = Cog()
         self.cog.create_namespace(self.graph_name)
         self.all_predicates = self.cog.list_tables()
-
+        self.views_dir = self.config.cog_views_dir()
+        if not os.path.exists(self.views_dir):
+            os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
@@ -107,7 +108,7 @@ class Graph:
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             for r in self.cog.scanner():
-                self.last_visited_vertices.append(Vertex(r))
+                self.last_visited_vertices.append(Vertex(r.key))
         return self
 
     def out(self, predicates=None):
@@ -137,6 +138,10 @@ class Graph:
 
         self.__hop("in", predicates)
         return self
+
+    def has(self, predicate, object):
+        pass
+
 
     def scan(self, limit=10, scan_type='v'):
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
@@ -201,6 +206,58 @@ class Graph:
             item = {"id":v.id}
             # item['edge'] = self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(item['edge']).value
             item.update(v.tags)
+
             result.append(item)
-        return {"result": result}
+        res = {"result": result}
+        return res
+
+    def view(self, view_name, js_src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"):
+        """
+            Returns html view of the graph
+            :return:
+        """
+        assert view_name is not None, "a view name is required to create a view, it can be any string."
+        result = self.all()
+        view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+        view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
+        view = View(view, view_html)
+        view.persist()
+        return view
+
+    def getv(self, view_name):
+        view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
+        assert os.path.isfile(view), "view not found, create a view by calling .view()"
+        with open(view, 'r') as f:
+            view_html = f.read()
+        view = View(view, view_html)
+        return view
+
+    def lsv(self):
+        return [f.split(".")[0] for f in listdir(self.views_dir)]
+
+
+class View(object):
+
+    def __init__(self, url, html):
+        self.url = url
+        self.html = html
+
+    def render(self):
+        """
+             This feature only works on IPython
+             :return:
+        """
+
+        iframe_html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.html)
+        from IPython.core.display import display, HTML
+        display(HTML(iframe_html))
+
+    def persist(self):
+        f = open(self.url, "w")
+        f.write(self.html)
+        f.close()
+
+    def __str__(self):
+        return self.url
+
 
