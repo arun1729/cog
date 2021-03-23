@@ -312,7 +312,7 @@ class Store:
             self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
             self.store_file.write(prevp)
         self.store_file.write(b'\x1E') # record separator
-        # self.store_file.flush()
+        self.store_file.flush()
         return store_position
 
     def read(self, position):
