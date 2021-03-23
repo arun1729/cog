@@ -126,14 +126,18 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
 
     def test_torque_15(self):
-        actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").view("bob_view")
-        print(actual)
+        view = TorqueTest.g.v("<bob>").out().tag("from").inc().tag("to").view("bob_view")
+        print(view.url)
+        self.assertTrue(view.url.endswith("bob_view.html"))
+        self.assertEqual(['bob_view'], TorqueTest.g.lsv())
+        view = TorqueTest.g.v("<dani>").tag("from").out().tag("to").view("dani_view")
+        print(view.url)
 
-    @classmethod
-    def tearDownClass(cls):
-        TorqueTest.g.close()
-        shutil.rmtree("/tmp/"+DIR_NAME)
-        print("*** deleted test data.")
+    # @classmethod
+    # def tearDownClass(cls):
+    #     TorqueTest.g.close()
+    #     shutil.rmtree("/tmp/"+DIR_NAME)
+    #     print("*** deleted test data.")
 
 
 if __name__ == '__main__':

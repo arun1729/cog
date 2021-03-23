@@ -4,8 +4,9 @@ import json
 import logging
 from logging.config import dictConfig
 from . import config as cfg
-from cog.view import graph_template, script_part1, script_part2
+from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 import os
+from os import listdir
 
 NOTAG="NOTAG"
 
@@ -33,14 +34,16 @@ class Graph:
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
     """
 
-    def __init__(self, graph_name, cog_home="cog_home"):
+    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
         '''
         :param graph_name:
-        :param cog_dir:
-        list of
+        :param cog_home: Home directory name, for most use cases use the default
+        :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         '''
         self.config = cfg
         self.config.COG_HOME = cog_home
+        if cog_path_prefix:
+            self.config.COG_PATH_PREFIX = cog_path_prefix
         self.graph_name = graph_name
 
         dictConfig(self.config.logging_config)
@@ -52,6 +55,8 @@ class Graph:
         self.cog.create_namespace(self.graph_name)
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
+        self.current_view = None
+        self.current_result = None
         if not os.path.exists(self.views_dir):
             os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
@@ -205,20 +210,32 @@ class Graph:
             item.update(v.tags)
 
             result.append(item)
+        self.current_result = result
         return {"result": result}
 
-    def view(self, view_name):
+    def view(self, view_name, js_src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"):
         """
             Returns html view of the graph
             :return:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.all()
-        current_view_html = script_part1 + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
-        current_view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
-        view = View(current_view, current_view_html)
-        view.persist()
+        # create a new view if one the conditions are met
+        if not self.current_view or self.current_view != view_name or self.current_result != result:
+            view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(plot_data_insert=json.dumps(result['result'])) + script_part2
+            view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
+            view = View(view, view_html)
+            view.persist()
+            self.current_view = view_name
+        else:
+            view = self.views_dir+"/{view_name}.html".format(view_name=view_name)
+            with open(view, 'r') as f:
+                view_html = f.read()
+            view = View(view, view_html)
         return view
+
+    def lsv(self):
+        return [f.split(".")[0] for f in listdir(self.views_dir)]
 
 
 class View(object):
@@ -233,9 +250,9 @@ class View(object):
              :return:
         """
 
-        html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.current_view_html)
-        from IPython.core.display import display, HTML, Javascript
-        display(HTML(self.html))
+        iframe_html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.html)
+        from IPython.core.display import display, HTML
+        display(HTML(iframe_html))
 
     def persist(self):
         f = open(self.url, "w")

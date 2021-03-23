@@ -3,12 +3,6 @@ script_part1 =r"""
 <html lang="en">
   <head>
     <title>Cog Graph</title>
-
-    <script
-      type="text/javascript"
-      src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"
-    ></script>
-
     <style type="text/css">
        body {
         padding: 0;
@@ -22,14 +16,24 @@ script_part1 =r"""
         height: 700px;
       }
     </style>
-  </head>
+"""
+
+graph_lib_src = r"""
+
+    <script
+      type="text/javascript"
+      src="{js_src}"
+    ></script>
+  </head>  
+"""
+
+graph_template = r""" 
   <body>
     <div id="cog-graph-view"></div>
 
     <script type="text/javascript">
-    """
 
-graph_template = r""" results ={plot_data_insert} """
+    results ={plot_data_insert} """
 
 script_part2 = r"""
 

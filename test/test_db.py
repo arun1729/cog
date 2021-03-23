@@ -27,7 +27,7 @@ class TestDB(unittest.TestCase):
 
     def test_db(self):
         data = Record('user100','{"firstname":"Hari","lastname":"seldon"}')
-        cogdb = Cog(config=config)
+        cogdb = Cog()
         cogdb.create_namespace("test")
         cogdb.create_table("db_test", "test")
         cogdb.put(data)
@@ -40,7 +40,7 @@ class TestDB(unittest.TestCase):
         cogdb.close()
 
     def test_list_tables(self):
-        cogdb = Cog(config=config)
+        cogdb = Cog()
         cogdb.create_namespace("test_ns")
         cogdb.create_table("table1", "test_ns")
         cogdb.create_table("table2", "test_ns")
