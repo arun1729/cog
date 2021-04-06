@@ -3,10 +3,9 @@
 
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
+> [cogdb.io](https://cogdb.io)
 
-> New release: 2.0.4, 
-> - Graph visualizations!
-> - bug fixes
+> New release: 2.0.5!
 
 ![ScreenShot](docs/ex2.png)
 
@@ -73,6 +72,19 @@ g.scan(3, 'e')
 g.v("bob").out().all()
 ```
 > {'result': [{'id': 'cool_person'}, {'id': 'fred'}]}
+
+### Everyone with status 'cool_person'
+```python
+g.v().has("status", 'cool_person').all()
+```
+
+> {'result': [{'id': 'bob'}, {'id': 'dani'}, {'id': 'greg'}]}
+
+### Include edges in the results
+```python
+g.v().has("follows", "fred").inc().all('e')
+```
+> {'result': [{'id': 'dani', 'edges': ['follows']}, {'id': 'charlie', 'edges': ['follows']}, {'id': 'alice', 'edges': ['follows']}]}
 
 ### starting from a vertex, follow all outgoing edges and count vertices
 ```python

@@ -150,7 +150,7 @@ class TorqueTest(unittest.TestCase):
     def test_torque_19(self):
         expected = {'result': [{'id': '<fred>', 'edges': ['<follows>']}, {'id': '"cool_person"', 'edges': ['<status>']}]}
         actual = TorqueTest.g.v("<bob>").out().all('e')
-        self.assertTrue(expected == actual)
+        self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_20(self):
         expected = {'result': [{'id': '<bob>'}, {'id': '<emily>'}]}

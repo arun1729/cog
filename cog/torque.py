@@ -111,8 +111,8 @@ class Graph:
 
     def out(self, predicates=None):
         '''
-        A string or a List of strings.
-        :param predicates:
+        Traverse forward through edges.
+        :param predicates: A string or a List of strings.
         :return:
         '''
         if predicates is not None:
@@ -127,6 +127,11 @@ class Graph:
         return self
 
     def inc(self, predicates=None):
+        '''
+        Traverse backward through edges.
+        :param predicates:
+        :return:
+        '''
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
@@ -156,7 +161,7 @@ class Graph:
 
     def has(self, predicates, vertex):
         """
-        Filters all edges traversed until this point to match :predicate
+        Filters all outgoing edges from a vertex that matches a list of predicates.
         :param predicates:
         :param vertex:
         :return:
@@ -180,7 +185,7 @@ class Graph:
 
     def hasr(self, predicates, vertex):
         """
-        'Has' in reverse.
+        'Has' in reverse. Filters all incoming edges from a vertex that matches a list of predicates.
         :param predicates:
         :param vertex:
         :return:
@@ -204,6 +209,12 @@ class Graph:
 
 
     def scan(self, limit=10, scan_type='v'):
+        '''
+        Scans vertices or edges in a graph.
+        :param limit:
+        :param scan_type:
+        :return:
+        '''
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
@@ -243,8 +254,7 @@ class Graph:
 
     def tag(self, tag_name):
         '''
-        Saves nodes with a tag name and returned in the result set.
-        Primarily used to capture nodes while navigating the graph.
+        Saves vertices with a tag name. Used to capture vertices while traversing a graph.
         :param tag_name:
         :return:
         '''
@@ -257,7 +267,7 @@ class Graph:
 
     def all(self, options=None):
         """
-        returns all the nodes in the result.
+        Returns all the vertices that are resultant of the graph query. Options 'e' would include the edges that were traversed.
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
         :return:
         """
@@ -276,7 +286,7 @@ class Graph:
 
     def view(self, view_name, js_src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"):
         """
-            Returns html view of the graph
+            Returns html view of the resulting graph from a query.
             :return:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."
