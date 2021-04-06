@@ -84,7 +84,6 @@ class TorqueTest(unittest.TestCase):
     def test_torque_7(self):
         expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all()
-        print(ordered(actual))
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_8(self):
@@ -132,6 +131,36 @@ class TorqueTest(unittest.TestCase):
         self.assertEqual(['bob_view'], TorqueTest.g.lsv())
         view = TorqueTest.g.v("<dani>").tag("from").out().tag("to").view("dani_view")
         self.assertEqual(['bob_view', 'dani_view'], sorted(TorqueTest.g.lsv()))
+
+    def test_torque_16(self):
+        expected = {'result': [{'id': '<bob>'}]}
+        actual = TorqueTest.g.v("<charlie>").out("<follows>").has("<follows>", "<fred>").all()
+        self.assertTrue(expected == actual)
+
+    def test_torque_17(self):
+        expected = {'result': [{'id': '<dani>'}, {'id': '<alice>'}, {'id': '<charlie>'}]}
+        actual = TorqueTest.g.v().has("<follows>", "<bob>").all()
+        self.assertTrue(expected == actual)
+
+    def test_torque_18(self):
+        expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<greg>'}]}
+        actual = TorqueTest.g.v().has("<status>", '"cool_person"').all()
+        self.assertTrue(expected == actual)
+
+    def test_torque_19(self):
+        expected = {'result': [{'id': '<fred>', 'edges': ['<follows>']}, {'id': '"cool_person"', 'edges': ['<status>']}]}
+        actual = TorqueTest.g.v("<bob>").out().all('e')
+        self.assertTrue(ordered(expected) == ordered(actual))
+
+    def test_torque_20(self):
+        expected = {'result': [{'id': '<bob>'}, {'id': '<emily>'}]}
+        actual = TorqueTest.g.v().has("<follows>", "<fred>").all('e')
+        self.assertTrue(expected == actual)
+
+    def test_torque_21(self):
+        expected = {'result': [{'id': '<dani>', 'edges': ['<follows>']}, {'id': '<charlie>', 'edges': ['<follows>']}, {'id': '<alice>', 'edges': ['<follows>']}]}
+        actual = TorqueTest.g.v().has("<follows>", "<fred>").inc().all('e')
+        self.assertTrue(expected == actual)
 
     @classmethod
     def tearDownClass(cls):

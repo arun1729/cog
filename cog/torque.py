@@ -16,10 +16,10 @@ class Vertex(object):
     def __init__(self, _id):
         self.id = _id
         self.tags = {}
-        self.edge = None
+        self.edges = set()
 
     def set_edge(self, edge):
-        self.edge = edge
+        self.edges.add(edge)
         return self
 
     def get_dict(self):
@@ -30,8 +30,7 @@ class Vertex(object):
 
 class Graph:
     """
-        https://www.w3.org/TR/WD-rdf-syntax-971002/
-        https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
+    Creates a graph object.
     """
 
     def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
@@ -78,7 +77,7 @@ class Graph:
 
     def load_csv(self, csv_path, id_column_name, graph_name=None):
         """
-        Loads CSV to a graph. One column must be designated as ID column
+        Loads CSV to a graph. One column must be designated as ID column.
         :param csv_path:
         :param id_column_name:
         :param graph_name:
@@ -101,7 +100,6 @@ class Graph:
         return self
 
     def v(self, vertex=None):
-        #TODO: need to check if node exists
         if vertex is not None:
             self.last_visited_vertices = [Vertex(vertex)]
         else:
@@ -113,14 +111,14 @@ class Graph:
 
     def out(self, predicates=None):
         '''
-        List of string predicates
-        :param predicates:
+        Traverse forward through edges.
+        :param predicates: A string or a List of strings.
         :return:
         '''
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
-            predicates = map(hash_predicate, predicates)
+            predicates = list(map(hash_predicate, predicates))
         else:
             predicates = self.all_predicates
 
@@ -129,21 +127,94 @@ class Graph:
         return self
 
     def inc(self, predicates=None):
+        '''
+        Traverse backward through edges.
+        :param predicates:
+        :return:
+        '''
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
-            predicates = map(hash_predicate, predicates)
+            predicates = list(map(hash_predicate, predicates))
         else:
             predicates = self.all_predicates
 
         self.__hop("in", predicates)
         return self
 
-    def has(self, predicate, object):
-        pass
+    def __adjacent_vertices(self, vertex, predicates, direction='out'):
+        self.cog.use_namespace(self.graph_name)
+        adjacent_vertices = []
+        for predicate in predicates:
+            if direction == 'out':
+                out_record = self.cog.use_table(predicate).get(out_nodes(vertex.id))
+                if not out_record.is_empty():
+                    for v_adj in out_record.value:
+                        adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
+            elif direction == 'in':
+                in_record = self.cog.use_table(predicate).get(in_nodes(vertex.id))
+                if not in_record.is_empty():
+                    for v_adj in in_record.value:
+                        adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
+
+        return adjacent_vertices
+
+    def has(self, predicates, vertex):
+        """
+        Filters all outgoing edges from a vertex that matches a list of predicates.
+        :param predicates:
+        :param vertex:
+        :return:
+        """
+
+        if predicates is not None:
+            if not isinstance(predicates, list):
+                predicates = [predicates]
+            predicates = list(map(hash_predicate, predicates))
+
+        has_vertices = []
+        for lv in self.last_visited_vertices:
+            adj_vertices = self.__adjacent_vertices(lv, predicates)
+            # print(lv.id + " -> " + str([x.id for x in adj_vertices]))
+            for av in adj_vertices:
+                if av.id == vertex:
+                    has_vertices.append(lv)
+
+        self.last_visited_vertices = has_vertices
+        return self
+
+    def hasr(self, predicates, vertex):
+        """
+        'Has' in reverse. Filters all incoming edges from a vertex that matches a list of predicates.
+        :param predicates:
+        :param vertex:
+        :return:
+        """
+
+        if predicates is not None:
+            if not isinstance(predicates, list):
+                predicates = [predicates]
+            predicates = list(map(hash_predicate, predicates))
+
+        has_vertices = []
+        for lv in self.last_visited_vertices:
+            adj_vertices = self.__adjacent_vertices(lv, predicates, 'in')
+            # print(lv.id + " -> " + str([x.id for x in adj_vertices]))
+            for av in adj_vertices:
+                if av.id == vertex:
+                    has_vertices.append(lv)
+
+        self.last_visited_vertices = has_vertices
+        return self
 
 
     def scan(self, limit=10, scan_type='v'):
+        '''
+        Scans vertices or edges in a graph.
+        :param limit:
+        :param scan_type:
+        :return:
+        '''
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
@@ -183,8 +254,7 @@ class Graph:
 
     def tag(self, tag_name):
         '''
-        Saves nodes with a tag name and returned in the result set.
-        Primarily used to capture nodes while navigating the graph.
+        Saves vertices with a tag name. Used to capture vertices while traversing a graph.
         :param tag_name:
         :return:
         '''
@@ -195,15 +265,18 @@ class Graph:
     def count(self):
         return len(self.last_visited_vertices)
 
-    def all(self):
+    def all(self, options=None):
         """
-        returns all the nodes in the result.
+        Returns all the vertices that are resultant of the graph query. Options 'e' would include the edges that were traversed.
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
         :return:
         """
         result = []
+        show_edge = True if options is not None and 'e' in options else False
         for v in self.last_visited_vertices:
-            item = {"id":v.id}
+            item = {"id": v.id}
+            if show_edge and v.edges:
+                item['edges'] = [self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(edge).value for edge in v.edges]
             # item['edge'] = self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(item['edge']).value
             item.update(v.tags)
 
@@ -213,7 +286,7 @@ class Graph:
 
     def view(self, view_name, js_src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"):
         """
-            Returns html view of the graph
+            Returns html view of the resulting graph from a query.
             :return:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."

@@ -3,10 +3,9 @@
 
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
+> [cogdb.io](https://cogdb.io)
 
-> New release: 2.0.4, 
-> - Graph visualizations!
-> - bug fixes
+> New release: 2.0.5!
 
 ![ScreenShot](docs/ex2.png)
 
@@ -55,14 +54,14 @@ g.load_csv('test/test-data/books.csv', "isbn")
 
 ### Torque query examples
 
-### Scan vertices
+#### Scan vertices
 ```python
 g.scan(3)
 ```
 
 > {'result': [{'id': 'bob'}, {'id': 'emily'}, {'id': 'charlie'}]}
 
-### Scan edges
+#### Scan edges
 ```python
 g.scan(3, 'e')
 ```
@@ -74,7 +73,20 @@ g.v("bob").out().all()
 ```
 > {'result': [{'id': 'cool_person'}, {'id': 'fred'}]}
 
-### starting from a vertex, follow all outgoing edges and count vertices
+#### Everyone with status 'cool_person'
+```python
+g.v().has("status", 'cool_person').all()
+```
+
+> {'result': [{'id': 'bob'}, {'id': 'dani'}, {'id': 'greg'}]}
+
+#### Include edges in the results
+```python
+g.v().has("follows", "fred").inc().all('e')
+```
+> {'result': [{'id': 'dani', 'edges': ['follows']}, {'id': 'charlie', 'edges': ['follows']}, {'id': 'alice', 'edges': ['follows']}]}
+
+#### starting from a vertex, follow all outgoing edges and count vertices
 ```python
 g.v("bob").out().count()
 ```
@@ -96,18 +108,18 @@ g.v().tag("from").out("follows").tag("to").view("follows").url
 ```
 > file:///Path/to/your/cog_home/views/follows.html
 
-### List all views 
+#### List all views 
 ```
 g.lsv()
 ```
 > ['follows']
 
-### Load existing visualization
+#### Load existing visualization
 ```
 g.getv('follows').render()
 ```
 
-### starting from a vertex, follow all out going edges and tag them
+#### starting from a vertex, follow all out going edges and tag them
 
 ```python
 g.v("bob").out().tag("from").out().tag("to").all()
@@ -115,7 +127,7 @@ g.v("bob").out().tag("from").out().tag("to").all()
 > {'result': [{'from': 'fred', 'id': 'greg', 'to': 'greg'}]}
 > 
 
-### starting from a vertex, follow all incoming edges and list all vertices
+#### starting from a vertex, follow all incoming edges and list all vertices
 ```python
 g.v("bob").inc().all()
 ```
@@ -124,14 +136,14 @@ g.v("bob").inc().all()
 
 ## Loading data from a file
 
-### Triples file
+#### Triples file
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people")
 g.load_triples("/path/to/triples.nt", "people")
 ```
 
-### Edgelist file
+#### Edgelist file
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people")
