@@ -54,14 +54,14 @@ g.load_csv('test/test-data/books.csv', "isbn")
 
 ### Torque query examples
 
-### Scan vertices
+#### Scan vertices
 ```python
 g.scan(3)
 ```
 
 > {'result': [{'id': 'bob'}, {'id': 'emily'}, {'id': 'charlie'}]}
 
-### Scan edges
+#### Scan edges
 ```python
 g.scan(3, 'e')
 ```
