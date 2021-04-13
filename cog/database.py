@@ -274,7 +274,7 @@ class Cog:
         :return:
         """
         self.create_namespace(graph_name)
-        self.create_or_load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(edgelist_file_path) as f:
             for line in f:
                 tokens = line.split()

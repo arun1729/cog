@@ -109,10 +109,28 @@ class Index:
         return int(block_data[:self.config.INDEX_BLOCK_BASE_LEN])
 
     def put(self, key, store_position, store):
+        """
+        key chain
+        :param key:
+        :param store_position:
+        :param store:
+        :return:
+        """
         orig_position, orig_hash = self.get_index(key)
-        probe_position = orig_position
-        data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-        self.logger.debug("PUT: probe position: " + str(probe_position) + " value = " + str(data_at_prob_position))
+        data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
+        self.logger.debug("PUT: probe position: " + str(orig_position) + " value = " + str(data_at_prob_position))
+        if data_at_prob_position != self.empty_block:
+            """
+            Read keys in bucket:
+                Read key at position in store
+                add that as the prev-key to the key-chain bit
+            write the new k:v to store
+            put the store position in the index position.
+            """
+        else:
+            store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN]
+
         looped_back=False
 
         while data_at_prob_position != self.empty_block:
@@ -314,6 +332,32 @@ class Store:
         self.store_file.write(b'\x1E') # record separator
         self.store_file.flush()
         return store_position
+
+    def read_keychain(self, position):
+        """
+        Reads all the keys in a bucket.
+        :param position:
+        :return:
+        """
+        tombstone, type_bit, record = self.__read_block(position)
+
+        if type_bit == 'l':
+            prev_pointer = self.__read_until(b'\x1E')
+            prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
+            c_list = [record[1]]
+            key = record[0]
+
+            while prev_pointer > -1:
+                self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
+                tombstone, type_bit, record = self.__read_block(prev_pointer)
+                c_list.append(record[1])
+                prev_pointer = self.__read_until(b'\x1E')
+                prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
+
+            self.logger.debug("STORE READ: list read terminating, returning: "+str((record[0], c_list)))
+            return tombstone, (key, c_list)
+        else:
+            return tombstone, record
 
     def read(self, position):
         tombstone, type_bit, record = self.__read_block(position)
