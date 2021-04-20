@@ -312,17 +312,25 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, record_obj, prev_pointer=None, c_type='s'):
-        """Store data"""
+    def save(self, record_obj, kc_pointer, prev_pointer=None, c_type='s'):
+        """
+        [[TS][key chain pointer][type][record]]
+        Store data
+        """
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
+        kcp = marshal.dumps(kc_pointer)
+        kcp_len = str(len(kcp))
         record = record_obj.serialize()
-        length = str(len(record))
-        self.logger.debug("STORE SAVE: length: "+length + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
+        rec_len = str(len(record))
+        self.logger.debug("STORE SAVE: length: "+rec_len + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
         self.store_file.seek(0, 2)
-        self.store_file.write(b'0')  # delete bit
+        self.store_file.write(b'0')  # TS
+        self.store_file.write(kcp_len.encode()) #KC len
+        self.store_file.write(b'\x1F')
+        self.store_file.write(kcp) #key chain
         self.store_file.write(c_type.encode())  # type bit
-        self.store_file.write(length.encode())
+        self.store_file.write(rec_len.encode()) # rec len
         self.store_file.write(b'\x1F') #content length end - unit separator
         self.store_file.write(record)
         if c_type == 'l' and prev_pointer is not None:
@@ -393,14 +401,16 @@ class Store:
         return b''.join(data).decode()
 
     def __read_block(self, position):
+        #  [[TS][key chain pointer][type][record]]
         self.store_file.seek(position)
         tombstone = self.store_file.read(1)
+        key_len = int(self.__read_until(b'\x1F'))
+        kc_pointer = marshal.loads(self.store_file.read(key_len))
         type_bit = self.store_file.read(1).decode()
-        data = self.__read_until(b'\x1F')
-        length = int(data)
-        record = marshal.loads(self.store_file.read(length))
+        record_len =int(self.__read_until(b'\x1F'))
+        record = marshal.loads(self.store_file.read(record_len))
         self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
-        return tombstone, type_bit, record
+        return tombstone, kc_pointer, type_bit, record
 
 
 class Indexer:
