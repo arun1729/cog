@@ -336,10 +336,11 @@ class Store:
     def read_keychain(self, position):
         """
         Reads all the keys in a bucket.
+        [[TS][key chain pointer][type][record]]
         :param position:
         :return:
         """
-        tombstone, type_bit, record = self.__read_block(position)
+        tombstone, kc_pointer, type_bit, record = self.__read_block(position)
 
         if type_bit == 'l':
             prev_pointer = self.__read_until(b'\x1E')
