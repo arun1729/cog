@@ -59,6 +59,60 @@ class Record:
     def __str__(self):
         return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
 
+
+
+        # self.store_file.seek(0, 2)
+        # store_position = self.store_file.tell()
+        # kcp = marshal.dumps(kc_pointer)
+        # kcp_len = str(len(kcp))
+        # record = record_obj.serialize()
+        # rec_len = str(len(record))
+        # self.logger.debug("STORE SAVE: length: "+rec_len + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
+        # self.store_file.seek(0, 2)
+        # self.store_file.write(b'0')  # TS
+        # self.store_file.write(kcp_len.encode()) #KC len
+        # self.store_file.write(b'\x1F')
+        # self.store_file.write(kcp) #key chain
+        # self.store_file.write(c_type.encode())  # type bit
+        # self.store_file.write(rec_len.encode()) # rec len
+        # self.store_file.write(b'\x1F') #content length end - unit separator
+        # self.store_file.write(record)
+        # if c_type == 'l' and prev_pointer is not None:
+        #     prevp = str(prev_pointer).encode()
+        #     self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
+        #     self.store_file.write(prevp)
+        # self.store_file.write(b'\x1E') # record separator
+        # self.store_file.flush()
+        # return store_position
+
+class Block:
+    """
+
+    """
+    #[[TS][key chain pointer][type][record]]
+    def __init__(self, tombstone, keychain_pointer, rec_type, record):
+        self.tombstone = tombstone
+        self.keychain_pointer = keychain_pointer
+        self.rec_type = rec_type
+        self.record = record
+
+    def get_bytes(self):
+        """
+        Returns byte representation of the a block
+        :return:
+        """
+
+
+    @classmethod
+    def from_bytes(cls, bytes):
+        """
+        parses bytes into a block object
+        :return:
+        """
+
+
+
+
 class Index:
 
     def __init__(self, table_meta, config, logger, index_id=0):
