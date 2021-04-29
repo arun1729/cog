@@ -19,6 +19,12 @@ class TestCore(unittest.TestCase):
             os.makedirs(path)
         config.CUSTOM_COG_DB_PATH = "/tmp/"+DIR_NAME
 
+
+    def test_record(self):
+        record = Record("rocket", "saturn-v", tombstone='0', store_position=25, rtype='s',  prev=5)
+        print(record.serialize())
+        print(record.marshal())
+
     def test_put_get_string(self):
         dictConfig(config.logging_config)
         logger = logging.getLogger()

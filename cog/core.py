@@ -36,13 +36,16 @@ class Table:
         self.store.close()
         self.logger.info("closed table: "+self.table_meta.name)
 
+
 class Record:
 
-    def __init__(self, key, value, tombstone=None, store_position=None):
+    def __init__(self, key, value, tombstone=None, store_position=None, rtype=None,  link=None, keychain=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
         self.store_position = store_position
+        self.prev = prev
+        self.rtype = rtype
 
     def is_equal_val(self, other_record):
         return self.key == other_record.key and self.value == other_record.value
@@ -52,6 +55,24 @@ class Record:
 
     def serialize(self):
         return marshal.dumps((self.key, self.value))
+
+    def marshal(self):
+        prevb = str(self.prev).encode()
+        plen = str(len(prevb))
+        serialized = self.serialize()
+        slen = str(len(serialized))
+
+        bytes = plen.encode() + b'\x1F' + prevb + self.tombstone.encode() + self.rtype.encode() + slen.encode() + b'\x1F' + serialized.encode()
+        if self.rtype == "l":
+            bytes += self.prev.encode()
+        bytes += b'\x1E'
+        return bytes
+
+    @classmethod
+    def unmarshal(cls, bytes):
+        """reads from bytes and creates object
+        return cls(1,2,3,4..)
+        """
 
     def is_empty(self):
         return self.key is None and self.value is None
@@ -73,6 +94,7 @@ class Record:
         # self.store_file.write(kcp_len.encode()) #KC len
         # self.store_file.write(b'\x1F')
         # self.store_file.write(kcp) #key chain
+
         # self.store_file.write(c_type.encode())  # type bit
         # self.store_file.write(rec_len.encode()) # rec len
         # self.store_file.write(b'\x1F') #content length end - unit separator
@@ -84,31 +106,34 @@ class Record:
         # self.store_file.write(b'\x1E') # record separator
         # self.store_file.flush()
         # return store_position
-
-class Block:
-    """
-
-    """
-    #[[TS][key chain pointer][type][record]]
-    def __init__(self, tombstone, keychain_pointer, rec_type, record):
-        self.tombstone = tombstone
-        self.keychain_pointer = keychain_pointer
-        self.rec_type = rec_type
-        self.record = record
-
-    def get_bytes(self):
-        """
-        Returns byte representation of the a block
-        :return:
-        """
-
-
-    @classmethod
-    def from_bytes(cls, bytes):
-        """
-        parses bytes into a block object
-        :return:
-        """
+#
+# class Block:
+#     """
+#
+#     """
+#     #[[TS][key chain pointer][record]]
+#     def __init__(self, tombstone, keychain_pointer, record):
+#         self.tombstone = tombstone
+#         self.keychain_pointer = keychain_pointer
+#         self.record = record
+#
+#     def get_bytes(self):
+#         """
+#         Returns byte representation of the a block
+#         :return:
+#         """
+#         kcp = self.kc_pointer.decode()
+#         kcp_len = str(len(kcp))
+#         self.tombstone.encode() + kcp_len.encode() + b'\x1F' +  kcp
+#
+#
+#
+#     @classmethod
+#     def from_bytes(cls, bytes):
+#         """
+#         parses bytes into a block object
+#         :return:
+#         """
 
 
 
