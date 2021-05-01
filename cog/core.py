@@ -39,12 +39,13 @@ class Table:
 
 class Record:
 
-    def __init__(self, key, value, tombstone=None, store_position=None, rtype=None,  link=None, keychain=None):
+    def __init__(self, key, value, tombstone=None, store_position=None, rtype=None,  key_link=None, value_link=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
         self.store_position = store_position
-        self.prev = prev
+        self.key_link = key_link
+        self.value_link = value_link
         self.rtype = rtype
 
     def is_equal_val(self, other_record):
@@ -57,22 +58,28 @@ class Record:
         return marshal.dumps((self.key, self.value))
 
     def marshal(self):
-        prevb = str(self.prev).encode()
-        plen = str(len(prevb))
+        key_link_bytes = str(self.key_link).encode()
         serialized = self.serialize()
-        slen = str(len(serialized))
 
-        bytes = plen.encode() + b'\x1F' + prevb + self.tombstone.encode() + self.rtype.encode() + slen.encode() + b'\x1F' + serialized.encode()
+        m_record = str(len(key_link_bytes)).encode() \
+                + b'\x1F' + key_link_bytes \
+                + self.tombstone.encode() \
+                + self.rtype.encode() \
+                + str(len(serialized)).encode() \
+                + b'\x1F' \
+                + serialized
         if self.rtype == "l":
-            bytes += self.prev.encode()
-        bytes += b'\x1E'
-        return bytes
+            m_record += str(self.value_link).encode()
+        m_record += b'\x1E'
+        return m_record
 
     @classmethod
     def unmarshal(cls, bytes):
         """reads from bytes and creates object
         return cls(1,2,3,4..)
+
         """
+
 
     def is_empty(self):
         return self.key is None and self.value is None

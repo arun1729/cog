@@ -21,9 +21,10 @@ class TestCore(unittest.TestCase):
 
 
     def test_record(self):
-        record = Record("rocket", "saturn-v", tombstone='0', store_position=25, rtype='s',  prev=5)
+        record = Record("rocket", "saturn-v", tombstone='0', store_position=25, rtype='s',  key_link=5)
         print(record.serialize())
         print(record.marshal())
+        Record.unmarshal(b'1\x1f50s20\x1f)\x02\xda\x06rocket\xfa\x08saturn-v\x1e')
 
     def test_put_get_string(self):
         dictConfig(config.logging_config)
