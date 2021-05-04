@@ -74,12 +74,38 @@ class Record:
         return m_record
 
     @classmethod
-    def unmarshal(cls, bytes):
+    def unmarshal(cls, store_bytes):
         """reads from bytes and creates object
         return cls(1,2,3,4..)
 
         """
 
+        store_bytes = memoryview(store_bytes)
+
+        tombstone = store_bytes[0:1].tobytes()
+
+        buff = b''
+        key_link_start_pos = 0
+        for i in range(1, len(store_bytes)):
+            s_byte = store_bytes[i:i + 1].tobytes()
+            buff += s_byte
+            if s_byte == b'\x1F':
+                key_link_start_pos = i + 1
+                break
+
+        key_link_len = int(int(buff.decode()))
+        key_link = int(store_bytes[key_link_start_pos: key_link_start_pos + key_link_len].decode())
+
+
+    @classmethod
+    def __read_until(cls, bytes, separtor):
+        """
+
+        :param bytes:
+        :param separtor:
+        :return:
+        """
+        pass
 
     def is_empty(self):
         return self.key is None and self.value is None
