@@ -46,7 +46,7 @@ class Record:
         self.store_position = store_position
         self.key_link = key_link
         self.value_link = value_link
-        self.rtype = rtype
+        self.value_type = rtype
 
     def is_equal_val(self, other_record):
         return self.key == other_record.key and self.value == other_record.value
@@ -64,14 +64,25 @@ class Record:
         m_record = str(len(key_link_bytes)).encode() \
                 + b'\x1F' + key_link_bytes \
                 + self.tombstone.encode() \
-                + self.rtype.encode() \
+                + self.value_type.encode() \
                 + str(len(serialized)).encode() \
                 + b'\x1F' \
                 + serialized
-        if self.rtype == "l":
+        if self.value_type == "l":
             m_record += str(self.value_link).encode()
         m_record += b'\x1E'
         return m_record
+
+    @classmethod
+    def __read_until(cls, start, sbytes, separtor=b'\x1F'):
+        buff = b''
+        for i in range(start, len(sbytes)):
+            s_byte = sbytes[i: i + 1].tobytes()
+            if s_byte == separtor:
+                break
+            buff += s_byte
+        print(buff, i)
+        return buff, i
 
     @classmethod
     def unmarshal(cls, store_bytes):
@@ -79,33 +90,23 @@ class Record:
         return cls(1,2,3,4..)
 
         """
-
         store_bytes = memoryview(store_bytes)
 
-        tombstone = store_bytes[0:1].tobytes()
+        key_link_len, end_pos = cls.__read_until(0, store_bytes)
+        key_link_len = int(key_link_len.decode())
+        key_link = int(store_bytes[0: key_link_len].tobytes().decode())
+        tombstone = store_bytes[key_link_len + 1:1].tobytes().decode()
+        value_type = store_bytes[key_link_len + 2:1].tobytes().decode()
+        value_len, end_pos = int(cls.__read_until(key_link_len + 3, store_bytes))
+        value_len = int(value_len.decode())
+        value = store_bytes[end_pos: value_len].tobytes().decode()
+        record = marshal.loads(value)
+        value_link = None
+        if value_type == 'l':
+            value_link, end_pos = cls.__read_until(end_pos + value_len + 1,  store_bytes, b'\x1E')
+            value_link = int(value_link.decode())
+        return cls(record[0], record[1], tombstone, store_position=None, rtype=value_type,  key_link=key_link, value_link=value_link)
 
-        buff = b''
-        key_link_start_pos = 0
-        for i in range(1, len(store_bytes)):
-            s_byte = store_bytes[i:i + 1].tobytes()
-            buff += s_byte
-            if s_byte == b'\x1F':
-                key_link_start_pos = i + 1
-                break
-
-        key_link_len = int(int(buff.decode()))
-        key_link = int(store_bytes[key_link_start_pos: key_link_start_pos + key_link_len].decode())
-
-
-    @classmethod
-    def __read_until(cls, bytes, separtor):
-        """
-
-        :param bytes:
-        :param separtor:
-        :return:
-        """
-        pass
 
     def is_empty(self):
         return self.key is None and self.value is None
