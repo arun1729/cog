@@ -21,12 +21,30 @@ class TestCore(unittest.TestCase):
 
 
     def test_record(self):
-        record = Record("rocket", "saturn-v", tombstone='0', store_position=25, rtype='s',  key_link=5)
-        print(record.serialize())
-        print(record.marshal())
-        unmarshalled_record = Record.unmarshal(b'1\x1f50s20\x1f)\x02\xda\x06rocket\xfa\x08saturn-v\x1e')
+        record = Record("rocket", "saturn-v", tombstone='0', store_position=25,  key_link=5, value_type='s', value_link=54378)
+        unmarshalled_record = Record.unmarshal(record.marshal())
         print(unmarshalled_record)
         self.assertTrue(record.is_equal_val(unmarshalled_record))
+        self.assertTrue(record.key,unmarshalled_record.key)
+        self.assertTrue(record.value, unmarshalled_record.value)
+        self.assertTrue(record.tombstone, unmarshalled_record.tombstone)
+        self.assertTrue(record.store_position, unmarshalled_record.store_position)
+        self.assertTrue(record.key_link, unmarshalled_record.key_link)
+        self.assertTrue(record.value_type, unmarshalled_record.value_type)
+        self.assertTrue(record.value_link, unmarshalled_record.value_link)
+
+    def test_record2(self):
+        record = Record("rocket", "saturn-v", tombstone='0', store_position=25,  key_link=5, value_type='l', value_link=54378)
+        unmarshalled_record = Record.unmarshal(record.marshal())
+        print(unmarshalled_record)
+        self.assertTrue(record.is_equal_val(unmarshalled_record))
+        self.assertTrue(record.key,unmarshalled_record.key)
+        self.assertTrue(record.value, unmarshalled_record.value)
+        self.assertTrue(record.tombstone, unmarshalled_record.tombstone)
+        self.assertTrue(record.store_position, unmarshalled_record.store_position)
+        self.assertTrue(record.key_link, unmarshalled_record.key_link)
+        self.assertTrue(record.value_type, unmarshalled_record.value_type)
+        self.assertTrue(record.value_link, unmarshalled_record.value_link)
 
     def test_put_get_string(self):
         dictConfig(config.logging_config)

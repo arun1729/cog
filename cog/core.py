@@ -39,14 +39,14 @@ class Table:
 
 class Record:
 
-    def __init__(self, key, value, tombstone=None, store_position=None, rtype=None,  key_link=None, value_link=None):
+    def __init__(self, key, value, tombstone=None, store_position=None, value_type=None,  key_link=None, value_link=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
         self.store_position = store_position
         self.key_link = key_link
         self.value_link = value_link
-        self.value_type = rtype
+        self.value_type = value_type
 
     def is_equal_val(self, other_record):
         return self.key == other_record.key and self.value == other_record.value
@@ -72,6 +72,18 @@ class Record:
             m_record += str(self.value_link).encode()
         m_record += b'\x1E'
         return m_record
+
+
+    def is_empty(self):
+        return self.key is None and self.value is None
+
+    def __str__(self):
+        return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
+
+    # def __eq__(self, other):
+    #     if isinstance(other, Record):
+    #         return self.key == other.key
+    #     return False
 
     @classmethod
     def __read_until(cls, start, sbytes, separtor=b'\x1F'):
@@ -119,74 +131,9 @@ class Record:
 
         value_link = None
         if value_type == 'l':
-            value_link, end_pos = cls.__read_until(end_pos + value_len + 1,  store_bytes, b'\x1E')
+            value_link, end_pos = cls.__read_until(end_pos + 1 + value_len ,  store_bytes, b'\x1E')
             value_link = int(value_link.decode())
-        return cls(record[0], record[1], tombstone, store_position=None, rtype=value_type,  key_link=key_link, value_link=value_link)
-
-
-    def is_empty(self):
-        return self.key is None and self.value is None
-
-    def __str__(self):
-        return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
-
-
-
-        # self.store_file.seek(0, 2)
-        # store_position = self.store_file.tell()
-        # kcp = marshal.dumps(kc_pointer)
-        # kcp_len = str(len(kcp))
-        # record = record_obj.serialize()
-        # rec_len = str(len(record))
-        # self.logger.debug("STORE SAVE: length: "+rec_len + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
-        # self.store_file.seek(0, 2)
-        # self.store_file.write(b'0')  # TS
-        # self.store_file.write(kcp_len.encode()) #KC len
-        # self.store_file.write(b'\x1F')
-        # self.store_file.write(kcp) #key chain
-
-        # self.store_file.write(c_type.encode())  # type bit
-        # self.store_file.write(rec_len.encode()) # rec len
-        # self.store_file.write(b'\x1F') #content length end - unit separator
-        # self.store_file.write(record)
-        # if c_type == 'l' and prev_pointer is not None:
-        #     prevp = str(prev_pointer).encode()
-        #     self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
-        #     self.store_file.write(prevp)
-        # self.store_file.write(b'\x1E') # record separator
-        # self.store_file.flush()
-        # return store_position
-#
-# class Block:
-#     """
-#
-#     """
-#     #[[TS][key chain pointer][record]]
-#     def __init__(self, tombstone, keychain_pointer, record):
-#         self.tombstone = tombstone
-#         self.keychain_pointer = keychain_pointer
-#         self.record = record
-#
-#     def get_bytes(self):
-#         """
-#         Returns byte representation of the a block
-#         :return:
-#         """
-#         kcp = self.kc_pointer.decode()
-#         kcp_len = str(len(kcp))
-#         self.tombstone.encode() + kcp_len.encode() + b'\x1F' +  kcp
-#
-#
-#
-#     @classmethod
-#     def from_bytes(cls, bytes):
-#         """
-#         parses bytes into a block object
-#         :return:
-#         """
-
-
-
+        return cls(record[0], record[1], tombstone, store_position=None, value_type=value_type,  key_link=key_link, value_link=value_link)
 
 class Index:
 
@@ -250,6 +197,22 @@ class Index:
         self.logger.debug("PUT: probe position: " + str(orig_position) + " value = " + str(data_at_prob_position))
         if data_at_prob_position != self.empty_block:
             """
+            bucket: k5 -> k4 -> k3 -> k2 -> k1
+            insert k6
+                read key link from k5 and prepend key6
+                    k6 -> k5 -> k4 ...
+            insert/update k4:
+                read until k4 or end (worst case):
+                    update? how? inplace in store?
+                OR
+                    just prepend the bucket just like k6
+                    k4 -> k6 -> k5 -> k4 -> k3 -> k2 -> k1
+                    while reading keep a hash map and if in map, reject older values
+                    bucket is stored in reverse cron order on disk
+                    note: we could update k5 to point to k3 but that would mean updating k5, would incur another write
+                    - the con to not doing this is that, too many updates will leave multiple duplicates in the bucket chain
+                    and will increase bucket read time....
+                    
             Read keys in bucket:
                 Read key at position in store
                 add that as the prev-key to the key-chain bit
