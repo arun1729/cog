@@ -95,14 +95,28 @@ class Record:
         print(">>>")
         print(key_link_len, end_pos)
         key_link_len = int(key_link_len.decode())
-        key_link = int(store_bytes[0: key_link_len].tobytes().decode())
-        tombstone = store_bytes[key_link_len + 2:1].tobytes().decode()
-        print(tombstone)
-        value_type = store_bytes[key_link_len + 4:1].tobytes().decode()
-        value_len, end_pos = cls.__read_until(key_link_len + 6, store_bytes)
+
+        base_pos = end_pos+1
+        key_link = int(store_bytes[base_pos: base_pos+key_link_len].tobytes().decode())
+        print("key_link: " + str(key_link))
+
+        next_base_pos = base_pos + key_link_len
+        tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
+        print("tombstone: " + tombstone)
+
+        value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
+        print("value_type: " + value_type)
+
+        value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        value = store_bytes[end_pos: value_len].tobytes().decode()
+        print("value_len: " + str(value_len))
+
+        value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
+        print("value: "+str(value))
+
         record = marshal.loads(value)
+        print("record" + str(record))
+
         value_link = None
         if value_type == 'l':
             value_link, end_pos = cls.__read_until(end_pos + value_len + 1,  store_bytes, b'\x1E')
