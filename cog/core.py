@@ -81,7 +81,6 @@ class Record:
             if s_byte == separtor:
                 break
             buff += s_byte
-        print(buff, i)
         return buff, i
 
     @classmethod
@@ -93,11 +92,14 @@ class Record:
         store_bytes = memoryview(store_bytes)
 
         key_link_len, end_pos = cls.__read_until(0, store_bytes)
+        print(">>>")
+        print(key_link_len, end_pos)
         key_link_len = int(key_link_len.decode())
         key_link = int(store_bytes[0: key_link_len].tobytes().decode())
-        tombstone = store_bytes[key_link_len + 1:1].tobytes().decode()
-        value_type = store_bytes[key_link_len + 2:1].tobytes().decode()
-        value_len, end_pos = int(cls.__read_until(key_link_len + 3, store_bytes))
+        tombstone = store_bytes[key_link_len + 2:1].tobytes().decode()
+        print(tombstone)
+        value_type = store_bytes[key_link_len + 4:1].tobytes().decode()
+        value_len, end_pos = cls.__read_until(key_link_len + 6, store_bytes)
         value_len = int(value_len.decode())
         value = store_bytes[end_pos: value_len].tobytes().decode()
         record = marshal.loads(value)
