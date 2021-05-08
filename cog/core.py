@@ -192,80 +192,102 @@ class Index:
         :param store:
         :return:
         """
+
+        """
+        bucket: k5 -> k4 -> k3 -> k2 -> k1
+        insert k6
+            read key link from k5 and prepend key6
+                k6 -> k5 -> k4 ...
+        insert/update k4:
+            read until k4 or end (worst case):
+                update? how? inplace in store?
+            OR
+                just prepend the bucket just like k6
+                k4 -> k6 -> k5 -> k4 -> k3 -> k2 -> k1
+                while reading keep a hash map and if in map, reject older values
+                bucket is stored in reverse cron order on disk
+                - first prepend k4, point to k6
+                - read until finding older k4 or end
+                - once k4 is found, step back one and link k5 to k3
+                - done
+                note: we could update k5 to point to k3 but that would mean updating k5, would incur another write
+                - the con to not doing this is that, too many updates will leave multiple duplicates in the bucket chain
+                and will increase bucket read time....
+
+        Read keys in bucket:
+            Read key at position in store
+            add that as the prev-key to the key-chain bit
+        write the new k:v to store
+        put the store position in the index position.
+        """
         orig_position, orig_hash = self.get_index(key)
         data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
-        self.logger.debug("PUT: probe position: " + str(orig_position) + " value = " + str(data_at_prob_position))
-        if data_at_prob_position != self.empty_block:
-            """
-            bucket: k5 -> k4 -> k3 -> k2 -> k1
-            insert k6
-                read key link from k5 and prepend key6
-                    k6 -> k5 -> k4 ...
-            insert/update k4:
-                read until k4 or end (worst case):
-                    update? how? inplace in store?
-                OR
-                    just prepend the bucket just like k6
-                    k4 -> k6 -> k5 -> k4 -> k3 -> k2 -> k1
-                    while reading keep a hash map and if in map, reject older values
-                    bucket is stored in reverse cron order on disk
-                    note: we could update k5 to point to k3 but that would mean updating k5, would incur another write
-                    - the con to not doing this is that, too many updates will leave multiple duplicates in the bucket chain
-                    and will increase bucket read time....
-                    
-            Read keys in bucket:
-                Read key at position in store
-                add that as the prev-key to the key-chain bit
-            write the new k:v to store
-            put the store position in the index position.
-            """
-        else:
-            store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN]
 
-        looped_back=False
+        record = Record.unmarshal(self.store.read(data_at_prob_position))
+        record_cache = {record.key, record}
+        prev_record = None
 
-        while data_at_prob_position != self.empty_block:
-            if looped_back:# Terminating condition
-                if probe_position >= orig_position or len(data_at_prob_position) == 0:
-                    self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
-                    return None
-            if len(data_at_prob_position) == 0:#check if EOF reached.
-                    probe_position=0
-                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                    looped_back=True
-                    self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+str(data_at_prob_position))
-                    continue
-            key_bit = self.get_key_bit(data_at_prob_position)
-            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-            if orig_bit == key_bit:
-                self.logger.debug("PUT: key_bit match! for: "+str(orig_bit))
-                record = store.read(self.get_store_bit(data_at_prob_position))
-                if record[1][0] == key:
-                    self.logger.debug("PUT: Updating index: " + self.name)
-                    break
-                else:
-                    #key bit collision
-                    probe_position += self.config.INDEX_BLOCK_LEN
-                    data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                    self.logger.debug("PUT: key bit collision, probing next position: " + str(probe_position) + " value = " + str(data_at_prob_position))
+        while record.key_link != self.config.RECORD_LINK_NULL:
+            record = Record.unmarshal(store.read(data_at_prob_position))
+            if record.key not in record_cache:
+                record_cache[record.key] = record
             else:
-                probe_position += self.config.INDEX_BLOCK_LEN
-                data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
+                """ record update """
 
-        # if a free index block is found, then write key to that position.
-        store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
-        if len(store_position_bit) > self.config.INDEX_BLOCK_BASE_LEN:
-            raise Exception('Store address '+str(len(store_position_bit))+' exceeds index block size '+str(self.config.INDEX_BLOCK_BASE_LEN)+'. Database is full. Please reconfigure database and reload data.')
+             prev_record = record
 
-        key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
-        self.logger.debug("store_position_bit: "+str(store_position_bit)+" key_bit: " + str(key_bit))
-        #if store position is greater that index block length, thrwo execption: maxium address length reachde, and link to github error notes for help.
-        self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = store_position_bit + key_bit
-        self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position) + " : key bit :" + str(key_bit))
-        self.load += 1
-        return probe_position
+        store_position = store.save(record)
+        store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
+        self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
+
+        # # old stuff
+        #
+        # if data_at_prob_position != self.empty_block:
+        #
+        #
+        # looped_back=False
+        #
+        # while data_at_prob_position != self.empty_block:
+        #     if looped_back:# Terminating condition
+        #         if probe_position >= orig_position or len(data_at_prob_position) == 0:
+        #             self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
+        #             return None
+        #     if len(data_at_prob_position) == 0:#check if EOF reached.
+        #             probe_position=0
+        #             data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
+        #             looped_back=True
+        #             self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+str(data_at_prob_position))
+        #             continue
+        #     key_bit = self.get_key_bit(data_at_prob_position)
+        #     orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
+        #     if orig_bit == key_bit:
+        #         self.logger.debug("PUT: key_bit match! for: "+str(orig_bit))
+        #         record = store.read(self.get_store_bit(data_at_prob_position))
+        #         if record[1][0] == key:
+        #             self.logger.debug("PUT: Updating index: " + self.name)
+        #             break
+        #         else:
+        #             #key bit collision
+        #             probe_position += self.config.INDEX_BLOCK_LEN
+        #             data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
+        #             self.logger.debug("PUT: key bit collision, probing next position: " + str(probe_position) + " value = " + str(data_at_prob_position))
+        #     else:
+        #         probe_position += self.config.INDEX_BLOCK_LEN
+        #         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
+        #         self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
+        #
+        # # if a free index block is found, then write key to that position.
+        # store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
+        # if len(store_position_bit) > self.config.INDEX_BLOCK_BASE_LEN:
+        #     raise Exception('Store address '+str(len(store_position_bit))+' exceeds index block size '+str(self.config.INDEX_BLOCK_BASE_LEN)+'. Database is full. Please reconfigure database and reload data.')
+        #
+        # key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
+        # self.logger.debug("store_position_bit: "+str(store_position_bit)+" key_bit: " + str(key_bit))
+        # #if store position is greater that index block length, thrwo execption: maxium address length reachde, and link to github error notes for help.
+        # self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = store_position_bit + key_bit
+        # self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position) + " : key bit :" + str(key_bit))
+        # self.load += 1
+        # return probe_position
 
     def get_index(self, key):
         num = self.cog_hash(key) % ((sys.maxsize + 1) * 2)
@@ -404,32 +426,13 @@ class Store:
     def close(self):
         self.store_file.close()
 
-    def save(self, record_obj, kc_pointer, prev_pointer=None, c_type='s'):
+    def save(self, record):
         """
-        [[TS][key chain pointer][type][record]]
         Store data
         """
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
-        kcp = marshal.dumps(kc_pointer)
-        kcp_len = str(len(kcp))
-        record = record_obj.serialize()
-        rec_len = str(len(record))
-        self.logger.debug("STORE SAVE: length: "+rec_len + " save record: "+ str(record) + " type: "+c_type + " prev pointer: "+str(prev_pointer))
-        self.store_file.seek(0, 2)
-        self.store_file.write(b'0')  # TS
-        self.store_file.write(kcp_len.encode()) #KC len
-        self.store_file.write(b'\x1F')
-        self.store_file.write(kcp) #key chain
-        self.store_file.write(c_type.encode())  # type bit
-        self.store_file.write(rec_len.encode()) # rec len
-        self.store_file.write(b'\x1F') #content length end - unit separator
-        self.store_file.write(record)
-        if c_type == 'l' and prev_pointer is not None:
-            prevp = str(prev_pointer).encode()
-            self.logger.debug("STORE SAVE: writing previous pointer: "+str(prevp))
-            self.store_file.write(prevp)
-        self.store_file.write(b'\x1E') # record separator
+        self.store_file.write(record.marshal()s)
         self.store_file.flush()
         return store_position
 
