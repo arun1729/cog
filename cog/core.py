@@ -39,7 +39,10 @@ class Table:
 
 class Record:
 
-    def __init__(self, key, value, tombstone=None, store_position=None, value_type=None,  key_link=None, value_link=None):
+    RECORD_LINK_LEN = 16
+    RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
+
+    def __init__(self, key, value, tombstone=None, store_position=None, value_type=None,  key_link=RECORD_LINK_NULL, value_link=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
@@ -58,11 +61,10 @@ class Record:
         return marshal.dumps((self.key, self.value))
 
     def marshal(self):
-        key_link_bytes = str(self.key_link).encode()
+        key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
         serialized = self.serialize()
 
-        m_record = str(len(key_link_bytes)).encode() \
-                + b'\x1F' + key_link_bytes \
+        m_record = key_link_bytes \
                 + self.tombstone.encode() \
                 + self.value_type.encode() \
                 + str(len(serialized)).encode() \
@@ -98,21 +100,14 @@ class Record:
     @classmethod
     def unmarshal(cls, store_bytes):
         """reads from bytes and creates object
-        return cls(1,2,3,4..)
-
         """
         store_bytes = memoryview(store_bytes)
 
-        key_link_len, end_pos = cls.__read_until(0, store_bytes)
-        print(">>>")
-        print(key_link_len, end_pos)
-        key_link_len = int(key_link_len.decode())
-
-        base_pos = end_pos+1
-        key_link = int(store_bytes[base_pos: base_pos+key_link_len].tobytes().decode())
+        base_pos = 0
+        key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes().decode())
         print("key_link: " + str(key_link))
 
-        next_base_pos = base_pos + key_link_len
+        next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
         print("tombstone: " + tombstone)
 
@@ -194,51 +189,52 @@ class Index:
         """
 
         """
-        bucket: k5 -> k4 -> k3 -> k2 -> k1
-        insert k6
-            read key link from k5 and prepend key6
-                k6 -> k5 -> k4 ...
-        insert/update k4:
-            read until k4 or end (worst case):
-                update? how? inplace in store?
-            OR
-                just prepend the bucket just like k6
-                k4 -> k6 -> k5 -> k4 -> k3 -> k2 -> k1
-                while reading keep a hash map and if in map, reject older values
-                bucket is stored in reverse cron order on disk
-                - first prepend k4, point to k6
-                - read until finding older k4 or end
-                - once k4 is found, step back one and link k5 to k3
-                - done
-                note: we could update k5 to point to k3 but that would mean updating k5, would incur another write
-                - the con to not doing this is that, too many updates will leave multiple duplicates in the bucket chain
-                and will increase bucket read time....
-
-        Read keys in bucket:
-            Read key at position in store
-            add that as the prev-key to the key-chain bit
-        write the new k:v to store
-        put the store position in the index position.
+        k5 -> k4 -> k3 -> k2 -> k1
+        add: k6
+        k6 -> k5 -> k4 -> k3 -> k2 -> k1
+        add/update: k4
+        1. k4 -> k6 -> k5 -> k4 -> k3 -> k2 -> k1
+        2. k4 -> k6 -> k5 -> k3 -> k2 -> k1
+        
         """
+        # read current key in hash table:
+        # key_cache = {key, store_position}
+
         orig_position, orig_hash = self.get_index(key)
         data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
 
-        record = Record.unmarshal(self.store.read(data_at_prob_position))
-        record_cache = {record.key, record}
-        prev_record = None
-
-        while record.key_link != self.config.RECORD_LINK_NULL:
-            record = Record.unmarshal(store.read(data_at_prob_position))
-            if record.key not in record_cache:
-                record_cache[record.key] = record
+        if data_at_prob_position == self.empty_block:
+            # point next link to record null
+            store.update_inplace(store_position, Record.RECORD_LINK_NULL)
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
+        else:
+            # read existing record and update pointers
+            record = Record.unmarshal(self.store.read(data_at_prob_position))
+            if record.key == key:
+                """ update existing record """
             else:
-                """ record update """
+                # prepend new record to the top of list
+                store.update_inplace(store_position, record.store_position)
+                # check if this record exists in the bucket, if yes remove pointer.
+                prev_record = None
+                while record.key_link != Record.RECORD_LINK_NULL:
+                    record = Record.unmarshal(store.read(data_at_prob_position))
+                    if record.key == key:
+                        """
+                        if same key found in bucket, update previous record in chain to point to key_link of this record
+                        prev_rec -> current rec.key_link
+                        curr_rec will not be linked in the bucket anymore.
+                        """
+                        #update in place the key link pointer of pervios record, ! need to add fixed length padding.
+                        store.update_inplace(prev_record.key_link, record.key_link)
+                    else:
+                        prev_record = record
+                        record = Record.unmarshal(self.store.read(data_at_prob_position))
 
-             prev_record = record
 
-        store_position = store.save(record)
-        store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
-        self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
+            # store_position = store.save(record)
+            # self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
+            # store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
 
         # # old stuff
         #
@@ -432,9 +428,12 @@ class Store:
         """
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
-        self.store_file.write(record.marshal()s)
+        self.store_file.write(record.marshal())
         self.store_file.flush()
         return store_position
+
+    def update_inplace(self,start_pos, value):
+        """updates fixed length value in store place"""
 
     def read_keychain(self, position):
         """
