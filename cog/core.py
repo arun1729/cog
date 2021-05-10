@@ -173,11 +173,9 @@ class Index:
     def get_load(self):
         return self.load
 
-    def get_key_bit(self, block_data):
-        return int(block_data[self.config.INDEX_BLOCK_BASE_LEN: self.config.INDEX_BLOCK_LEN])
+    def get_index_key(self, int_store_position):
+        return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
 
-    def get_store_bit(self, block_data):
-        return int(block_data[:self.config.INDEX_BLOCK_BASE_LEN])
 
     def put(self, key, store_position, store):
         """
@@ -199,21 +197,21 @@ class Index:
         """
         # read current key in hash table:
         # key_cache = {key, store_position}
-
         orig_position, orig_hash = self.get_index(key)
         data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
 
         if data_at_prob_position == self.empty_block:
             # point next link to record null
             store.update_inplace(store_position, Record.RECORD_LINK_NULL)
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = self.get_index_key(store_position)
         else:
             # read existing record and update pointers
             record = Record.unmarshal(self.store.read(data_at_prob_position))
             if record.key == key:
                 """ update existing record """
+                store.update_inplace(store_position, record.key_link)
             else:
-                # prepend new record to the top of list
+                # set next link to the record at the top of the bucket
                 store.update_inplace(store_position, record.store_position)
                 # check if this record exists in the bucket, if yes remove pointer.
                 prev_record = None
@@ -232,9 +230,7 @@ class Index:
                         record = Record.unmarshal(self.store.read(data_at_prob_position))
 
 
-            # store_position = store.save(record)
-            # self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = store_position
-            # store_position = str(store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = self.get_index_key(store_position)
 
         # # old stuff
         #
