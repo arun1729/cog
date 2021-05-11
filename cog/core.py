@@ -195,8 +195,6 @@ class Index:
         2. k4 -> k6 -> k5 -> k3 -> k2 -> k1
         
         """
-        # read current key in hash table:
-        # key_cache = {key, store_position}
         orig_position, orig_hash = self.get_index(key)
         data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
 
@@ -224,7 +222,7 @@ class Index:
                         curr_rec will not be linked in the bucket anymore.
                         """
                         #update in place the key link pointer of pervios record, ! need to add fixed length padding.
-                        store.update_inplace(prev_record.key_link, record.key_link)
+                        store.update_inplace(prev_record.store_position, record.key_link)
                     else:
                         prev_record = record
                         record = Record.unmarshal(self.store.read(data_at_prob_position))
@@ -232,54 +230,6 @@ class Index:
 
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = self.get_index_key(store_position)
 
-        # # old stuff
-        #
-        # if data_at_prob_position != self.empty_block:
-        #
-        #
-        # looped_back=False
-        #
-        # while data_at_prob_position != self.empty_block:
-        #     if looped_back:# Terminating condition
-        #         if probe_position >= orig_position or len(data_at_prob_position) == 0:
-        #             self.logger.info("Unable to index data. Index capacity reached!: "+self.name)
-        #             return None
-        #     if len(data_at_prob_position) == 0:#check if EOF reached.
-        #             probe_position=0
-        #             data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-        #             looped_back=True
-        #             self.logger.debug("PUT: LOOP BACK to position: "+str(probe_position)+" value = "+str(data_at_prob_position))
-        #             continue
-        #     key_bit = self.get_key_bit(data_at_prob_position)
-        #     orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-        #     if orig_bit == key_bit:
-        #         self.logger.debug("PUT: key_bit match! for: "+str(orig_bit))
-        #         record = store.read(self.get_store_bit(data_at_prob_position))
-        #         if record[1][0] == key:
-        #             self.logger.debug("PUT: Updating index: " + self.name)
-        #             break
-        #         else:
-        #             #key bit collision
-        #             probe_position += self.config.INDEX_BLOCK_LEN
-        #             data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-        #             self.logger.debug("PUT: key bit collision, probing next position: " + str(probe_position) + " value = " + str(data_at_prob_position))
-        #     else:
-        #         probe_position += self.config.INDEX_BLOCK_LEN
-        #         data_at_prob_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-        #         self.logger.debug("PUT: probing next position: "+str(probe_position)+" value = "+str(data_at_prob_position))
-        #
-        # # if a free index block is found, then write key to that position.
-        # store_position_bit = str(store_position).encode().rjust(self.config.INDEX_BLOCK_BASE_LEN)
-        # if len(store_position_bit) > self.config.INDEX_BLOCK_BASE_LEN:
-        #     raise Exception('Store address '+str(len(store_position_bit))+' exceeds index block size '+str(self.config.INDEX_BLOCK_BASE_LEN)+'. Database is full. Please reconfigure database and reload data.')
-        #
-        # key_bit = str(orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)).encode().rjust(self.config.INDEX_BLOCK_KEYBIT_LEN)
-        # self.logger.debug("store_position_bit: "+str(store_position_bit)+" key_bit: " + str(key_bit))
-        # #if store position is greater that index block length, thrwo execption: maxium address length reachde, and link to github error notes for help.
-        # self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN] = store_position_bit + key_bit
-        # self.logger.debug("indexed " + key + " @: " + str(probe_position) + " : store position: " + str(store_position) + " : key bit :" + str(key_bit))
-        # self.load += 1
-        # return probe_position
 
     def get_index(self, key):
         num = self.cog_hash(key) % ((sys.maxsize + 1) * 2)
@@ -428,8 +378,12 @@ class Store:
         self.store_file.flush()
         return store_position
 
-    def update_inplace(self,start_pos, value):
+    def update_inplace(self, start_pos, int_value):
         """updates fixed length value in store place"""
+        byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
+        self.store_file.seek(start_pos)
+        self.store_file.write(byte_value)
+        self.store_file.flush()
 
     def read_keychain(self, position):
         """
