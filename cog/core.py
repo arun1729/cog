@@ -42,7 +42,7 @@ class Record:
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
 
-    def __init__(self, key, value, tombstone=None, store_position=None, value_type=None,  key_link=RECORD_LINK_NULL, value_link=None):
+    def __init__(self, key, value, tombstone='0', store_position=None, value_type="s",  key_link=-1, value_link=None):
         self.key = key
         self.value = value
         self.tombstone = tombstone
@@ -50,6 +50,9 @@ class Record:
         self.key_link = key_link
         self.value_link = value_link
         self.value_type = value_type
+
+    def set_store_position(self, pos):
+        self.store_position = pos
 
     def is_equal_val(self, other_record):
         return self.key == other_record.key and self.value == other_record.value
@@ -101,10 +104,12 @@ class Record:
     def unmarshal(cls, store_bytes):
         """reads from bytes and creates object
         """
+
+        print("~~~"+str(store_bytes))
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
-        key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes().decode())
+        key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
         print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
@@ -201,10 +206,10 @@ class Index:
         if data_at_prob_position == self.empty_block:
             # point next link to record null
             store.update_inplace(store_position, Record.RECORD_LINK_NULL)
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = self.get_index_key(store_position)
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # read existing record and update pointers
-            record = Record.unmarshal(self.store.read(data_at_prob_position))
+            record = Record.unmarshal(self.store.read(int(data_at_prob_position)))
             if record.key == key:
                 """ update existing record """
                 store.update_inplace(store_position, record.key_link)
@@ -214,7 +219,7 @@ class Index:
                 # check if this record exists in the bucket, if yes remove pointer.
                 prev_record = None
                 while record.key_link != Record.RECORD_LINK_NULL:
-                    record = Record.unmarshal(store.read(data_at_prob_position))
+                    record = Record.unmarshal(store.read(record.key_link))
                     if record.key == key:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
@@ -223,12 +228,9 @@ class Index:
                         """
                         #update in place the key link pointer of pervios record, ! need to add fixed length padding.
                         store.update_inplace(prev_record.store_position, record.key_link)
-                    else:
-                        prev_record = record
-                        record = Record.unmarshal(self.store.read(data_at_prob_position))
+                    prev_record = record
 
-
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_BASE_LEN] = self.get_index_key(store_position)
+            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
 
 
     def get_index(self, key):
@@ -246,47 +248,15 @@ class Index:
     #@profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
-        orig_position, orig_hash = self.get_index(key)
-        probe_position = orig_position
-        record = None
-        looped_back=False
+        index_position, raw_hash = self.get_index(key)
+        data_at_index_position = int(self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN])
+        record = Record.unmarshal(store.read(data_at_index_position))
 
-        while True:
-            data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-            self.logger.debug("GET: probe position @1: "+str(probe_position)+" value = "+str(data_at_probe_position))
-
-            if len(data_at_probe_position) == 0:#EOF index
-                if not looped_back:
-                    probe_position = 0
-                    data_at_probe_position = self.db_mem[probe_position:probe_position + self.config.INDEX_BLOCK_LEN]
-                    self.logger.debug("GET: LOOP BACK: "+str(probe_position)+" value = "+str(data_at_probe_position))
-                    looped_back = True
-                else:
-                    self.logger.info("Index EOF reached! Key not found.")
-                    return Record(None, None, None, None)
-
-            if data_at_probe_position == self.empty_block:
-                probe_position += self.config.INDEX_BLOCK_LEN
-                self.logger.debug("GET: found empty block, terminating get.")
-                return Record(None, None, None, None)
-
-            key_bit = self.get_key_bit(data_at_probe_position)
-            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-            #record = None
-            if(orig_bit == key_bit):
-                record = store.read(self.get_store_bit(data_at_probe_position))
-                self.logger.debug("GET: READ BACK RECORD: "+str(record))
-                if record is None or len(record) == 0:#EOF store
-                    self.logger.error("Store EOF reached! Indexed record not found.")
-                    Record(None, None, None, None)
-
-                if record is not None and key == record[1][0]:# found record!
-                    self.logger.info("found key in index."+self.name)
-                    return Record(record[1][0], record[1][1], record[0], self.get_store_bit(data_at_probe_position))
-
-            self.logger.info("found key "+ key +" but `collision` in index."+self.name + " orig_bit: "+str(orig_bit) + " key_bit: "+str(key_bit) + " record: " + str(record))
-
-            probe_position += self.config.INDEX_BLOCK_LEN
+        while record.key_link != Record.RECORD_LINK_NULL:
+            record = Record.unmarshal(store.read(record.key_link))
+            if record.key == key:
+                return record
+        return None
 
     '''
         Iterates through record in itr_store.
@@ -374,6 +344,9 @@ class Store:
         """
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
+        record.set_store_position(store_position)
+        print("writing--->")
+        print(record.marshal())
         self.store_file.write(record.marshal())
         self.store_file.flush()
         return store_position
@@ -413,25 +386,28 @@ class Store:
             return tombstone, record
 
     def read(self, position):
-        tombstone, type_bit, record = self.__read_block(position)
-
-        if type_bit == 'l':
-            prev_pointer = self.__read_until(b'\x1E')
-            prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
-            c_list = [record[1]]
-            key = record[0]
-
-            while prev_pointer > -1:
-                self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
-                tombstone, type_bit, record = self.__read_block(prev_pointer)
-                c_list.append(record[1])
-                prev_pointer = self.__read_until(b'\x1E')
-                prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
-
-            self.logger.debug("STORE READ: list read terminating, returning: "+str((record[0], c_list)))
-            return tombstone, (key, c_list)
-        else:
-            return tombstone, record
+        print(">>"+str(position))
+        self.store_file.seek(position)
+        return self.__read_until(b'\x1E')
+        # tombstone, type_bit, record = self.__read_block(position)
+        #
+        # if type_bit == 'l':
+        #     prev_pointer = self.__read_until(b'\x1E')
+        #     prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
+        #     c_list = [record[1]]
+        #     key = record[0]
+        #
+        #     while prev_pointer > -1:
+        #         self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
+        #         tombstone, type_bit, record = self.__read_block(prev_pointer)
+        #         c_list.append(record[1])
+        #         prev_pointer = self.__read_until(b'\x1E')
+        #         prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
+        #
+        #     self.logger.debug("STORE READ: list read terminating, returning: "+str((record[0], c_list)))
+        #     return tombstone, (key, c_list)
+        # else:
+        #     return tombstone, record
 
     def __read_until(self, separator):
         data = []
@@ -442,19 +418,20 @@ class Store:
             if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
-        return b''.join(data).decode()
+        print(data)
+        return b''.join(data)
 
-    def __read_block(self, position):
+    # def __read_block(self, position):
         #  [[TS][key chain pointer][type][record]]
-        self.store_file.seek(position)
-        tombstone = self.store_file.read(1)
-        key_len = int(self.__read_until(b'\x1F'))
-        kc_pointer = marshal.loads(self.store_file.read(key_len))
-        type_bit = self.store_file.read(1).decode()
-        record_len =int(self.__read_until(b'\x1F'))
-        record = marshal.loads(self.store_file.read(record_len))
-        self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
-        return tombstone, kc_pointer, type_bit, record
+        # self.store_file.seek(position)
+        # tombstone = self.store_file.read(1)
+        # key_len = int(self.__read_until(b'\x1F'))
+        # kc_pointer = marshal.loads(self.store_file.read(key_len))
+        # type_bit = self.store_file.read(1).decode()
+        # record_len =int(self.__read_until(b'\x1F'))
+        # record = marshal.loads(self.store_file.read(record_len))
+        # self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
+        # return tombstone, kc_pointer, type_bit, record
 
 
 class Indexer:

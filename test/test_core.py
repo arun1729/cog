@@ -22,6 +22,7 @@ class TestCore(unittest.TestCase):
 
     def test_record(self):
         record = Record("rocket", "saturn-v", tombstone='0', store_position=25,  key_link=5, value_type='s', value_link=54378)
+        print(record.marshal())
         unmarshalled_record = Record.unmarshal(record.marshal())
         print(unmarshalled_record)
         self.assertTrue(record.is_equal_val(unmarshalled_record))
@@ -50,7 +51,7 @@ class TestCore(unittest.TestCase):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
-        expected_data = Record("new super data","super new old stuff")
+        expected_data = Record("rocket", "gemini-titan")
 
         table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
         print(config.COG_HOME)
@@ -62,7 +63,6 @@ class TestCore(unittest.TestCase):
 
         index.put(expected_data.key,position,store)
         print("indexed")
-
 
         returned_data=index.get(expected_data.key, store)
         print("retrieved data: "+str(returned_data))
