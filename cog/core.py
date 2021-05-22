@@ -40,7 +40,8 @@ class Table:
 class Record:
 
     RECORD_LINK_LEN = 16
-    RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
+    RECORD_LINK_NULL = -1
+    # RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
 
     def __init__(self, key, value, tombstone='0', store_position=None, value_type="s",  key_link=-1, value_link=None):
         self.key = key
@@ -78,12 +79,11 @@ class Record:
         m_record += b'\x1E'
         return m_record
 
-
     def is_empty(self):
         return self.key is None and self.value is None
 
     def __str__(self):
-        return "key: {}, value: {}, tombstone: {}, store_position: {}".format(self.key, self.value, self.tombstone, self.store_position)
+        return "key: {}, value: {}, tombstone: {}, store_position: {}, key_link: {}".format(self.key, self.value, self.tombstone, self.store_position, self.key_link)
 
     # def __eq__(self, other):
     #     if isinstance(other, Record):
@@ -127,7 +127,7 @@ class Record:
         print("value: "+str(value))
 
         record = marshal.loads(value)
-        print("record" + str(record))
+        print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
@@ -209,7 +209,7 @@ class Index:
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # read existing record and update pointers
-            record = Record.unmarshal(self.store.read(int(data_at_prob_position)))
+            record = Record.unmarshal(store.read(int(data_at_prob_position)))
             if record.key == key:
                 """ update existing record """
                 store.update_inplace(store_position, record.key_link)
@@ -253,10 +253,11 @@ class Index:
         record = Record.unmarshal(store.read(data_at_index_position))
 
         while record.key_link != Record.RECORD_LINK_NULL:
+            print("record.key_link: "+str(record.key_link))
             record = Record.unmarshal(store.read(record.key_link))
             if record.key == key:
                 return record
-        return None
+        return record
 
     '''
         Iterates through record in itr_store.
@@ -346,8 +347,9 @@ class Store:
         store_position = self.store_file.tell()
         record.set_store_position(store_position)
         print("writing--->")
-        print(record.marshal())
-        self.store_file.write(record.marshal())
+        a = record.marshal()#b'  -10s25\x1f)\x02\xda\x06rocket\xfa\rxgemini-titan\x1e'
+        print(a)
+        self.store_file.write(a)
         self.store_file.flush()
         return store_position
 
@@ -386,7 +388,7 @@ class Store:
             return tombstone, record
 
     def read(self, position):
-        print(">>"+str(position))
+        print("reading at:"+str(position))
         self.store_file.seek(position)
         return self.__read_until(b'\x1E')
         # tombstone, type_bit, record = self.__read_block(position)
@@ -418,7 +420,6 @@ class Store:
             if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
-        print(data)
         return b''.join(data)
 
     # def __read_block(self, position):
