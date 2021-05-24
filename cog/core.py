@@ -41,9 +41,10 @@ class Record:
 
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
+    VALUE_LINK_NULL = -1
     # RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
 
-    def __init__(self, key, value, tombstone='0', store_position=None, value_type="s",  key_link=-1, value_link=None):
+    def __init__(self, key, value, tombstone='0', store_position=None, value_type="s",  key_link=-1, value_link=-1):
         self.key = key
         self.value = value
         self.tombstone = tombstone
@@ -54,6 +55,12 @@ class Record:
 
     def set_store_position(self, pos):
         self.store_position = pos
+
+    def set_value_link(self, pos):
+        self.value_link = pos
+
+    def set_value(self, value):
+        self.value = value
 
     def is_equal_val(self, other_record):
         return self.key == other_record.key and self.value == other_record.value
@@ -75,7 +82,8 @@ class Record:
                 + b'\x1F' \
                 + serialized
         if self.value_type == "l":
-            m_record += str(self.value_link).encode()
+            if self.value_link is not None:
+                m_record += str(self.value_link).encode()
         m_record += b'\x1E'
         return m_record
 
@@ -83,7 +91,7 @@ class Record:
         return self.key is None and self.value is None
 
     def __str__(self):
-        return "key: {}, value: {}, tombstone: {}, store_position: {}, key_link: {}".format(self.key, self.value, self.tombstone, self.store_position, self.key_link)
+        return "key: {}, value: {}, tombstone: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(self.key, self.value, self.tombstone, self.store_position, self.key_link, self.value_link, self.value_type)
 
     # def __eq__(self, other):
     #     if isinstance(other, Record):
@@ -93,6 +101,7 @@ class Record:
     @classmethod
     def __read_until(cls, start, sbytes, separtor=b'\x1F'):
         buff = b''
+        i  = 0 # default
         for i in range(start, len(sbytes)):
             s_byte = sbytes[i: i + 1].tobytes()
             if s_byte == separtor:
@@ -105,7 +114,8 @@ class Record:
         """reads from bytes and creates object
         """
 
-        print("~~~"+str(store_bytes))
+        print("### unmarshal ###")
+        print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
@@ -131,9 +141,29 @@ class Record:
 
         value_link = None
         if value_type == 'l':
-            value_link, end_pos = cls.__read_until(end_pos + 1 + value_len ,  store_bytes, b'\x1E')
+            value_link, end_pos = cls.__read_until(end_pos + value_len + 1 ,  store_bytes, b'\x1E')
             value_link = int(value_link.decode())
         return cls(record[0], record[1], tombstone, store_position=None, value_type=value_type,  key_link=key_link, value_link=value_link)
+
+
+    @classmethod
+    def __load_value(cls, store_pointer, val_list, store):
+        """loads value from the store"""
+        while store_pointer != Record.VALUE_LINK_NULL:
+            rec = Record.unmarshal(store.read(store_pointer))
+            val_list.append(rec.value)
+            store_pointer = rec.value_link
+        return val_list
+
+    @classmethod
+    def load_from_store(cls, position: int, store):
+        record = cls.unmarshal(store.read(position))
+        if record.value_type == 'l':
+            values = cls.__load_value(record.value_link, [record.value], store)
+            record.set_value(values)
+
+        return record
+
 
 class Index:
 
@@ -209,7 +239,8 @@ class Index:
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # read existing record and update pointers
-            record = Record.unmarshal(store.read(int(data_at_prob_position)))
+            record = Record.load_from_store(int(data_at_prob_position), store)
+            record.set_store_position((data_at_prob_position))
             if record.key == key:
                 """ update existing record """
                 store.update_inplace(store_position, record.key_link)
@@ -219,7 +250,8 @@ class Index:
                 # check if this record exists in the bucket, if yes remove pointer.
                 prev_record = None
                 while record.key_link != Record.RECORD_LINK_NULL:
-                    record = Record.unmarshal(store.read(record.key_link))
+                    record = Record.load_from_store(record.key_link, store)
+                    record.set_store_position(record.key_link)
                     if record.key == key:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
@@ -249,12 +281,18 @@ class Index:
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         index_position, raw_hash = self.get_index(key)
-        data_at_index_position = int(self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN])
-        record = Record.unmarshal(store.read(data_at_index_position))
+        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
+        if data_at_index_position == self.empty_block:
+            return None
+        data_at_index_position = int(data_at_index_position)
+        record = Record.load_from_store(data_at_index_position, store)
+        record.set_store_position(data_at_index_position)
+        print("read record " + str(record))
 
         while record.key_link != Record.RECORD_LINK_NULL:
             print("record.key_link: "+str(record.key_link))
-            record = Record.unmarshal(store.read(record.key_link))
+            record = Record.load_from_store(record.key_link, store)
+            record.set_store_position(record.key_link)
             if record.key == key:
                 return record
         return record
@@ -347,7 +385,7 @@ class Store:
         store_position = self.store_file.tell()
         record.set_store_position(store_position)
         print("writing--->")
-        a = record.marshal()#b'  -10s25\x1f)\x02\xda\x06rocket\xfa\rxgemini-titan\x1e'
+        a = record.marshal()
         print(a)
         self.store_file.write(a)
         self.store_file.flush()
@@ -420,20 +458,9 @@ class Store:
             if len(c) == 0:
                 self.logger.debug("EOF store file! Data read error.")
                 return None
+        if c == separator:
+            data.append(c) # append last value of c if is the separator
         return b''.join(data)
-
-    # def __read_block(self, position):
-        #  [[TS][key chain pointer][type][record]]
-        # self.store_file.seek(position)
-        # tombstone = self.store_file.read(1)
-        # key_len = int(self.__read_until(b'\x1F'))
-        # kc_pointer = marshal.loads(self.store_file.read(key_len))
-        # type_bit = self.store_file.read(1).decode()
-        # record_len =int(self.__read_until(b'\x1F'))
-        # record = marshal.loads(self.store_file.read(record_len))
-        # self.logger.debug("STORE READ: " + str(record) + " type bit: "+type_bit)
-        # return tombstone, kc_pointer, type_bit, record
-
 
 class Indexer:
     '''

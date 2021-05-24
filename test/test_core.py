@@ -47,6 +47,19 @@ class TestCore(unittest.TestCase):
         self.assertTrue(record.value_type, unmarshalled_record.value_type)
         self.assertTrue(record.value_link, unmarshalled_record.value_link)
 
+    def test_record_list(self):
+        record = Record("rockets", ["saturn-v","delta","atlas","mercury"], tombstone='0', store_position=25,  key_link=5, value_type='l', value_link=54378)
+        unmarshalled_record = Record.unmarshal(record.marshal())
+        print(unmarshalled_record)
+        self.assertTrue(record.is_equal_val(unmarshalled_record))
+        self.assertTrue(record.key,unmarshalled_record.key)
+        self.assertTrue(record.value, unmarshalled_record.value)
+        self.assertTrue(record.tombstone, unmarshalled_record.tombstone)
+        self.assertTrue(record.store_position, unmarshalled_record.store_position)
+        self.assertTrue(record.key_link, unmarshalled_record.key_link)
+        self.assertTrue(record.value_type, unmarshalled_record.value_type)
+        self.assertTrue(record.value_link, unmarshalled_record.value_link)
+
     def test_put_get_string(self):
         dictConfig(config.logging_config)
         logger = logging.getLogger()
@@ -103,11 +116,15 @@ class TestCore(unittest.TestCase):
 
         for fruit in fruits:
             print("storing :"+fruit)
-            r = Record('fruits', fruit)
+            r = Record('fruits', fruit, value_type='l')
             print("CHECK IF LIST EXISTS - - - ->")
-            record = index.get(r.key, store)
-            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(record.store_position))
-            position=store.save(r, record.store_position, 'l')
+            read_record = index.get(r.key, store)
+            # print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(record.store_position))
+            if read_record is not None:
+                print("prev record store pos: "+str(read_record.store_position))
+                r.set_value_link(read_record.store_position)
+            print(str(r))
+            position = store.save(r)
             print("stored new list value at store pos: "+str(position))
 
             index.put(r.key, position, store)
