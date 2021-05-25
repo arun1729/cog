@@ -229,7 +229,7 @@ class TestCore(unittest.TestCase):
         indexer.delete(expected_data.key,store)
         returned_data=indexer.get(expected_data.key, store)
         print("indexer retrieved data after delete: "+str(returned_data))
-        self.assertTrue(returned_data.is_empty())
+        self.assertTrue(returned_data == None)
 
         indexer.close()
         store.close()

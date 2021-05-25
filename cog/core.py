@@ -114,30 +114,30 @@ class Record:
         """reads from bytes and creates object
         """
 
-        print("### unmarshal ###")
-        print(store_bytes)
+        # print("### unmarshal ###")
+        # print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
-        print("key_link: " + str(key_link))
+        # print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
-        print("tombstone: " + tombstone)
+        # print("tombstone: " + tombstone)
 
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
-        print("value_type: " + value_type)
+        # print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        print("value_len: " + str(value_len))
+        # print("value_len: " + str(value_len))
 
         value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
-        print("value: "+str(value))
+        # print("value: "+str(value))
 
         record = marshal.loads(value)
-        print("record: " + str(record))
+        # print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
@@ -287,13 +287,13 @@ class Index:
         data_at_index_position = int(data_at_index_position)
         record = Record.load_from_store(data_at_index_position, store)
         record.set_store_position(data_at_index_position)
-        print("read record " + str(record))
+        self.logger.debug("read record " + str(record))
 
         if record.key == key:
             return record
         else:
             while record.key_link != Record.RECORD_LINK_NULL:
-                print("record.key_link: "+str(record.key_link))
+                self.logger.debug("record.key_link: "+str(record.key_link))
                 record = Record.load_from_store(record.key_link, store)
                 record.set_store_position(record.key_link)
                 if record.key == key:
@@ -338,7 +338,7 @@ class Index:
         data_at_index_position = int(data_at_index_position)
         record = Record.load_from_store(data_at_index_position, store)
         record.set_store_position(data_at_index_position)
-        print("read record " + str(record))
+        self.logger.debug("read record " + str(record))
         if record.key == key:
             """delete bucket => map hash table to empty block"""
             self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
@@ -388,10 +388,7 @@ class Store:
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
         record.set_store_position(store_position)
-        print("writing--->")
-        a = record.marshal()
-        print(a)
-        self.store_file.write(a)
+        self.store_file.write(record.marshal())
         self.store_file.flush()
         return store_position
 
@@ -430,28 +427,8 @@ class Store:
             return tombstone, record
 
     def read(self, position):
-        print("reading at:"+str(position))
         self.store_file.seek(position)
         return self.__read_until(b'\x1E')
-        # tombstone, type_bit, record = self.__read_block(position)
-        #
-        # if type_bit == 'l':
-        #     prev_pointer = self.__read_until(b'\x1E')
-        #     prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
-        #     c_list = [record[1]]
-        #     key = record[0]
-        #
-        #     while prev_pointer > -1:
-        #         self.logger.debug("STORE READ: look for prev pointer: "+str(prev_pointer))
-        #         tombstone, type_bit, record = self.__read_block(prev_pointer)
-        #         c_list.append(record[1])
-        #         prev_pointer = self.__read_until(b'\x1E')
-        #         prev_pointer = int(prev_pointer) if prev_pointer != '' else -1
-        #
-        #     self.logger.debug("STORE READ: list read terminating, returning: "+str((record[0], c_list)))
-        #     return tombstone, (key, c_list)
-        # else:
-        #     return tombstone, record
 
     def __read_until(self, separator):
         data = []
@@ -503,21 +480,8 @@ class Indexer:
                         self.live_index = index
 
     def put(self, key, store_position, store):
-
-        while True:
-            if self.live_index.get_load() * 100.0 / self.config.INDEX_CAPACITY > self.config.INDEX_LOAD_FACTOR:
-                self.live_index.flush()
-                self.index_id += 1
-                self.logger.info("Index load reached, creating new index file: "+str(self.index_id))
-                self.index_list.append(Index(self.tablemeta, self.config, self.logger, self.index_id))
-                self.live_index = self.index_list[self.index_id]
-                self.live_index_usage = self.live_index.get_load()
-
             resp = self.live_index.put(key, store_position, store)
-
-            if resp is not None:
-                self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
-                break
+            self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
 
     #@profile
     def get(self, key, store):
