@@ -192,9 +192,11 @@ class Cog:
         assert type(data.value) is str, "Only string type is supported."
         record = self.current_table.indexer.get(data.key, self.current_table.store)
         # skip insert into store-list if value already present.
-        if record.value is None:
-            position = self.current_table.store.save(data, record.store_position, 'l')
-            self.current_table.indexer.put(data.key, position, self.current_table.store)
+        if record is not None:
+            if data.value not in record.value:
+                new_record = Record(data.key, data.value, value_type='l')
+                position = self.current_table.store.save(new_record)
+                self.current_table.indexer.put(data.key, position, self.current_table.store)
         else:
             if data.value not in record.value:
                 position = self.current_table.store.save(data, record.store_position, 'l')
