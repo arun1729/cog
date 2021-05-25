@@ -123,7 +123,6 @@ class TestCore(unittest.TestCase):
             if read_record is not None:
                 print("prev record store pos: "+str(read_record.store_position))
                 r.set_value_link(read_record.store_position)
-            print(str(r))
             position = store.save(r)
             print("stored new list value at store pos: "+str(position))
 
@@ -153,8 +152,10 @@ class TestCore(unittest.TestCase):
             r = Record('fruits', fruit)
             print("CHECK IF LIST EXISTS - - - ->")
             record = index.get(r.key, store)
-            print("CHECK IF LIST EXISTS FOUND -> prev rec: "+str(record)+" get prev pos: "+str(record.store_position))
-            position=store.save(r, record.store_position, 'l')
+            if record is not None:
+                print("prev record store pos: "+str(record.store_position))
+                r.set_value_link(record.store_position)
+            position=store.save(r)
             print("stored new list value at store pos: "+str(position))
 
             index.put(r.key, position, store)
@@ -163,7 +164,7 @@ class TestCore(unittest.TestCase):
         index.delete(r.key, store)
         returned_data=index.get(r.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertTrue(returned_data.is_empty())
+        self.assertTrue(returned_data == None)
 
         index.close()
         store.close()
@@ -175,6 +176,7 @@ class TestCore(unittest.TestCase):
         logger = logging.getLogger()
 
         expected_data = Record("new super data","super new old stuff")
+        expected_data2 = Record("new super data", "updated value")
 
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
 
@@ -187,11 +189,17 @@ class TestCore(unittest.TestCase):
         index.put(expected_data.key,position,store)
         print("indexed")
 
+        position = store.save(expected_data2)
+        print("stored")
+
+        index.put(expected_data2.key, position, store)
+        print("indexed")
+
         index.delete(expected_data.key, store)
 
         returned_data=index.get(expected_data.key, store)
         print("retrieved data: "+str(returned_data))
-        self.assertTrue(returned_data.is_empty())
+        self.assertTrue(returned_data == None)
 
         index.close()
         store.close()

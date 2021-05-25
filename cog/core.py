@@ -289,13 +289,16 @@ class Index:
         record.set_store_position(data_at_index_position)
         print("read record " + str(record))
 
-        while record.key_link != Record.RECORD_LINK_NULL:
-            print("record.key_link: "+str(record.key_link))
-            record = Record.load_from_store(record.key_link, store)
-            record.set_store_position(record.key_link)
-            if record.key == key:
-                return record
-        return record
+        if record.key == key:
+            return record
+        else:
+            while record.key_link != Record.RECORD_LINK_NULL:
+                print("record.key_link: "+str(record.key_link))
+                record = Record.load_from_store(record.key_link, store)
+                record.set_store_position(record.key_link)
+                if record.key == key:
+                    return record
+        return None
 
     '''
         Iterates through record in itr_store.
@@ -319,42 +322,43 @@ class Index:
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
-        index_position, orig_hash = self.get_index(key)
-        data_at_probe_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
+        """
+               k5 -> k4 -> k3 -> k2 -> k1
+               del: k3
+               k6 -> k5 -> k4 -> k2 -> k1
 
-        if data_at_probe_position == self.empty_block:
+        """
+        self.logger.debug("GET: Reading index: " + self.name)
+        index_position, raw_hash = self.get_index(key)
+
+        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
+        if data_at_index_position == self.empty_block:
             return False
 
-        key_bit = self.get_key_bit(data_at_probe_position)
-        orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-
-        record = None
-        if (orig_bit == key_bit):
-            record = store.read(self.get_store_bit(data_at_probe_position))
-
-            if record is None:
-                self.logger.info("Store EOF reached! Record not found.")
-                return False
-
-        while key != record[1][0]:
-            index_position += self.config.INDEX_BLOCK_LEN
-            current_store_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-            if len(current_store_position) == 0:
-                self.logger.info("Index EOF reached! Key not found.")
-                return False
-
-            key_bit = self.get_key_bit(current_store_position)
-            orig_bit = orig_hash % pow(10, self.config.INDEX_BLOCK_KEYBIT_LEN)
-            if (orig_bit == key_bit):
-                record = store.read(self.get_store_bit(current_store_position))
-                if len(record) == 0:
-                    self.logger.info("Store EOF reached! Record not found.")
-                    return False
-
-        self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
-        self.logger.debug("deleted :"+str(data_at_probe_position))
-        self.load -= 1
+        data_at_index_position = int(data_at_index_position)
+        record = Record.load_from_store(data_at_index_position, store)
+        record.set_store_position(data_at_index_position)
+        print("read record " + str(record))
+        if record.key == key:
+            """delete bucket => map hash table to empty block"""
+            self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+        else:
+            """search bucket"""
+            prev_record = None
+            while record.key_link != Record.RECORD_LINK_NULL:
+                record = Record.load_from_store(record.key_link, store)
+                record.set_store_position(record.key_link)
+                if record.key == key:
+                    """
+                    if same key found in bucket, update previous record in chain to point to key_link of this record
+                    prev_rec -> current rec.key_link
+                    curr_rec will not be linked in the bucket anymore.
+                    """
+                    # update in place the key link pointer of pervios record, ! need to add fixed length padding.
+                    store.update_inplace(prev_record.store_position, record.key_link)
+                prev_record = record
         return True
+
 
     def flush(self):
         self.db_mem.flush()
@@ -473,7 +477,7 @@ class Indexer:
         self.tablemeta = tablemeta
         self.config = config
         self.logger = logging.getLogger('indexer')
-        self.index_list = []
+        self.index_list = [] #future range index.
         self.index_id = 0
         self.load_indexes()
         #if no index currenlty exist, create new live index.
