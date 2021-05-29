@@ -4,7 +4,7 @@ import os
 import os.path
 import sys
 import logging
-# from profilehooks import profile
+from profilehooks import profile
 import xxhash
 
 class TableMeta:
@@ -193,27 +193,17 @@ class Index:
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
 
-        self.load = 0
         self.db_mem.seek(0)
         current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
-        #computes current load on index file.
-        while len(current_block) != 0:
-            if current_block != self.empty_block:
-                self.load += 1
-            current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
-
-        # self.db_mem.seek(0)
 
     def close(self):
         self.db.close()
 
-    def get_load(self):
-        return self.load
 
     def get_index_key(self, int_store_position):
         return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
 
-
+    @profile
     def put(self, key, store_position, store):
         """
         key chain
@@ -279,7 +269,7 @@ class Index:
     def cog_hash(self, string):
         return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
-    #@profile
+    @profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         index_position, raw_hash = self.get_index(key)
@@ -409,17 +399,23 @@ class Store:
         return self.__read_until(b'\x1E')
 
     def __read_until(self, separator):
-        data = []
-        c = self.store_file.read(1)
-        while c != separator:
-            data.append(c)
-            c = self.store_file.read(1)
-            if len(c) == 0:
-                self.logger.debug("EOF store file! Data read error.")
-                return None
-        if c == separator:
-            data.append(c) # append last value of c if is the separator
-        return b''.join(data)
+        data = None
+        while True:
+            chunk = self.store_file.read(self.config.STORE_READ_SIZE)
+            if len(chunk) == 0:
+                raise Exception("EOF store file! Data read error.")
+            if separator in chunk:
+                chunk = chunk.split(separator)[0]
+                if data is None:
+                    data = chunk
+                else:
+                    data += chunk
+                break
+            if data is None:
+                data = chunk
+            else:
+                data += chunk
+        return data
 
 class Indexer:
     '''
@@ -461,7 +457,7 @@ class Indexer:
             resp = self.live_index.put(key, store_position, store)
             self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
 
-    #@profile
+    @profile
     def get(self, key, store):
         if len(self.index_list) > 1:
             self.logger.info("multiple index: " + str(len(self.index_list)))

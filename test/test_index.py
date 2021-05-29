@@ -35,7 +35,6 @@ class TestIndex2(unittest.TestCase):
         index = Index(tablemeta, config, logger, 0)
         test_size = 30
         for i in range(test_size):
-            print("Index load: "+str(index.get_load()))
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = Record(key, value)

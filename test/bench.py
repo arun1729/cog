@@ -17,7 +17,7 @@ import pkg_resources
 #read, ops/s: 16784.0337416
 
 DIR_NAME = "TestIndexerPerf"
-COG_VERSION = '2.0.1'
+COG_VERSION = '3.0.0'
 
 class TestIndexerPerf(unittest.TestCase):
 
@@ -35,45 +35,60 @@ class TestIndexerPerf(unittest.TestCase):
         dictConfig(config.logging_config)
 
         logger = logging.getLogger()
-        config.INDEX_CAPACITY = 1000000
+        config.INDEX_CAPACITY = 100
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=100000
+        max_range=10000
 
         insert_perf=[]
 
         key_list = []
+        total_seconds_put = 0.0
         for i in range(max_range):
             key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = Record(key,value)
             key_list.append(key)
+            start_time = timeit.default_timer()
             position=store.save(expected_data)
             indexer.put(expected_data.key,position,store)
+            elapsed = timeit.default_timer() - start_time
+            insert_perf.append(elapsed * 1000.0)  # to ms
+            total_seconds_put += elapsed
             print("Loading data progress: " + str(i * 100.0 / max_range) + "%", end="\r")
         print("\n total index files: " + str(len(indexer.index_list)))
 
+        plt.xlim([-1, max_range])
+        plt.ylim([0, 10])
+        plt.xlabel("puts")
+        plt.ylabel("ms")
+        plt.plot(insert_perf)
+        plt.title(COG_VERSION + " PUT BECHMARK : " + str(max_range), fontsize=12)
+        plt.savefig("put_bench.png")
+        print("\n ops/s: " + str(max_range / total_seconds_put))
+        print('\n num index files: ' + str(len(table.indexer.index_list)))
 
-        total_seconds=0.0
+        get_perf = []
+        total_seconds_get=0.0
         i = 0
         for key in key_list:
             start_time = timeit.default_timer()
             indexer.get(key, store)
             elapsed = timeit.default_timer() - start_time
-            insert_perf.append(elapsed*1000.0) #to ms
-            total_seconds += elapsed
+            get_perf.append(elapsed*1000.0) #to ms
+            total_seconds_get += elapsed
             print("get test progress: " + str(i * 100.0 / max_range) + "%", end="\r")
             i += 1
 
         plt.xlim([-1,max_range])
-        plt.ylim([0,2])
-        plt.xlabel("get call")
+        plt.ylim([0,10])
+        plt.xlabel("gets")
         plt.ylabel("ms")
-        plt.plot(insert_perf)
+        plt.plot(get_perf)
         plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
         plt.savefig("get_bench.png")
-        print("\n ops/s: "+str(max_range/total_seconds))
+        print("\n ops/s: "+str(max_range/total_seconds_get))
         print('\n num index files: '+str(len(table.indexer.index_list)))
         table.close()
 
