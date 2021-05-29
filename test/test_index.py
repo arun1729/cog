@@ -40,13 +40,9 @@ class TestIndex2(unittest.TestCase):
             value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
             expected_data = Record(key, value)
             position=store.save(expected_data)
-            status=index.put(expected_data.key,position,store)
-            if(status is not None):
-                returned_data=index.get(expected_data.key, store)
-                self.assertTrue(expected_data.is_equal_val(returned_data))
-            else:
-                print("Index has reached its capacity.")
-                break
+            index.put(expected_data.key,position,store)
+            returned_data=index.get(expected_data.key, store)
+            self.assertTrue(expected_data.is_equal_val(returned_data))
 
         c = 0
         scanner = index.scanner(store)

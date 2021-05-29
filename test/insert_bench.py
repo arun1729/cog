@@ -33,12 +33,12 @@ class TestIndexerPerf(unittest.TestCase):
     def test_indexer(self):
 
         dictConfig(config.logging_config)
-        config.INDEX_CAPACITY=1000000
+        config.INDEX_CAPACITY=100000
         logger = logging.getLogger()
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)
         store = table.store
         indexer = table.indexer
-        max_range=100000
+        max_range=500000
 
         insert_perf=[]
         total_seconds=0.0
@@ -56,7 +56,7 @@ class TestIndexerPerf(unittest.TestCase):
             print("Test progress: "+str(i*100.0/max_range) + "%", end="\r")
         plt.xlim([-1,max_range])
         plt.ylim([0,2])
-        plt.xlabel("put call")
+        plt.xlabel("puts")
         plt.ylabel("ms")
         plt.plot(insert_perf)
         plt.savefig("insert_bench.png")

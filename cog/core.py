@@ -116,30 +116,30 @@ class Record:
         """reads from bytes and creates object
         """
 
-        print("### unmarshal ###")
-        print(store_bytes)
+        # print("### unmarshal ###")
+        # print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
-        print("key_link: " + str(key_link))
+        # print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
-        print("tombstone: " + tombstone)
+        # print("tombstone: " + tombstone)
 
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
-        print("value_type: " + value_type)
+        # print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        print("value_len: " + str(value_len))
+        # print("value_len: " + str(value_len))
 
         value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
-        print("value: "+str(value))
+        # print("value: "+str(value))
 
         record = marshal.loads(value)
-        print("record: " + str(record))
+        # print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
