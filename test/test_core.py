@@ -104,6 +104,54 @@ class TestCore(unittest.TestCase):
         index.close()
         store.close()
 
+    def test_put_get_record_update(self):
+        dictConfig(config.logging_config)
+        logger = logging.getLogger()
+
+        expected_data_list= [Record("rocket", "gemini-titan"), Record("rocket", "saturn V"), Record("rocket", "V2")]
+        final_expected_data = Record("rocket", "V2")
+
+        table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
+        print(config.COG_HOME)
+        store = table.store
+        index = table.indexer.index_list[0]
+        for rec in expected_data_list:
+            position = store.save(rec)
+            index.put(rec.key, position, store)
+            returned_data = index.get(rec.key, store)
+            print("retrieved data: " + str(returned_data))
+
+        updated_rec = index.get(final_expected_data.key, store)
+        self.assertTrue(updated_rec.is_equal_val(final_expected_data))
+
+        index.close()
+        store.close()
+
+    def test_collision(self):
+        orig_conf = config.INDEX_CAPACITY
+        dictConfig(config.logging_config)
+        logger = logging.getLogger()
+
+        expected_data_list= [Record("rocket", "gemini-titan"), Record("rocket2", "saturn V"), Record("rocket0", "V2")]
+
+        table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
+        config.INDEX_CAPACITY = 4
+        print(config.COG_HOME)
+        store = table.store
+        index = table.indexer.index_list[0]
+        for rec in expected_data_list:
+            position = store.save(rec)
+            index.put(rec.key, position, store)
+            returned_data = index.get(rec.key, store)
+            print("retrieved data: " + str(returned_data))
+            self.assertTrue(rec.is_equal_val(returned_data))
+
+        index.close()
+        store.close()
+
+        #set original config back
+        config.INDEX_CAPACITY = orig_conf
+
     def test_put_get_list(self):
         dictConfig(config.logging_config)
         logger = logging.getLogger()

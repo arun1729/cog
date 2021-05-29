@@ -179,8 +179,11 @@ class Cog:
         assert type(data.key) is str, "Only string type is supported."
         assert type(data.value) is str, "Only string type is supported."
         record = self.current_table.indexer.get(data.key, self.current_table.store)
-        position = self.current_table.store.save(data, record.store_position, 'l')
-        self.current_table.indexer.put(data.key, position, self.current_table.store)
+        new_record = Record(data.key, data.value, value_type='l')
+        if record is not None:
+            new_record.set_value_link(record.store_position)
+        position = self.current_table.store.save(new_record)
+        self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
     def put_set(self, data):
         '''
@@ -192,16 +195,16 @@ class Cog:
         assert type(data.value) is str, "Only string type is supported."
         record = self.current_table.indexer.get(data.key, self.current_table.store)
         # skip insert into store-list if value already present.
+        new_record = Record(data.key, data.value, value_type='l')
         if record is not None:
-            if data.value not in record.value:
-                new_record = Record(data.key, data.value, value_type='l')
+            if data.value not in record.value: # record value is a linked list.
+                new_record.set_value_link(record.store_position)
                 position = self.current_table.store.save(new_record)
-                self.current_table.indexer.put(data.key, position, self.current_table.store)
+                self.current_table.indexer.put(new_record.key, position, self.current_table.store)
         else:
-            if data.value not in record.value:
-                position = self.current_table.store.save(data, record.store_position, 'l')
-                self.current_table.indexer.put(data.key, position, self.current_table.store)
-
+            # insert new record
+            position = self.current_table.store.save(new_record)
+            self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)

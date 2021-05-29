@@ -54,6 +54,8 @@ class Record:
         self.value_type = value_type
 
     def set_store_position(self, pos):
+        if type(pos) is not int:
+            raise ValueError("store position must be int but provided : "+str(pos))
         self.store_position = pos
 
     def set_value_link(self, pos):
@@ -114,30 +116,30 @@ class Record:
         """reads from bytes and creates object
         """
 
-        # print("### unmarshal ###")
-        # print(store_bytes)
+        print("### unmarshal ###")
+        print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
-        # print("key_link: " + str(key_link))
+        print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
-        # print("tombstone: " + tombstone)
+        print("tombstone: " + tombstone)
 
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
-        # print("value_type: " + value_type)
+        print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        # print("value_len: " + str(value_len))
+        print("value_len: " + str(value_len))
 
         value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
-        # print("value: "+str(value))
+        print("value: "+str(value))
 
         record = marshal.loads(value)
-        # print("record: " + str(record))
+        print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
@@ -232,7 +234,7 @@ class Index:
         """
         orig_position, orig_hash = self.get_index(key)
         data_at_prob_position = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
-
+        self.logger.debug('writing : '+str(key) + ' current data at store position: '+ str(data_at_prob_position))
         if data_at_prob_position == self.empty_block:
             # point next link to record null
             store.update_inplace(store_position, Record.RECORD_LINK_NULL)
@@ -240,10 +242,10 @@ class Index:
         else:
             # read existing record and update pointers
             record = Record.load_from_store(int(data_at_prob_position), store)
-            record.set_store_position((data_at_prob_position))
+            record.set_store_position(int(data_at_prob_position))
             if record.key == key:
                 """ update existing record """
-                store.update_inplace(store_position, record.key_link)
+                store.update_inplace(store_position, int(record.key_link))
             else:
                 # set next link to the record at the top of the bucket
                 store.update_inplace(store_position, record.store_position)
@@ -394,7 +396,10 @@ class Store:
 
     def update_inplace(self, start_pos, int_value):
         """updates fixed length value in store place"""
+        if type(int_value) is not int:
+            raise ValueError("store position must be int but provided : "+str(pos))
         byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
+        self.logger.debug('update_inplace: ' + str(byte_value))
         self.store_file.seek(start_pos)
         self.store_file.write(byte_value)
         self.store_file.flush()

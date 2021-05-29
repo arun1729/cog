@@ -148,12 +148,12 @@ class Graph:
         for predicate in predicates:
             if direction == 'out':
                 out_record = self.cog.use_table(predicate).get(out_nodes(vertex.id))
-                if not out_record.is_empty():
+                if out_record is not None:
                     for v_adj in out_record.value:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
             elif direction == 'in':
                 in_record = self.cog.use_table(predicate).get(in_nodes(vertex.id))
-                if not in_record.is_empty():
+                if not in_record is not None:
                     for v_adj in in_record.value:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
 
@@ -245,7 +245,7 @@ class Graph:
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
-                if not record.is_empty():
+                if record is not None:
                     for v_adjacent in record.value:
                         v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                         v_adjacent_obj.tags.update(v.tags)
