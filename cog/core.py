@@ -4,7 +4,7 @@ import os
 import os.path
 import sys
 import logging
-from profilehooks import profile
+# from profilehooks import profile
 import xxhash
 
 class TableMeta:
@@ -87,6 +87,7 @@ class Record:
             if self.value_link is not None:
                 m_record += str(self.value_link).encode()
         m_record += b'\x1E'
+        print("marshall: "+str(m_record))
         return m_record
 
     def is_empty(self):
@@ -116,30 +117,30 @@ class Record:
         """reads from bytes and creates object
         """
 
-        # print("### unmarshal ###")
-        # print(store_bytes)
+        print("### unmarshal ###")
+        print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
-        # print("key_link: " + str(key_link))
+        print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
-        # print("tombstone: " + tombstone)
+        print("tombstone: " + tombstone)
 
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
-        # print("value_type: " + value_type)
+        print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        # print("value_len: " + str(value_len))
+        print("value_len: " + str(value_len))
 
         value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
-        # print("value: "+str(value))
+        print("value: "+str(value))
 
         record = marshal.loads(value)
-        # print("record: " + str(record))
+        print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
@@ -159,6 +160,7 @@ class Record:
 
     @classmethod
     def load_from_store(cls, position: int, store):
+        print(">>load from store:")
         record = cls.unmarshal(store.read(position))
         if record.value_type == 'l':
             values = cls.__load_value(record.value_link, [record.value], store)
@@ -203,7 +205,7 @@ class Index:
     def get_index_key(self, int_store_position):
         return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
 
-    @profile
+    # @profile
     def put(self, key, store_position, store):
         """
         key chain
@@ -269,7 +271,7 @@ class Index:
     def cog_hash(self, string):
         return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
-    @profile
+    # @profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         index_position, raw_hash = self.get_index(key)
@@ -387,7 +389,7 @@ class Store:
     def update_inplace(self, start_pos, int_value):
         """updates fixed length value in store place"""
         if type(int_value) is not int:
-            raise ValueError("store position must be int but provided : "+str(pos))
+            raise ValueError("store position must be int but provided : "+str(start_pos))
         byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
         self.logger.debug('update_inplace: ' + str(byte_value))
         self.store_file.seek(start_pos)
@@ -395,6 +397,7 @@ class Store:
         self.store_file.flush()
 
     def read(self, position):
+        self.logger.debug("store read request at position: "+str(position))
         self.store_file.seek(position)
         return self.__read_until(b'\x1E')
 
@@ -402,19 +405,26 @@ class Store:
         data = None
         while True:
             chunk = self.store_file.read(self.config.STORE_READ_SIZE)
+            print("chunk: "+str(chunk))
+
             if len(chunk) == 0:
                 raise Exception("EOF store file! Data read error.")
-            if separator in chunk:
-                chunk = chunk.split(separator)[0]
+            i = chunk.find(b'\x1E')
+
+            if i > 0:
+                chunk = chunk[:i+1]
                 if data is None:
                     data = chunk
                 else:
                     data += chunk
                 break
+
             if data is None:
                 data = chunk
             else:
                 data += chunk
+        # data = data + separator if data is not None else data
+        self.logger.debug("store __read_until: "+str(data))
         return data
 
 class Indexer:
@@ -457,7 +467,7 @@ class Indexer:
             resp = self.live_index.put(key, store_position, store)
             self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
 
-    @profile
+    # @profile
     def get(self, key, store):
         if len(self.index_list) > 1:
             self.logger.info("multiple index: " + str(len(self.index_list)))
