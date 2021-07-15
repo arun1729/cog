@@ -25,7 +25,8 @@ class TorqueTest3(unittest.TestCase):
         if os.path.exists("test-data/100movie.nq"):
             nq_file = "test-data/100movie.nq"
         g = Graph(graph_name="movies", cog_path_prefix="/tmp/" + DIR_NAME)
-        g.load_triples(nq_file, 'movies')
+        g.load_triples('/Users/arun/Documents/data/graph/30kmoviedata.nq', 'movies')
+        g.close()
         # print(g.v("</en/joe_palma>").inc(["</film/performance/actor>"]).count())
 
     @classmethod

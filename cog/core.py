@@ -7,6 +7,10 @@ import logging
 # from profilehooks import profile
 import xxhash
 
+RECORD_SEP = b'\xFD'
+UNIT_SEP = b'\xAC'
+
+
 class TableMeta:
 
     def __init__(self, name, namespace, db_instance_id, column_mode):
@@ -76,18 +80,18 @@ class Record:
     def marshal(self):
         key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
         serialized = self.serialize()
-
+        # print("string:" + str(self) + " serialized: " + str(serialized))
         m_record = key_link_bytes \
                 + self.tombstone.encode() \
                 + self.value_type.encode() \
                 + str(len(serialized)).encode() \
-                + b'\x1F' \
+                + UNIT_SEP \
                 + serialized
         if self.value_type == "l":
             if self.value_link is not None:
                 m_record += str(self.value_link).encode()
-        m_record += b'\x1E'
-        print("marshall: "+str(m_record))
+        m_record += RECORD_SEP
+        # print("marshall: "+str(m_record))
         return m_record
 
     def is_empty(self):
@@ -102,7 +106,7 @@ class Record:
     #     return False
 
     @classmethod
-    def __read_until(cls, start, sbytes, separtor=b'\x1F'):
+    def __read_until(cls, start, sbytes, separtor=UNIT_SEP):
         buff = b''
         i  = 0 # default
         for i in range(start, len(sbytes)):
@@ -117,34 +121,34 @@ class Record:
         """reads from bytes and creates object
         """
 
-        print("### unmarshal ###")
-        print(store_bytes)
+        # print("### unmarshal ###")
+        # print(store_bytes)
         store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
-        print("key_link: " + str(key_link))
+        # print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
-        print("tombstone: " + tombstone)
+        # print("tombstone: " + tombstone)
 
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
-        print("value_type: " + value_type)
+        # print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        print("value_len: " + str(value_len))
+        # print("value_len: " + str(value_len))
 
         value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
-        print("value: "+str(value))
+        # print("value: "+str(value))
 
         record = marshal.loads(value)
-        print("record: " + str(record))
+        # print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
-            value_link, end_pos = cls.__read_until(end_pos + value_len + 1 ,  store_bytes, b'\x1E')
+            value_link, end_pos = cls.__read_until(end_pos + value_len + 1 ,  store_bytes, RECORD_SEP)
             value_link = int(value_link.decode())
         return cls(record[0], record[1], tombstone, store_position=None, value_type=value_type,  key_link=key_link, value_link=value_link)
 
@@ -160,7 +164,7 @@ class Record:
 
     @classmethod
     def load_from_store(cls, position: int, store):
-        print(">>load from store:")
+        # print(">>load from store:")
         record = cls.unmarshal(store.read(position))
         if record.value_type == 'l':
             values = cls.__load_value(record.value_link, [record.value], store)
@@ -246,7 +250,7 @@ class Index:
                 while record.key_link != Record.RECORD_LINK_NULL:
                     record = Record.load_from_store(record.key_link, store)
                     record.set_store_position(record.key_link)
-                    if record.key == key:
+                    if record.key == key and prev_record is not None:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
                         prev_rec -> current rec.key_link
@@ -399,17 +403,18 @@ class Store:
     def read(self, position):
         self.logger.debug("store read request at position: "+str(position))
         self.store_file.seek(position)
-        return self.__read_until(b'\x1E')
+        return self.__read_until(RECORD_SEP)
 
     def __read_until(self, separator):
         data = None
         while True:
             chunk = self.store_file.read(self.config.STORE_READ_SIZE)
-            print("chunk: "+str(chunk))
+            # print("chunk: "+str(chunk))
 
             if len(chunk) == 0:
-                raise Exception("EOF store file! Data read error.")
-            i = chunk.find(b'\x1E')
+                return data
+                # raise Exception("EOF store file! Data read error.")
+            i = chunk.find(RECORD_SEP)
 
             if i > 0:
                 chunk = chunk[:i+1]
@@ -473,7 +478,7 @@ class Indexer:
             self.logger.info("multiple index: " + str(len(self.index_list)))
         for idx in self.index_list:
             self.logger.info("GET: looking in index: "+idx.name + " for key: "+key)
-            record=idx.get(key, store)
+            record = idx.get(key, store)
             if record:
                 return record
 
