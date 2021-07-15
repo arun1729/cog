@@ -87,7 +87,7 @@ class TestIndexerPerf(unittest.TestCase):
         plt.ylabel("ms")
         plt.plot(get_perf)
         plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
-        plt.savefig("get_bench.png")
+        plt.savefig("bench.png")
         print("\n ops/s: "+str(max_range/total_seconds_get))
         print('\n num index files: '+str(len(table.indexer.index_list)))
         table.close()

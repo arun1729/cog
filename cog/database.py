@@ -18,18 +18,34 @@ from .core import Table
 from . import config
 import xxhash
 import csv
+import shlex
 
-# class Compaction:
+# functions
 
 def out_nodes(v):
     return (v + "__:out:__")
 
+
 def in_nodes(v):
     return (v + "__:in:__")
 
+# https://www.w3.org/TR/n-triples/#sec-n-triples-language
 def hash_predicate(predicate):
-    return str(xxhash.xxh32(predicate,seed=2).intdigest())
-    #return str(hash(predicate) % ((sys.maxsize + 1) * 2))
+    return str(xxhash.xxh32(predicate, seed=2).intdigest())
+
+
+def parse_tripple(tripple):
+    tokens = shlex.split(tripple)
+    subject = tokens[0].strip()
+    predicate = tokens[1].strip()
+    object = tokens[2].strip()
+    context = None
+
+    if len(tokens) > 3:  # nQuad
+        context = tokens[3].strip()
+
+    return subject, predicate, object, context
+
 
 class Cog:
     """
@@ -248,7 +264,7 @@ class Cog:
         self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), vertex2))
         self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), vertex1))
 
-    def load_triples(self, graph_data_path, graph_name, delimiter=None):
+    def load_triples(self, graph_data_path, graph_name):
        """
        :param graph_data_path: 
        :param graph_name: 
@@ -258,15 +274,8 @@ class Cog:
        self.create_namespace(graph_name)
        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
        with open(graph_data_path) as f:
-            for line in f:
-                tokens = line.split(delimiter) if delimiter is not None else line.split()
-                subject = tokens[0].strip()
-                predicate = tokens[1].strip()
-                object = tokens[2].strip()
-
-                if len(tokens) > 3: #nQuad
-                    context = tokens[3].strip() #not used currently
-
+           for line in f:
+                subject, predicate, object, context = parse_tripple(line)
                 self.load_table(hash_predicate(predicate), graph_name)
                 self.put_node(subject, predicate, object)
 
@@ -308,3 +317,5 @@ class Cog:
                     self.load_table(hash_predicate(predicate), graph_name)
                     self.put_node(subject, predicate, obj)
                     self.logger.debug("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))
+
+
