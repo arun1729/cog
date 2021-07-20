@@ -5,6 +5,7 @@ import shutil
 
 DIR_NAME = "TorqueTest3"
 
+
 def ordered(obj):
     if isinstance(obj, dict):
         return sorted((k, ordered(v)) for k, v in list(obj.items()))
@@ -12,6 +13,7 @@ def ordered(obj):
         return sorted(ordered(x) for x in obj)
     else:
         return obj
+
 
 class TorqueTest3(unittest.TestCase):
 
@@ -25,7 +27,7 @@ class TorqueTest3(unittest.TestCase):
         if os.path.exists("test-data/100movie.nq"):
             nq_file = "test-data/100movie.nq"
         g = Graph(graph_name="movies", cog_path_prefix="/tmp/" + DIR_NAME)
-        g.load_triples('/Users/arun/Documents/data/graph/30kmoviedata.nq', 'movies')
+        g.load_triples(nq_file, 'movies')
         g.close()
         # print(g.v("</en/joe_palma>").inc(["</film/performance/actor>"]).count())
 

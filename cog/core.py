@@ -6,6 +6,7 @@ import sys
 import logging
 from profilehooks import profile
 import xxhash
+import gc
 
 RECORD_SEP = b'\xFD'
 UNIT_SEP = b'\xAC'
@@ -110,7 +111,7 @@ class Record:
         buff = b''
         i  = 0 # default
         for i in range(start, len(sbytes)):
-            s_byte = sbytes[i: i + 1].tobytes()
+            s_byte = sbytes[i: i + 1]
             if s_byte == separtor:
                 break
             buff += s_byte
@@ -123,24 +124,24 @@ class Record:
 
         # print("### unmarshal ###")
         # print(store_bytes)
-        store_bytes = memoryview(store_bytes)
+        # store_bytes = memoryview(store_bytes)
 
         base_pos = 0
-        key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN].tobytes())
+        key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN])
         # print("key_link: " + str(key_link))
 
         next_base_pos = Record.RECORD_LINK_LEN
-        tombstone = store_bytes[next_base_pos : next_base_pos + 1].tobytes().decode()
+        tombstone = store_bytes[next_base_pos:next_base_pos + 1].decode()
         # print("tombstone: " + tombstone)
 
-        value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].tobytes().decode()
+        value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].decode()
         # print("value_type: " + value_type)
 
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
         # print("value_len: " + str(value_len))
 
-        value = store_bytes[end_pos+1: end_pos+1 + value_len].tobytes()
+        value = store_bytes[end_pos+1: end_pos+1 + value_len]
         # print("value: "+str(value))
 
         record = marshal.loads(value)
@@ -148,7 +149,7 @@ class Record:
 
         value_link = None
         if value_type == 'l':
-            value_link, end_pos = cls.__read_until(end_pos + value_len + 1 ,  store_bytes, RECORD_SEP)
+            value_link, end_pos = cls.__read_until(end_pos + value_len + 1,  store_bytes, RECORD_SEP)
             value_link = int(value_link.decode())
         return cls(record[0], record[1], tombstone, store_position=None, value_type=value_type,  key_link=key_link, value_link=value_link)
 
@@ -163,13 +164,13 @@ class Record:
         return val_list
 
     @classmethod
+    @profile
     def load_from_store(cls, position: int, store):
         # print(">>load from store:")
         record = cls.unmarshal(store.read(position))
         if record.value_type == 'l':
             values = cls.__load_value(record.value_link, [record.value], store)
             record.set_value(values)
-
         return record
 
 
@@ -400,11 +401,13 @@ class Store:
         self.store_file.write(byte_value)
         self.store_file.flush()
 
+    @profile
     def read(self, position):
         self.logger.debug("store read request at position: "+str(position))
         self.store_file.seek(position)
         return self.__read_until(RECORD_SEP)
 
+    @profile
     def __read_until(self, separator):
         data = None
         while True:
@@ -474,16 +477,8 @@ class Indexer:
 
     @profile
     def get(self, key, store):
-        if len(self.index_list) > 1:
-            self.logger.info("multiple index: " + str(len(self.index_list)))
-        for idx in self.index_list:
-            self.logger.info("GET: looking in index: "+idx.name + " for key: "+key)
-            record = idx.get(key, store)
-            if record:
-                return record
-
-        self.logger.info("Key: "+key+ " not found in table: "+self.tablemeta.name)
-        return None
+        idx = self.index_list[0]  # only one index file.
+        return idx.get(key, store)
 
     def scanner(self, store):
         for idx in self.index_list:
