@@ -6,7 +6,7 @@ import sys
 import logging
 from profilehooks import profile
 import xxhash
-import gc
+
 
 RECORD_SEP = b'\xFD'
 UNIT_SEP = b'\xAC'
@@ -124,7 +124,6 @@ class Record:
 
         # print("### unmarshal ###")
         # print(store_bytes)
-        # store_bytes = memoryview(store_bytes)
 
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN])
@@ -234,7 +233,7 @@ class Index:
         self.logger.debug('writing : '+str(key) + ' current data at store position: '+ str(data_at_prob_position))
         if data_at_prob_position == self.empty_block:
             # point next link to record null
-            store.update_inplace(store_position, Record.RECORD_LINK_NULL)
+            store.update_record_link_inplace(store_position, Record.RECORD_LINK_NULL)
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # read existing record and update pointers
@@ -242,10 +241,10 @@ class Index:
             record.set_store_position(int(data_at_prob_position))
             if record.key == key:
                 """ update existing record """
-                store.update_inplace(store_position, int(record.key_link))
+                store.update_record_link_inplace(store_position, int(record.key_link))
             else:
                 # set next link to the record at the top of the bucket
-                store.update_inplace(store_position, record.store_position)
+                store.update_record_link_inplace(store_position, record.store_position)
                 # check if this record exists in the bucket, if yes remove pointer.
                 prev_record = None
                 while record.key_link != Record.RECORD_LINK_NULL:
@@ -258,7 +257,7 @@ class Index:
                         curr_rec will not be linked in the bucket anymore.
                         """
                         #update in place the key link pointer of pervios record, ! need to add fixed length padding.
-                        store.update_inplace(prev_record.store_position, record.key_link)
+                        store.update_record_link_inplace(prev_record.store_position, record.key_link)
                     prev_record = record
 
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
@@ -354,7 +353,7 @@ class Index:
                     curr_rec will not be linked in the bucket anymore.
                     """
                     # update in place the key link pointer of pervios record, ! need to add fixed length padding.
-                    store.update_inplace(prev_record.store_position, record.key_link)
+                    store.update_record_link_inplace(prev_record.store_position, record.key_link)
                 prev_record = record
         return True
 
@@ -365,7 +364,9 @@ class Index:
 
 class Store:
 
-    def __init__(self, tablemeta, config, logger):
+    def __init__(self, tablemeta, config, logger, caching_enabled=True):
+        self.caching_enabled = caching_enabled
+        self.store_cache = Cache()
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
@@ -387,23 +388,34 @@ class Store:
         self.store_file.seek(0, 2)
         store_position = self.store_file.tell()
         record.set_store_position(store_position)
-        self.store_file.write(record.marshal())
+        marshalled_record = record.marshal()
+        self.store_file.write(marshalled_record)
         self.store_file.flush()
+        if self.caching_enabled:
+            self.store_cache.put(store_position, marshalled_record)
         return store_position
 
-    def update_inplace(self, start_pos, int_value):
-        """updates fixed length value in store place"""
+    def update_record_link_inplace(self, start_pos, int_value):
+        """updates record link in store file in place"""
         if type(int_value) is not int:
             raise ValueError("store position must be int but provided : "+str(start_pos))
+
         byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
-        self.logger.debug('update_inplace: ' + str(byte_value))
+        self.logger.debug('update_record_link_inplace: ' + str(byte_value))
         self.store_file.seek(start_pos)
         self.store_file.write(byte_value)
+
+        if self.caching_enabled:
+            self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
         self.store_file.flush()
 
     @profile
     def read(self, position):
         self.logger.debug("store read request at position: "+str(position))
+        if self.caching_enabled:
+            cached_record = self.store_cache.get(position)
+            if cached_record is not None:
+                return cached_record
         self.store_file.seek(position)
         return self.__read_until(RECORD_SEP)
 
@@ -431,9 +443,9 @@ class Store:
                 data = chunk
             else:
                 data += chunk
-        # data = data + separator if data is not None else data
         self.logger.debug("store __read_until: "+str(data))
         return data
+
 
 class Indexer:
     '''
@@ -493,3 +505,31 @@ class Indexer:
                 return True
             else:
                 return False
+
+
+class Cache:
+
+    def __init__(self):
+        self.cache = {}
+
+    def put(self, key, value):
+        key = int(key)
+        self.cache[key] = value
+
+    def get(self, key):
+        key = int(key)
+        if key in self.cache:
+            return self.cache[key]
+        else:
+            return None
+
+    def partial_update_from_zero_index(self, key, partial_value):
+        # print("cache: "+ str(self.cache))
+        # print("parital update: " + str(key) + " -> " + str(partial_value))
+        end_pos = len(partial_value)
+        if key not in self.cache:
+            return
+
+        value_byte_array = bytearray(self.cache[key])
+        value_byte_array[0: end_pos] = partial_value
+        self.cache[key] = bytes(value_byte_array)
