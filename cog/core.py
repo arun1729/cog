@@ -5,6 +5,7 @@ import os.path
 import sys
 import logging
 from profilehooks import profile
+from cog.cache import Cache
 import xxhash
 
 
@@ -23,18 +24,19 @@ class TableMeta:
 
 class Table:
 
-    def __init__(self, name, namespace, db_instance_id, config, logger=None, column_mode=False):
+    def __init__(self, name, namespace, db_instance_id, config, column_mode=False, shared_cache=None):
         self.logger = logging.getLogger('table')
         self.config = config
+        self.shared_cache = shared_cache
         self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
         self.indexer = self.__create_indexer()
-        self.store = self.__create_store()
+        self.store = self.__create_store(shared_cache)
 
     def __create_indexer(self):
         return Indexer(self.table_meta, self.config, self.logger)
 
-    def __create_store(self):
-        return Store(self.table_meta, self.config, self.logger)
+    def __create_store(self, shared_cache):
+        return Store(self.table_meta, self.config, self.logger, shared_cache=shared_cache)
 
     def close(self):
         self.indexer.close()
@@ -364,15 +366,15 @@ class Index:
 
 class Store:
 
-    def __init__(self, tablemeta, config, logger, caching_enabled=True):
+    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None):
         self.caching_enabled = caching_enabled
-        self.store_cache = Cache()
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
+        self.store_cache = Cache(self.store, shared_cache)
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
@@ -505,31 +507,3 @@ class Indexer:
                 return True
             else:
                 return False
-
-
-class Cache:
-
-    def __init__(self):
-        self.cache = {}
-
-    def put(self, key, value):
-        key = int(key)
-        self.cache[key] = value
-
-    def get(self, key):
-        key = int(key)
-        if key in self.cache:
-            return self.cache[key]
-        else:
-            return None
-
-    def partial_update_from_zero_index(self, key, partial_value):
-        # print("cache: "+ str(self.cache))
-        # print("parital update: " + str(key) + " -> " + str(partial_value))
-        end_pos = len(partial_value)
-        if key not in self.cache:
-            return
-
-        value_byte_array = bytearray(self.cache[key])
-        value_byte_array[0: end_pos] = partial_value
-        self.cache[key] = bytes(value_byte_array)

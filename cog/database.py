@@ -52,12 +52,13 @@ class Cog:
         Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
     """
 
-    def __init__(self):
+    def __init__(self, shared_cache=None):
         self.logger = logging.getLogger('database')
         self.config = config
         self.logger.info("Cog init.")
         self.namespaces = {}
         self.current_table = None
+        self.shared_cache = shared_cache
         '''creates Cog instance files.'''
         if os.path.exists(self.config.cog_instance_sys_file()):
             f=open(self.config.cog_instance_sys_file(),"rb")
@@ -115,7 +116,7 @@ class Cog:
         self.current_namespace = namespace
 
     def create_table(self, table_name, namespace):
-        table = Table(table_name, namespace, self.instance_id, self.config, self.logger)
+        table = Table(table_name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
         self.current_namespace = namespace
         self.current_table = table
         self.namespaces[namespace][table_name] = table
@@ -137,7 +138,7 @@ class Cog:
             self.namespaces[namespace] = {}
         self.logger.debug("loading table: "+name)
         if name not in self.namespaces[namespace]:
-            self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, self.logger)
+            self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
             self.logger.debug("created new table: " + name)
 
         self.current_table = self.namespaces[namespace][name]

@@ -2,6 +2,7 @@ from cog.torque import Graph
 import unittest
 import os
 import shutil
+import time
 
 DIR_NAME = "TorqueTest3"
 
@@ -17,9 +18,12 @@ class TorqueTest3(unittest.TestCase):
         nq_file = "test/test-data/100movie.nq"
         if os.path.exists("test-data/100movie.nq"):
             nq_file = "test-data/100movie.nq"
-        g = Graph(graph_name="movies", cog_path_prefix="/tmp/" + DIR_NAME)
-        g.load_triples('/Users/arun/Documents/data/graph/30kmoviedata.nq', 'movies')
-        g.close()
+        g = Graph(graph_name="movies3", cog_path_prefix="/tmp/" + DIR_NAME)
+        # p = g.load_triples('/Users/arun/Documents/data/graph/30kmoviedata.nq', 'movies3', True)
+        # while p.is_alive():
+        #     print("total record inserted : {}".format(g.v().count()))
+        #     time.sleep(1)
+        # g.close()
         # print(g.v("</en/joe_palma>").inc(["</film/performance/actor>"]).count())
 
     @classmethod

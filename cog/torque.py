@@ -7,6 +7,8 @@ from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 import os
 from os import listdir
+import multiprocessing
+from multiprocessing import Manager
 
 NOTAG="NOTAG"
 
@@ -33,7 +35,7 @@ class Graph:
     Creates a graph object.
     """
 
-    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
+    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, cache=None):
         '''
         :param graph_name:
         :param cog_home: Home directory name, for most use cases use the default
@@ -45,12 +47,19 @@ class Graph:
             self.config.COG_PATH_PREFIX = cog_path_prefix
         self.graph_name = graph_name
 
+        if cache is None:
+            # cache dictionary shared among multiple processes.
+            manager = Manager()
+            self.shared_cache = manager.dict()
+        else:
+            self.shared_cache =  cache
+
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
         #self.logger.setLevel(logging.DEBUG)
         self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
 
-        self.cog = Cog()
+        self.cog = Cog(cache)
         self.cog.create_namespace(self.graph_name)
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
@@ -60,20 +69,26 @@ class Graph:
 
         self.last_visited_vertices = None
 
-    def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
-        self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
-        self.all_predicates = self.cog.list_tables()
+    # def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
+    #     self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
+    #     self.all_predicates = self.cog.list_tables()
 
-    def load_triples(self, graph_data_path, graph_name=None):
+    def load_triples(self, graph_data_path, graph_name=None, fork=False):
         '''
         Loads a list of triples
         :param graph_data_path:
         :param graph_name:
         :return:
         '''
-        graph_name = self.graph_name if graph_name is None else graph_name
-        self.cog.load_triples(graph_data_path, graph_name)
-        self.all_predicates = self.cog.list_tables()
+        if fork:
+            p = multiprocessing.Process(name="cogdb-worker-"+self.cog.instance_id, target=fork_cog, args=(self.config.COG_HOME, self.config.COG_PATH_PREFIX, graph_data_path, graph_name, self.shared_cache))
+            p.start()
+            return p
+        else:
+            graph_name = self.graph_name if graph_name is None else graph_name
+            self.cog.load_triples(graph_data_path, graph_name)
+            self.all_predicates = self.cog.list_tables()
+            return None
 
     def load_csv(self, csv_path, id_column_name, graph_name=None):
         """
@@ -308,6 +323,11 @@ class Graph:
     def lsv(self):
         return [f.split(".")[0] for f in listdir(self.views_dir)]
 
+    def get_new_graph_instance(self):
+        """ TODO: share cache between instacnes"""
+        return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)
+
+
 
 class View(object):
 
@@ -334,3 +354,8 @@ class View(object):
         return self.url
 
 
+# functions
+
+def fork_cog(cog_home, cog_path_prefix, graph_data_path, graph_name, shared_cache):
+     g = Graph(graph_name, cog_home, cog_path_prefix, shared_cache)
+     g.load_triples(graph_data_path, graph_name)

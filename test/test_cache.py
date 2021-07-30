@@ -1,4 +1,5 @@
-from cog.core import Record, Cache
+from cog.core import Record
+from cog.cache import Cache
 import unittest
 
 DIR_NAME = "TestCore"
@@ -7,13 +8,13 @@ DIR_NAME = "TestCore"
 class TestCache(unittest.TestCase):
 
     def test_record(self):
-        cache = Cache()
+        cache = Cache("test_cache")
         record = Record("rocket", "saturn-v", tombstone='0', store_position=25,  key_link=5, value_type='l', value_link=54378)
         marshalled_record = record.marshal()
         cache.put(0, marshalled_record)
         print(cache.get(0))
         byte_partial_value = str(10075).encode().rjust(Record.RECORD_LINK_LEN)
-        cache.partial_update(0, byte_partial_value)
+        cache.partial_update_from_zero_index(0, byte_partial_value)
         print(cache.get(0))
 
         unmarshalled_record = Record.unmarshal(cache.get(0))
