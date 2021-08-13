@@ -71,7 +71,6 @@ class Cog:
 
         '''Create default namespace and table.'''
         self.create_namespace(self.config.COG_DEFAULT_NAMESPACE)
-        #self.create_or_load_table("default", self.config.COG_DEFAULT_NAMESPACE)
 
         '''Load all table names but lazy load actual tables on request.'''
         for name in self.list_tables():
@@ -143,6 +142,11 @@ class Cog:
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
+        # scan table to load cache
+        for r in self.scanner():
+            pass
+        print(":::::: cache :: " + str(self.current_table.store.store_cache
+                                       .size_list()))
 
     def close(self):
         for name, space in self.namespaces.items():
@@ -226,11 +230,11 @@ class Cog:
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)
 
-    def scanner(self, sfilter=None):
+    def scanner(self, filter=None):
         scan_itr = self.current_table.indexer.scanner(self.current_table.store)
         for r in scan_itr:
-            if sfilter:
-                yield sfilter.process(r[1][1])
+            if filter:
+                yield filter.process(r.key)
             else:
                 yield r
 

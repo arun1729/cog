@@ -1,6 +1,5 @@
 import logging
 
-# TODO: add cache loader process.
 
 class Cache:
 
@@ -36,3 +35,6 @@ class Cache:
         value_byte_array = bytearray(self.cache[key])
         value_byte_array[0: end_pos] = partial_value
         self.cache[key] = bytes(value_byte_array)
+
+    def size_list(self):
+        return [len(self.cache[key]) for key in self.cache]

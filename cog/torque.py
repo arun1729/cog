@@ -69,10 +69,6 @@ class Graph:
 
         self.last_visited_vertices = None
 
-    # def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
-    #     self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
-    #     self.all_predicates = self.cog.list_tables()
-
     def load_triples(self, graph_data_path, graph_name=None, fork=False):
         '''
         Loads a list of triples
