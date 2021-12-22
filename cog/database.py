@@ -133,9 +133,11 @@ class Cog:
                     table_names.add(table_name)
                     self.logger.debug("loading index: id: {}, table name: {}".format(id, table_name))
                     self.load_table(table_name, namespace)
+                    self.refresh_cache(table_name, namespace)
         self.current_namespace = namespace
 
     def load_table(self, name, namespace):
+        # this method should not refresh cache since it's used in many places, this is basically "context switch" method.
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
         self.logger.debug("loading table: "+name)
@@ -146,11 +148,16 @@ class Cog:
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
+        # self.print_cache_info()
 
-        # scan table to load cache
-        # for r in self.scanner():
-        #     pass
-        # print(":::::: cache :: " + str(self.current_table.store.store_cache.size_list()))
+    def refresh_cache(self, name, namespace):
+        self.current_table = self.namespaces[namespace][name]
+        # scan table to refresh cache
+        for r in self.scanner():
+            pass
+
+    def print_cache_info(self):
+        print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name, str(self.current_table.store.store_cache.size_list())))
 
     def close(self):
         for name, space in self.namespaces.items():

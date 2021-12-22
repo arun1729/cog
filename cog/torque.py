@@ -46,21 +46,19 @@ class Graph:
             self.config.COG_PATH_PREFIX = cog_path_prefix
 
         self.graph_name = graph_name
-        self.cache = None
+        self.cache = {}
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
-        self.logger.debug("Torque init on graph: " + graph_name + " predicates: ")
-        self.cog = Cog(self.cache)
 
+        self.logger.debug("Torque init on graph: " + graph_name + " predicates: ")
+
+        self.cog = Cog(self.cache)
         self.cog.create_or_load_namespace(self.graph_name)
-        # if self.cog.is_namespace(self.graph_name):
-        #     print("-->loading tables..")
-        #     self.cog.load_all_tables(self.graph_name)
-        # else:
-        #     self.cog.create_or_load_namespace(self.graph_name)
+        #self.cog.print_cache_info()
 
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
+
         if not os.path.exists(self.views_dir):
             os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
@@ -68,7 +66,7 @@ class Graph:
         self.last_visited_vertices = None
 
     def refresh(self):
-        self.cog.create_or_load_namespace(self.graph_name)
+        self.cog.refresh_cache()
 
     def load_triples(self, graph_data_path, graph_name=None):
         '''
