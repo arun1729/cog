@@ -4,7 +4,7 @@ import os
 import os.path
 import sys
 import logging
-from profilehooks import profile
+# from profilehooks import profile
 from cog.cache import Cache
 import xxhash
 
@@ -165,7 +165,7 @@ class Record:
         return val_list
 
     @classmethod
-    @profile
+    # @profile
     def load_from_store(cls, position: int, store):
         # print(">>load from store:")
         record = cls.unmarshal(store.read(position))
@@ -211,7 +211,7 @@ class Index:
     def get_index_key(self, int_store_position):
         return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
 
-    @profile
+    # @profile
     def put(self, key, store_position, store):
         """
         key chain
@@ -277,7 +277,7 @@ class Index:
     def cog_hash(self, string):
         return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
-    @profile
+    # @profile
     def get(self, key, store):
         self.logger.debug("GET: Reading index: " + self.name)
         index_position, raw_hash = self.get_index(key)
@@ -411,7 +411,7 @@ class Store:
             self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
         self.store_file.flush()
 
-    @profile
+    # @profile
     def read(self, position):
         self.logger.debug("store read request at position: "+str(position))
         if self.caching_enabled:
@@ -421,7 +421,7 @@ class Store:
         self.store_file.seek(position)
         return self.__read_until(RECORD_SEP)
 
-    @profile
+    # @profile
     def __read_until(self, separator):
         data = None
         while True:
@@ -489,7 +489,7 @@ class Indexer:
             resp = self.live_index.put(key, store_position, store)
             self.logger.debug("Key: "+key+" indexed in: "+self.live_index.name)
 
-    @profile
+    # @profile
     def get(self, key, store):
         idx = self.index_list[0]  # only one index file.
         return idx.get(key, store)

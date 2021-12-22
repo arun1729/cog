@@ -152,7 +152,7 @@ g.load_edgelist("/path/to/edgelist", "people")
 
 ## Low level key-value store API:
 Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 
-on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts. 
+on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts.
 
 ```python
 
@@ -161,25 +161,26 @@ from cog.database import Cog
 cogdb = Cog('path/to/dbdir')
 
 # create a namespace
-cogdb.create_namespace("my_namespace")
+cogdb.create_or_load_namespace("my_namespace")
 
 # create new table
 cogdb.create_table("new_db", "my_namespace")
 
 # put some data
-cogdb.put(('key','val'))
+cogdb.put(('key', 'val'))
 
 # retrieve data 
 cogdb.get('key')
 
 # put some more data
-cogdb.put(('key2','val2'))
+cogdb.put(('key2', 'val2'))
 
 # scan
 scanner = cogdb.scanner()
 for r in scanner:
-    print r
-    
+ print
+ r
+
 # delete data
 cogdb.delete('key1')
 
@@ -198,15 +199,17 @@ COG_HOME = "cog-test"
 
 ```python
 from cog import config
+
 config.COG_HOME = "app1_home"
-data = ('user_data:id=1','{"firstname":"Hari","lastname":"seldon"}')
+data = ('user_data:id=1', '{"firstname":"Hari","lastname":"seldon"}')
 cog = Cog(config)
-cog.create_namespace("test")
+cog.create_or_load_namespace("test")
 cog.create_table("db_test", "test")
 cog.put(data)
 scanner = cog.scanner()
 for r in scanner:
-    print r
+ print
+ r
 
 ```
 

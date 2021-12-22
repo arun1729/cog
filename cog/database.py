@@ -70,7 +70,7 @@ class Cog:
             self.instance_id = self.init_instance(config.COG_DEFAULT_NAMESPACE)
 
         '''Create default namespace and table.'''
-        self.create_namespace(self.config.COG_DEFAULT_NAMESPACE)
+        self.create_or_load_namespace(self.config.COG_DEFAULT_NAMESPACE)
 
         '''Load all table names but lazy load actual tables on request.'''
         for name in self.list_tables():
@@ -102,7 +102,7 @@ class Cog:
         self.logger.info("done.")
         return instance_id
 
-    def create_namespace(self, namespace):
+    def create_or_load_namespace(self, namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
             os.mkdir(self.config.cog_data_dir(namespace))
             self.logger.info("Created new namespace: "+self.config.cog_data_dir(namespace))
@@ -113,6 +113,9 @@ class Cog:
             self.load_namespace(namespace)
 
         self.current_namespace = namespace
+
+    def is_namespace(self, namespace):
+        return os.path.exists(self.config.cog_data_dir(namespace))
 
     def create_table(self, table_name, namespace):
         table = Table(table_name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
@@ -136,17 +139,18 @@ class Cog:
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
         self.logger.debug("loading table: "+name)
+
         if name not in self.namespaces[namespace]:
             self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
             self.logger.debug("created new table: " + name)
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
+
         # scan table to load cache
         for r in self.scanner():
             pass
-        print(":::::: cache :: " + str(self.current_table.store.store_cache
-                                       .size_list()))
+        # print(":::::: cache :: " + str(self.current_table.store.store_cache.size_list()))
 
     def close(self):
         for name, space in self.namespaces.items():
@@ -166,6 +170,19 @@ class Cog:
         for f in files:
             p.add(f.split("-")[0])
         return list(p)
+
+    # def load_all_tables(self, namespace):
+    #     path = self.config.cog_data_dir(namespace)
+    #     print("--> path: "+path)
+    #     if not os.path.exists(path):
+    #         print("bad path")
+    #         return
+    #     files = [f for f in listdir(path) if isfile(join(path, f))]
+    #     print(files)
+    #     for f in files:
+    #         table_name = f.split("-")[0]
+    #         print("loading table: "+ table_name)
+    #         self.load_table(table_name, self.current_namespace)
 
     def use_namespace(self, namespace):
         self.current_namespace = namespace
@@ -276,7 +293,7 @@ class Cog:
        :param delimiter:
        :return: 
        """
-       self.create_namespace(graph_name)
+       self.create_or_load_namespace(graph_name)
        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
        with open(graph_data_path) as f:
            for line in f:
@@ -292,7 +309,7 @@ class Cog:
         :param predicate:
         :return:
         """
-        self.create_namespace(graph_name)
+        self.create_or_load_namespace(graph_name)
         self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(edgelist_file_path) as f:
             for line in f:
@@ -310,7 +327,7 @@ class Cog:
         :param graph_name
         :return:
         """
-        self.create_namespace(graph_name)
+        self.create_or_load_namespace(graph_name)
         self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
         with open(file_name) as csv_file:
             reader = csv.DictReader(csv_file)
@@ -319,8 +336,7 @@ class Cog:
                     subject = row[id_column_name]
                     predicate = k
                     obj = row[k]
-                    self.load_table(hash_predicate(predicate), graph_name)
                     self.put_node(subject, predicate, obj)
-                    self.logger.debug("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))
+                    self.logger.info("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))
 
 

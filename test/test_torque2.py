@@ -36,7 +36,7 @@ class TorqueTest2(unittest.TestCase):
 
     def test_torque_load_csv(self):
         csv_file = "test/test-data/books.csv"
-        if os.path.exists("test-data/test.nq"):
+        if os.path.exists("test-data/books.csv"):
             csv_file = "test-data/books.csv"
         g = Graph(graph_name="books5")
         g.load_csv(csv_file, "isbn")
@@ -49,7 +49,6 @@ class TorqueTest2(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # pass
         shutil.rmtree("/tmp/"+DIR_NAME)
         print("*** deleted test data.")
 

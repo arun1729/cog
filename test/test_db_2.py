@@ -18,7 +18,7 @@ class TestDB2(unittest.TestCase):
         cogdb = Cog()
 
         # create a namespace
-        cogdb.create_namespace("my_namespace")
+        cogdb.create_or_load_namespace("my_namespace")
 
         # create new table
         cogdb.create_table("new_db", "my_namespace")

@@ -7,11 +7,8 @@ from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 import os
 from os import listdir
-import multiprocessing
-from multiprocessing import Manager
 
 NOTAG="NOTAG"
-
 
 class Vertex(object):
 
@@ -35,32 +32,33 @@ class Graph:
     Creates a graph object.
     """
 
-    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, cache=None):
+    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
         '''
         :param graph_name:
-        :param cog_home: Home directory name, for most use cases use the default
+        :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         '''
+
         self.config = cfg
         self.config.COG_HOME = cog_home
+
         if cog_path_prefix:
             self.config.COG_PATH_PREFIX = cog_path_prefix
+
         self.graph_name = graph_name
-
-        if cache is None:
-            # cache dictionary shared among multiple processes.
-            manager = Manager()
-            self.shared_cache = manager.dict()
-        else:
-            self.shared_cache =  cache
-
+        self.cache = None
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
-        #self.logger.setLevel(logging.DEBUG)
-        self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
+        self.logger.debug("Torque init on graph: " + graph_name + " predicates: ")
+        self.cog = Cog(self.cache)
 
-        self.cog = Cog(cache)
-        self.cog.create_namespace(self.graph_name)
+        self.cog.create_or_load_namespace(self.graph_name)
+        # if self.cog.is_namespace(self.graph_name):
+        #     print("-->loading tables..")
+        #     self.cog.load_all_tables(self.graph_name)
+        # else:
+        #     self.cog.create_or_load_namespace(self.graph_name)
+
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
         if not os.path.exists(self.views_dir):
@@ -69,22 +67,21 @@ class Graph:
 
         self.last_visited_vertices = None
 
-    def load_triples(self, graph_data_path, graph_name=None, fork=False):
+    def refresh(self):
+        self.cog.create_or_load_namespace(self.graph_name)
+
+    def load_triples(self, graph_data_path, graph_name=None):
         '''
         Loads a list of triples
         :param graph_data_path:
         :param graph_name:
         :return:
         '''
-        if fork:
-            p = multiprocessing.Process(name="cogdb-worker-"+self.cog.instance_id, target=fork_cog, args=(self.config.COG_HOME, self.config.COG_PATH_PREFIX, graph_data_path, graph_name, self.shared_cache))
-            p.start()
-            return p
-        else:
-            graph_name = self.graph_name if graph_name is None else graph_name
-            self.cog.load_triples(graph_data_path, graph_name)
-            self.all_predicates = self.cog.list_tables()
-            return None
+
+        graph_name = self.graph_name if graph_name is None else graph_name
+        self.cog.load_triples(graph_data_path, graph_name)
+        self.all_predicates = self.cog.list_tables()
+        return None
 
     def load_csv(self, csv_path, id_column_name, graph_name=None):
         """
@@ -320,7 +317,6 @@ class Graph:
         return [f.split(".")[0] for f in listdir(self.views_dir)]
 
     def get_new_graph_instance(self):
-        """ TODO: share cache between instacnes"""
         return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)
 
 
@@ -348,10 +344,3 @@ class View(object):
 
     def __str__(self):
         return self.url
-
-
-# functions
-
-def fork_cog(cog_home, cog_path_prefix, graph_data_path, graph_name, shared_cache):
-     g = Graph(graph_name, cog_home, cog_path_prefix, shared_cache)
-     g.load_triples(graph_data_path, graph_name)
