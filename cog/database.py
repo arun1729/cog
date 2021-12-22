@@ -148,8 +148,8 @@ class Cog:
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
 
         # scan table to load cache
-        for r in self.scanner():
-            pass
+        # for r in self.scanner():
+        #     pass
         # print(":::::: cache :: " + str(self.current_table.store.store_cache.size_list()))
 
     def close(self):
