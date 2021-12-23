@@ -148,7 +148,6 @@ class Cog:
 
         self.current_table = self.namespaces[namespace][name]
         self.logger.debug("SET table {} in namespace {}. ".format(name, namespace))
-        # self.print_cache_info()
 
     def refresh_cache(self, name, namespace):
         self.current_table = self.namespaces[namespace][name]
@@ -156,6 +155,13 @@ class Cog:
         for r in self.scanner():
             pass
 
+    def refresh_all(self):
+        for ns in self.namespaces:
+            table = self.namespaces[ns]
+
+        # scan table to refresh cache
+        for r in self.scanner():
+            pass
 
     def print_cache_info(self):
         print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name, str(self.current_table.store.store_cache.size_list())))
@@ -255,11 +261,11 @@ class Cog:
     def get(self, key):
         return self.current_table.indexer.get(key, self.current_table.store)
 
-    def scanner(self, filter=None):
-        scan_itr = self.current_table.indexer.scanner(self.current_table.store)
+    def scanner(self, table=None, scan_filter=None):
+        scan_itr = self.current_table.indexer.scanner(self.current_table.store) if not table else table.indexer.scanner(table.store)
         for r in scan_itr:
-            if filter:
-                yield filter.process(r.key)
+            if scan_filter:
+                yield scan_filter.process(r.key)
             else:
                 yield r
 

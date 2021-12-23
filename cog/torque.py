@@ -65,7 +65,7 @@ class Graph:
         self.last_visited_vertices = None
 
     def refresh(self):
-        self.cog.refresh_cache()
+        self.cog.refresh_all()
 
     def load_triples(self, graph_data_path, graph_name=None):
         '''
