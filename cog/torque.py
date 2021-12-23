@@ -54,7 +54,6 @@ class Graph:
 
         self.cog = Cog(self.cache)
         self.cog.create_or_load_namespace(self.graph_name)
-        #self.cog.print_cache_info()
 
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()

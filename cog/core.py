@@ -418,8 +418,14 @@ class Store:
             cached_record = self.store_cache.get(position)
             if cached_record is not None:
                 return cached_record
+
         self.store_file.seek(position)
-        return self.__read_until(RECORD_SEP)
+        record = self.__read_until(RECORD_SEP)
+
+        if self.caching_enabled:
+            self.store_cache.put(position, record)
+
+        return record
 
     # @profile
     def __read_until(self, separator):

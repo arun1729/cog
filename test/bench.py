@@ -10,6 +10,7 @@ import random
 import timeit
 import unittest
 import matplotlib.pyplot as plt
+import subprocess
 import pkg_resources
 
 #!!! clean namespace before running test.
@@ -17,7 +18,9 @@ import pkg_resources
 #read, ops/s: 16784.0337416
 
 DIR_NAME = "TestIndexerPerf"
-COG_VERSION = '3.0.0'
+out = str(subprocess.check_output(['grep "version" ../setup.py'], shell=True))
+COG_VERSION = out.split("'")[1]
+
 
 class TestIndexerPerf(unittest.TestCase):
 
@@ -41,7 +44,9 @@ class TestIndexerPerf(unittest.TestCase):
         indexer = table.indexer
         max_range=10000
 
-        insert_perf=[]
+        plt.title(COG_VERSION + " PUT BENCHMARK : " + str(max_range), fontsize=12)
+
+        put_perf=[]
 
         key_list = []
         total_seconds_put = 0.0
@@ -54,7 +59,7 @@ class TestIndexerPerf(unittest.TestCase):
             position=store.save(expected_data)
             indexer.put(expected_data.key,position,store)
             elapsed = timeit.default_timer() - start_time
-            insert_perf.append(elapsed * 1000.0)  # to ms
+            put_perf.append(elapsed * 1000.0)  # to ms
             total_seconds_put += elapsed
             print("Loading data progress: " + str(i * 100.0 / max_range) + "%", end="\r")
         print("\n total index files: " + str(len(indexer.index_list)))
@@ -63,15 +68,14 @@ class TestIndexerPerf(unittest.TestCase):
         plt.ylim([0, 10])
         plt.xlabel("puts")
         plt.ylabel("ms")
-        plt.plot(insert_perf)
-        plt.title(COG_VERSION + " PUT BECHMARK : " + str(max_range), fontsize=12)
-        plt.savefig("put_bench.png")
-        print("\n ops/s: " + str(max_range / total_seconds_put))
+        plt.plot(put_perf)
+        print("\n put ops/s: " + str(max_range / total_seconds_put))
         print('\n num index files: ' + str(len(table.indexer.index_list)))
 
         get_perf = []
         total_seconds_get=0.0
         i = 0
+
         for key in key_list:
             start_time = timeit.default_timer()
             indexer.get(key, store)
@@ -86,9 +90,9 @@ class TestIndexerPerf(unittest.TestCase):
         plt.xlabel("gets")
         plt.ylabel("ms")
         plt.plot(get_perf)
-        plt.title(COG_VERSION + " GET BECHMARK : "+ str(max_range) , fontsize=12)
+        plt.title(COG_VERSION + " GET BENCHMARK : "+ str(max_range), fontsize=12)
         plt.savefig("bench.png")
-        print("\n ops/s: "+str(max_range/total_seconds_get))
+        print("\n get ops/s: "+str(max_range/total_seconds_get))
         print('\n num index files: '+str(len(table.indexer.index_list)))
         table.close()
 
