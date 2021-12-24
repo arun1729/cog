@@ -7,11 +7,11 @@
 
 > New release!: 3.0.0
 >
-> - Improved indexing and storage
-> - Caching
-> - Query performance improvements
-> - Bug fixes
-> Note: Data stored in 2.xx is not compatible with 3.xx
+> - New and improved indexing and storage.
+> - Introduced caching.
+> - Query performance improvements.
+> - Bug fixes.
+> - Note: Data stored in CogDB 2.xx is not compatible with 3.xx
 
 ![ScreenShot](notes/ex2.png)
 
