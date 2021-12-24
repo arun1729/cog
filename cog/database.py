@@ -66,7 +66,6 @@ class Cog:
             self.instance_id=self.m_info["m_instance_id"]
             f.close()
         else:
-            # only single database is currently supported.
             self.instance_id = self.init_instance(config.COG_DEFAULT_NAMESPACE)
 
         '''Create default namespace and table.'''

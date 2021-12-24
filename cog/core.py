@@ -431,7 +431,7 @@ class Store:
     def __read_until(self, separator):
         data = None
         while True:
-            chunk = self.store_file.read(self.config.STORE_READ_SIZE)
+            chunk = self.store_file.read(self.config.STORE_READ_BUFFER_SIZE)
             # print("chunk: "+str(chunk))
 
             if len(chunk) == 0:

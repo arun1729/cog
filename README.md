@@ -5,9 +5,15 @@
 # ![ScreenShot](/cog-logo.png)
 > [cogdb.io](https://cogdb.io)
 
-> New release: 2.0.5!
+> New release!: 3.0.0
+>
+> - Improved indexing and storage
+> - Caching
+> - Query performance improvements
+> - Bug fixes
+> Note: Data stored in 2.xx is not compatible with 3.xx
 
-![ScreenShot](docs/ex2.png)
+![ScreenShot](notes/ex2.png)
 
 ## Installing Cog
 ```
@@ -100,7 +106,7 @@ g.v().tag("from").out("follows").tag("to").view("follows").render()
 
 ```
 
-# ![ScreenShot](docs/ex1.png)
+# ![ScreenShot](notes/ex1.png)
 
 ```python
 g.v().tag("from").out("follows").tag("to").view("follows").url
@@ -226,7 +232,6 @@ The perf test script is included with the tests: insert_bench.py and get_bench.p
 INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
 Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
 
-#### Put and Get performance profile
+#### Benchmark
 
-![Put Perf](insert_bench.png)
-![Get Perf](get_bench.png)
+# ![Put Perf](notes/bench.png)
