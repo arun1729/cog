@@ -49,7 +49,6 @@ class Record:
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
-    # RECORD_LINK_NULL = "-1".encode().rjust(RECORD_LINK_LEN)
 
     def __init__(self, key, value, tombstone='0', store_position=None, value_type="s",  key_link=-1, value_link=-1):
         self.key = key
@@ -103,10 +102,6 @@ class Record:
     def __str__(self):
         return "key: {}, value: {}, tombstone: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(self.key, self.value, self.tombstone, self.store_position, self.key_link, self.value_link, self.value_type)
 
-    # def __eq__(self, other):
-    #     if isinstance(other, Record):
-    #         return self.key == other.key
-    #     return False
 
     @classmethod
     def __read_until(cls, start, sbytes, separtor=UNIT_SEP):
@@ -123,30 +118,15 @@ class Record:
     def unmarshal(cls, store_bytes):
         """reads from bytes and creates object
         """
-
-        # print("### unmarshal ###")
-        # print(store_bytes)
-
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos+Record.RECORD_LINK_LEN])
-        # print("key_link: " + str(key_link))
-
         next_base_pos = Record.RECORD_LINK_LEN
         tombstone = store_bytes[next_base_pos:next_base_pos + 1].decode()
-        # print("tombstone: " + tombstone)
-
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].decode()
-        # print("value_type: " + value_type)
-
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
-        # print("value_len: " + str(value_len))
-
         value = store_bytes[end_pos+1: end_pos+1 + value_len]
-        # print("value: "+str(value))
-
         record = marshal.loads(value)
-        # print("record: " + str(record))
 
         value_link = None
         if value_type == 'l':
@@ -167,7 +147,6 @@ class Record:
     @classmethod
     # @profile
     def load_from_store(cls, position: int, store):
-        # print(">>load from store:")
         record = cls.unmarshal(store.read(position))
         if record.value_type == 'l':
             values = cls.__load_value(record.value_link, [record.value], store)
@@ -432,7 +411,6 @@ class Store:
         data = None
         while True:
             chunk = self.store_file.read(self.config.STORE_READ_BUFFER_SIZE)
-            # print("chunk: "+str(chunk))
 
             if len(chunk) == 0:
                 return data

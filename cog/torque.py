@@ -180,7 +180,6 @@ class Graph:
         has_vertices = []
         for lv in self.last_visited_vertices:
             adj_vertices = self.__adjacent_vertices(lv, predicates)
-            # print(lv.id + " -> " + str([x.id for x in adj_vertices]))
             for av in adj_vertices:
                 if av.id == vertex:
                     has_vertices.append(lv)

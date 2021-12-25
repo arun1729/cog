@@ -184,19 +184,6 @@ class Cog:
             p.add(f.split("-")[0])
         return list(p)
 
-    # def load_all_tables(self, namespace):
-    #     path = self.config.cog_data_dir(namespace)
-    #     print("--> path: "+path)
-    #     if not os.path.exists(path):
-    #         print("bad path")
-    #         return
-    #     files = [f for f in listdir(path) if isfile(join(path, f))]
-    #     print(files)
-    #     for f in files:
-    #         table_name = f.split("-")[0]
-    #         print("loading table: "+ table_name)
-    #         self.load_table(table_name, self.current_namespace)
-
     def use_namespace(self, namespace):
         self.current_namespace = namespace
         return self
