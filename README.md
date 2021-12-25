@@ -219,19 +219,6 @@ for r in scanner:
 
 ```
 
-## Performance
-
-Put and Get calls performance:
-
-> put ops/second: 18968
-
-> get ops/second: 39113
-
-The perf test script is included with the tests: insert_bench.py and get_bench.py
-
-INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
-Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
-
-#### Benchmark
+## Benchmark
 
 # ![Put Perf](notes/bench.png)
