@@ -10,7 +10,6 @@ from os import listdir
 
 NOTAG="NOTAG"
 
-
 class Vertex(object):
 
     def __init__(self, _id):
@@ -36,33 +35,37 @@ class Graph:
     def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None):
         '''
         :param graph_name:
-        :param cog_home: Home directory name, for most use cases use the default
+        :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         '''
+
         self.config = cfg
         self.config.COG_HOME = cog_home
+
         if cog_path_prefix:
             self.config.COG_PATH_PREFIX = cog_path_prefix
-        self.graph_name = graph_name
 
+        self.graph_name = graph_name
+        self.cache = {}
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
-        #self.logger.setLevel(logging.DEBUG)
-        self.logger.debug("Torque init : graph: " + graph_name + " predicates: ")
 
-        self.cog = Cog()
-        self.cog.create_namespace(self.graph_name)
+        self.logger.debug("Torque init on graph: " + graph_name + " predicates: ")
+
+        self.cog = Cog(self.cache)
+        self.cog.create_or_load_namespace(self.graph_name)
+
         self.all_predicates = self.cog.list_tables()
         self.views_dir = self.config.cog_views_dir()
+
         if not os.path.exists(self.views_dir):
             os.mkdir(self.views_dir)
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
 
-    def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
-        self.cog.load_edgelist(edgelist_file_path, graph_name, predicate)
-        self.all_predicates = self.cog.list_tables()
+    def refresh(self):
+        self.cog.refresh_all()
 
     def load_triples(self, graph_data_path, graph_name=None):
         '''
@@ -71,9 +74,11 @@ class Graph:
         :param graph_name:
         :return:
         '''
+
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_triples(graph_data_path, graph_name)
         self.all_predicates = self.cog.list_tables()
+        return None
 
     def load_csv(self, csv_path, id_column_name, graph_name=None):
         """
@@ -148,12 +153,12 @@ class Graph:
         for predicate in predicates:
             if direction == 'out':
                 out_record = self.cog.use_table(predicate).get(out_nodes(vertex.id))
-                if not out_record.is_empty():
+                if out_record is not None:
                     for v_adj in out_record.value:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
             elif direction == 'in':
                 in_record = self.cog.use_table(predicate).get(in_nodes(vertex.id))
-                if not in_record.is_empty():
+                if not in_record is not None:
                     for v_adj in in_record.value:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
 
@@ -175,7 +180,6 @@ class Graph:
         has_vertices = []
         for lv in self.last_visited_vertices:
             adj_vertices = self.__adjacent_vertices(lv, predicates)
-            # print(lv.id + " -> " + str([x.id for x in adj_vertices]))
             for av in adj_vertices:
                 if av.id == vertex:
                     has_vertices.append(lv)
@@ -245,7 +249,7 @@ class Graph:
                     record = self.cog.use_table(predicate).get(out_nodes(v.id))
                 else:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
-                if not record.is_empty():
+                if record is not None:
                     for v_adjacent in record.value:
                         v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                         v_adjacent_obj.tags.update(v.tags)
@@ -308,6 +312,10 @@ class Graph:
     def lsv(self):
         return [f.split(".")[0] for f in listdir(self.views_dir)]
 
+    def get_new_graph_instance(self):
+        return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)
+
+
 
 class View(object):
 
@@ -332,5 +340,3 @@ class View(object):
 
     def __str__(self):
         return self.url
-
-

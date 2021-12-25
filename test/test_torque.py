@@ -1,8 +1,6 @@
-from cog.core import Record
 from cog.torque import Graph
 import unittest
 import os
-import json
 import shutil
 
 DIR_NAME = "TorqueTest"
@@ -27,6 +25,7 @@ DIR_NAME = "TorqueTest"
 #https://docs.janusgraph.org/latest/gremlin.html
 #https://tinkerpop.apache.org/gremlin.html
 
+
 def ordered(obj):
     if isinstance(obj, dict):
         return sorted((k, ordered(v)) for k, v in list(obj.items()))
@@ -35,7 +34,9 @@ def ordered(obj):
     else:
         return obj
 
+
 class TorqueTest(unittest.TestCase):
+    maxDiff = None
 
     @classmethod
     def setUpClass(cls):
@@ -57,39 +58,39 @@ class TorqueTest(unittest.TestCase):
         self.assertEqual(1, TorqueTest.g.v("<alice>").out().count())
 
     def test_torque_2(self):
-        expected = {'result': [{'source': '"cool_person"', 'id': '"cool_person"'}, {'source': '<fred>', 'id': '<fred>'}]}
+        expected = {'result': [{'source': 'cool_person', 'id': 'cool_person'}, {'source': '<fred>', 'id': '<fred>'}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_3(self):
         expected = {"result": [{"source": "<fred>", "id": "<greg>", "target": "<greg>"}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").out().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_4(self):
-        expected = {'result': [{'source': '"cool_person"', 'id': '<bob>', 'target': '<bob>'}, {'source': '"cool_person"', 'id': '<dani>', 'target': '<dani>'}, {'source': '"cool_person"', 'id': '<greg>', 'target': '<greg>'}, {'source': '<fred>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<fred>', 'id': '<emily>', 'target': '<emily>'}]}
+        expected = {'result': [{'source': 'cool_person', 'id': '<bob>', 'target': '<bob>'}, {'source': 'cool_person', 'id': '<dani>', 'target': '<dani>'}, {'source': 'cool_person', 'id': '<greg>', 'target': '<greg>'}, {'source': '<fred>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<fred>', 'id': '<emily>', 'target': '<emily>'}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_5(self):
         expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_6(self):
         expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_7(self):
-        expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}]}
+        expected = {'result': [{'source': '<greg>', 'id': 'cool_person', 'target': 'cool_person'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").out().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_8(self):
-        expected = {'result': [{'source': '<greg>', 'id': '"cool_person"', 'target': '"cool_person"'}, {'source': '<greg>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}]}
+        expected = {'result': [{'source': '<greg>', 'id': 'cool_person', 'target': 'cool_person'}, {'source': '<greg>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_9(self):
         expected = {'result': [{'source': '<fred>', 'id': '<fred>'}]}
@@ -97,9 +98,9 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_10(self):
-        expected = {'result': [{'source': '<fred>', 'id': '<fred>'}, {'source': '"cool_person"', 'id': '"cool_person"'}]}
+        expected = {'result': [{'source': '<fred>', 'id': '<fred>'}, {'source': 'cool_person', 'id': 'cool_person'}]}
         actual = TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag("source").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     # bad predicates, should not break test
     def test_torque_11(self):
@@ -144,13 +145,13 @@ class TorqueTest(unittest.TestCase):
 
     def test_torque_18(self):
         expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<greg>'}]}
-        actual = TorqueTest.g.v().has("<status>", '"cool_person"').all()
-        self.assertTrue(expected == actual)
+        actual = TorqueTest.g.v().has("<status>", 'cool_person').all()
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_19(self):
-        expected = {'result': [{'id': '<fred>', 'edges': ['<follows>']}, {'id': '"cool_person"', 'edges': ['<status>']}]}
+        expected = {'result': [{'id': '<fred>', 'edges': ['<follows>']}, {'id': 'cool_person', 'edges': ['<status>']}]}
         actual = TorqueTest.g.v("<bob>").out().all('e')
-        self.assertTrue(ordered(expected) == ordered(actual))
+        self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_20(self):
         expected = {'result': [{'id': '<bob>'}, {'id': '<emily>'}]}

@@ -1,13 +1,19 @@
-![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8|2.7-blue.svg)
+![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8+-blue.svg)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
 # Cog - Embedded Graph Database for Python
 # ![ScreenShot](/cog-logo.png)
 > [cogdb.io](https://cogdb.io)
 
-> New release: 2.0.5!
+> New release!: 3.0.0
+>
+> - New and improved indexing and storage.
+> - Introduced caching.
+> - Query performance improvements.
+> - Bug fixes.
+> - Note: Data stored in CogDB 2.xx is not compatible with 3.xx
 
-![ScreenShot](docs/ex2.png)
+![ScreenShot](notes/ex2.png)
 
 ## Installing Cog
 ```
@@ -100,7 +106,7 @@ g.v().tag("from").out("follows").tag("to").view("follows").render()
 
 ```
 
-# ![ScreenShot](docs/ex1.png)
+# ![ScreenShot](notes/ex1.png)
 
 ```python
 g.v().tag("from").out("follows").tag("to").view("follows").url
@@ -152,7 +158,7 @@ g.load_edgelist("/path/to/edgelist", "people")
 
 ## Low level key-value store API:
 Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 
-on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts. 
+on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts.
 
 ```python
 
@@ -161,25 +167,26 @@ from cog.database import Cog
 cogdb = Cog('path/to/dbdir')
 
 # create a namespace
-cogdb.create_namespace("my_namespace")
+cogdb.create_or_load_namespace("my_namespace")
 
 # create new table
 cogdb.create_table("new_db", "my_namespace")
 
 # put some data
-cogdb.put(('key','val'))
+cogdb.put(('key', 'val'))
 
 # retrieve data 
 cogdb.get('key')
 
 # put some more data
-cogdb.put(('key2','val2'))
+cogdb.put(('key2', 'val2'))
 
 # scan
 scanner = cogdb.scanner()
 for r in scanner:
-    print r
-    
+ print
+ r
+
 # delete data
 cogdb.delete('key1')
 
@@ -198,32 +205,20 @@ COG_HOME = "cog-test"
 
 ```python
 from cog import config
+
 config.COG_HOME = "app1_home"
-data = ('user_data:id=1','{"firstname":"Hari","lastname":"seldon"}')
+data = ('user_data:id=1', '{"firstname":"Hari","lastname":"seldon"}')
 cog = Cog(config)
-cog.create_namespace("test")
+cog.create_or_load_namespace("test")
 cog.create_table("db_test", "test")
 cog.put(data)
 scanner = cog.scanner()
 for r in scanner:
-    print r
+ print
+ r
 
 ```
 
-## Performance
+## Benchmark
 
-Put and Get calls performance:
-
-> put ops/second: 18968
-
-> get ops/second: 39113
-
-The perf test script is included with the tests: insert_bench.py and get_bench.py
-
-INDEX_LOAD_FACTOR on an index determines when a new index file is created, Cog uses linear probing to resolve index collisions.
-Higher INDEX_LOAD_FACTOR leads slightly lower performance on operations on index files that have reached the target load.
-
-#### Put and Get performance profile
-
-![Put Perf](insert_bench.png)
-![Get Perf](get_bench.png)
+# ![Put Perf](notes/bench.png)
