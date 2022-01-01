@@ -104,22 +104,28 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
         return self
 
-    def v(self, vertex=None):
+    def v(self, vertex=None, func=None):
         if vertex is not None:
             self.last_visited_vertices = [Vertex(vertex)]
         else:
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
             for r in self.cog.scanner():
+                if func is not None and not func(r.key):
+                    continue
                 self.last_visited_vertices.append(Vertex(r.key))
         return self
 
-    def out(self, predicates=None):
+    def out(self, predicates=None, func=None):
         '''
         Traverse forward through edges.
         :param predicates: A string or a List of strings.
         :return:
         '''
+
+        if func:
+            assert callable(func),  "func must be a lambda. Example: func = lambda d: int(d) > 5 "
+
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
@@ -128,15 +134,19 @@ class Graph:
             predicates = self.all_predicates
 
         self.logger.debug("OUT: predicates: "+str(predicates))
-        self.__hop("out", predicates)
+        self.__hop("out", predicates=predicates, func=func)
         return self
 
-    def inc(self, predicates=None):
+    def inc(self, predicates=None, func=None):
         '''
         Traverse backward through edges.
         :param predicates:
         :return:
         '''
+
+        if func:
+            assert callable(func),  "func must be a lambda. Example: func = lambda d: int(d) > 5 "
+
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
@@ -144,7 +154,7 @@ class Graph:
         else:
             predicates = self.all_predicates
 
-        self.__hop("in", predicates)
+        self.__hop("in", predicates, func=func)
         return self
 
     def __adjacent_vertices(self, vertex, predicates, direction='out'):
@@ -236,7 +246,7 @@ class Graph:
                 break
         return {"result": result}
 
-    def __hop(self, direction, predicates=None, tag=NOTAG):
+    def __hop(self, direction, predicates=None, tag=NOTAG, func=None):
         self.logger.debug("__hop : direction: " + str(direction) + " predicates: " + str(predicates) + " graph name: "+self.graph_name)
         self.cog.use_namespace(self.graph_name)
         self.logger.debug("hopping from vertices: " + str(map(lambda x : x.id, self.last_visited_vertices)))
@@ -251,6 +261,8 @@ class Graph:
                     record = self.cog.use_table(predicate).get(in_nodes(v.id))
                 if record is not None:
                     for v_adjacent in record.value:
+                        if func is not None and not func(v_adjacent):
+                            continue
                         v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                         v_adjacent_obj.tags.update(v.tags)
                         traverse_vertex.append(v_adjacent_obj)

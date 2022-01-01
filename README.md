@@ -48,6 +48,10 @@ g.put("dani","status","cool_person")
 g.put("emily","follows","fred")
 g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
+g.put("bob","score", "5")
+g.put("greg","score", "10")
+g.put("alice" "score", "7")
+g.put("dani", "score", "100")
 ```
 
 ### Create a graph from CSV file
@@ -139,6 +143,23 @@ g.v("bob").inc().all()
 ```
 > {'result': [{'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
 
+#### Using lambda to chose vertices while traversing the graph.
+
+```python
+g.v(func=lambda x: x.startswith("d")).all()
+```
+> {'result': [{'id': 'dani'}]}
+
+
+```python
+g.v().out("score", func=lambda x: int(x) > 5).inc().all()
+```
+> {'result': [{'id': 'alice'}, {'id': 'dani'}, {'id': 'greg'}]}
+
+```python
+g.v("emily").out("follows", func=lambda x: x.startswith("f")).all()
+```
+> {'result': [{'id': 'fred'}]}
 
 ## Loading data from a file
 
