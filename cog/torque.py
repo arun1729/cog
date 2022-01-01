@@ -335,13 +335,13 @@ class View(object):
         self.url = url
         self.html = html
 
-    def render(self):
+    def render(self, width=700, height=700):
         """
              This feature only works on IPython
              :return:
         """
 
-        iframe_html = r"""  <iframe srcdoc='{0}' width="700" height="700"> </iframe> """.format(self.html)
+        iframe_html = r"""  <iframe srcdoc='{0}' width="{1}" height="{2}"> </iframe> """.format(self.html, width, height)
         from IPython.core.display import display, HTML
         display(HTML(iframe_html))
 
