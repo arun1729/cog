@@ -52,6 +52,11 @@ class TorqueTest(unittest.TestCase):
         actual = TorqueTest.g.v().inc("city", func=lambda x: x.startswith("d")).all()
         self.assertTrue(expected == actual)
 
+    def test_torque_func(self):
+        expected = {'result': [{'id': 'edmonton'}, {'id': 'vancouver'}, {'id': 'montreal'}]}
+        actual = TorqueTest.g.v().out("score", func=lambda x: int(x) > 5).inc().out("city").all()
+        self.assertTrue(expected == actual)
+
     @classmethod
     def tearDownClass(cls):
         TorqueTest.g.close()

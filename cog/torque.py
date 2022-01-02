@@ -106,7 +106,10 @@ class Graph:
 
     def v(self, vertex=None, func=None):
         if vertex is not None:
-            self.last_visited_vertices = [Vertex(vertex)]
+            if isinstance(vertex, list):
+                self.last_visited_vertices = [Vertex(v) for v in vertex]
+            else:
+                self.last_visited_vertices = [Vertex(vertex)]
         else:
             self.last_visited_vertices = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
@@ -124,7 +127,8 @@ class Graph:
         '''
 
         if func:
-            assert callable(func),  "func must be a lambda. Example: func = lambda d: int(d) > 5 "
+            assert callable(func),  "func must be a lambda. Example: func = lambda d: int(d) > 5"
+            assert not isinstance(predicates, list), "func cannot be used with a list of predicates"
 
         if predicates is not None:
             if not isinstance(predicates, list):
@@ -145,7 +149,8 @@ class Graph:
         '''
 
         if func:
-            assert callable(func),  "func must be a lambda. Example: func = lambda d: int(d) > 5 "
+            assert callable(func), "func must be a lambda. Example: func = lambda d: int(d) > 5"
+            assert not isinstance(predicates, list), "func cannot be used with a list of predicates"
 
         if predicates is not None:
             if not isinstance(predicates, list):
