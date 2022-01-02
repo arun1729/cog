@@ -45,10 +45,10 @@ g.put("dani","status","cool_person")
 g.put("emily","follows","fred")
 g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
-g.put("bob","score", "5")
-g.put("greg","score", "10")
-g.put("alice", "score", "7")
-g.put("dani", "score", "100")
+g.put("bob","score","5")
+g.put("greg","score","10")
+g.put("alice","score","7")
+g.put("dani","score","100")
 ```
 
 ### Create a graph from CSV file
