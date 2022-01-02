@@ -5,13 +5,10 @@
 # ![ScreenShot](/cog-logo.png)
 > [cogdb.io](https://cogdb.io)
 
-> New release!: 3.0.0
+> New release!: 3.0.1
 >
-> - New and improved indexing and storage.
-> - Introduced caching.
-> - Query performance improvements.
-> - Bug fixes.
-> - Note: Data stored in CogDB 2.xx is not compatible with 3.xx
+> - Ability to use lambda in graph queries.
+> - Adjustable height and width for views.  
 
 ![ScreenShot](notes/ex2.png)
 
@@ -48,6 +45,10 @@ g.put("dani","status","cool_person")
 g.put("emily","follows","fred")
 g.put("fred","follows","greg")
 g.put("greg","status","cool_person")
+g.put("bob","score","5")
+g.put("greg","score","10")
+g.put("alice","score","7")
+g.put("dani","score","100")
 ```
 
 ### Create a graph from CSV file
@@ -55,8 +56,13 @@ g.put("greg","status","cool_person")
 ```python
 from cog.torque import Graph
 g = Graph("books")
-g.load_csv('test/test-data/books.csv', "isbn")
+g.load_csv('test/test-data/books.csv', "book_id")
 ```
+#### Get the names of the books that have an average rating greater than 4.0
+```python
+g.v().out("average_rating", func=lambda x: float(x) > 4.0).inc().out("title").all()
+```
+
 
 ### Torque query examples
 
@@ -77,7 +83,7 @@ g.scan(3, 'e')
 ```python
 g.v("bob").out().all()
 ```
-> {'result': [{'id': 'cool_person'}, {'id': 'fred'}]}
+> {'result': [{'id': '5'}, {'id': 'fred'}, {'id': 'cool_person'}]}
 
 #### Everyone with status 'cool_person'
 ```python
@@ -96,9 +102,9 @@ g.v().has("follows", "fred").inc().all('e')
 ```python
 g.v("bob").out().count()
 ```
-> '2'
+> '3'
 
-### See who is following who and create a view of that network
+#### See who is following who and create a view of that network
 #### Note: `render()` is supported only in IPython environment like Jupyter notebook otherwise use view(..).url.
 By tagging the vertices 'from' and 'to', the resulting graph can be visualized.
 ```python
@@ -139,6 +145,23 @@ g.v("bob").inc().all()
 ```
 > {'result': [{'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
 
+#### Using lambda to chose vertices while traversing the graph.
+
+```python
+g.v(func=lambda x: x.startswith("d")).all()
+```
+> {'result': [{'id': 'dani'}]}
+
+
+```python
+g.v().out("score", func=lambda x: int(x) > 5).inc().all()
+```
+> {'result': [{'id': 'alice'}, {'id': 'dani'}, {'id': 'greg'}]}
+
+```python
+g.v("emily").out("follows", func=lambda x: x.startswith("f")).all()
+```
+> {'result': [{'id': 'fred'}]}
 
 ## Loading data from a file
 
