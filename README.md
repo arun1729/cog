@@ -1,7 +1,7 @@
 ![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8+-blue.svg)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
-# Cog - Embedded Graph Database for Python
+# CogDB - Graph Database for Python
 # ![logo](cog-logo.png)
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
@@ -16,11 +16,9 @@
 ```
 pip install cogdb
 ```
-Cog is a persistent embedded graph database implemented purely in Python. Torque is Cog's graph query language. Cog also provides a low level API to its fast persistent key-value store.
+CogDB is a persistent graph database implemented purely in Python. Torque is CogDB's graph query language. CogDB is an ideal choice if you need a database that is very easy to use and that has no setup overhead. All you need to do is to import it into your Python application. CogDB can be used interactively in an IPython environment like Jupyter notebooks.
 
-Cog is ideal for python applications that does not require a full featured database. Cog can easily be used as a library from within a Python application. Cog be used interactively in an IPython environment like Jupyter notebooks.
-
-Cog can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
+CogDB can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
 
 In short, an N-Triple is sequence of subject, predicate and object in a single line that defines a connection between two vertices:
 
