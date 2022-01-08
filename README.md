@@ -2,8 +2,8 @@
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
 # Cog - Embedded Graph Database for Python
-# ![ScreenShot](/cog-logo.png)
-> [cogdb.io](https://cogdb.io)
+# ![logo](cog-logo.png)
+> Documents and examples at [cogdb.io](https://cogdb.io)
 
 > New release!: 3.0.1
 >
@@ -50,19 +50,6 @@ g.put("greg","score","10")
 g.put("alice","score","7")
 g.put("dani","score","100")
 ```
-
-### Create a graph from CSV file
-
-```python
-from cog.torque import Graph
-g = Graph("books")
-g.load_csv('test/test-data/books.csv', "book_id")
-```
-#### Get the names of the books that have an average rating greater than 4.0
-```python
-g.v().out("average_rating", func=lambda x: float(x) > 4.0).inc().out("title").all()
-```
-
 
 ### Torque query examples
 
@@ -164,6 +151,18 @@ g.v("emily").out("follows", func=lambda x: x.startswith("f")).all()
 > {'result': [{'id': 'fred'}]}
 
 ## Loading data from a file
+
+### Create a graph from CSV file
+
+```python
+from cog.torque import Graph
+g = Graph("books")
+g.load_csv('test/test-data/books.csv', "book_id")
+```
+#### Get the names of the books that have an average rating greater than 4.0
+```python
+g.v().out("average_rating", func=lambda x: float(x) > 4.0).inc().out("title").all()
+```
 
 #### Triples file
 ```python
