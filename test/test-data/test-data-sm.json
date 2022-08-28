@@ -1,0 +1,4 @@
+[{"name" : "bob", "friends" : [{"name":"alice", "contact": { "phone" : "555-555-5555"} }, {"name" : "joe", "contact": { "phone" : "111-222-3333"}}, {"name" : "fred"}], "colors" : ["yellow", "green"], "location" :  {"city" : "toronto", "country" :  "canada"}},
+{"name" : "alice", "friends" : [{"name":"bob", "contact": { "phone" : "222-222-2222"} }, {"name" : "joe", "contact": { "phone" : "111-222-3333"}}], "colors" : ["pruple", "black"], "location" :  {"city" : "montreal", "country" :  "canada"}},
+{"name" : "joe", "friends" : [{"name":"alice", "contact": { "phone" : "112-554-3333"} }], "colors" : ["green"], "location" :  {"city" : "montreal", "country" :  "canada"}},
+{"_id":  "1", "name" : "fred", "friends" : [{"name":"bob", "contact": { "phone" : "888-888-8888"} }], "colors" : ["blue"], "location" :  { "_id" : "11", "city" : "vancouver", "country" :  "canada"}}]

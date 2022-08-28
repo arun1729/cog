@@ -1,8 +1,8 @@
 ![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8+-blue.svg)
  [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
 
-# CogDB - Micro Graph Database for Python Applications
 # ![logo](cog-logo.png)
+# Embedded Graph Database Library for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
 > New release!: 3.0.1
@@ -16,18 +16,14 @@
 ```
 pip install cogdb
 ```
-CogDB is a persistent graph database implemented purely in Python. Torque is CogDB's graph query language. CogDB is an ideal choice if you need a database that is very easy to use and that has no setup overhead. All you need to do is to import it into your Python application. CogDB can be used interactively in an IPython environment like Jupyter notebooks.
+CogDB is a persistent, embedded graph database library implemented purely in Python.  Torque is CogDB's graph query language, it is implemented as a Python API. CogDB is an ideal choice if you need a database that is easy to use and that has no setup overhead. All you need to do is to import it into your Python application. CogDB can be used interactively in an IPython environment like Jupyter notebooks.
 
-CogDB can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
-
-In short, an N-Triple is sequence of subject, predicate and object in a single line that defines a connection between two vertices:
-
-  ```vertex <predicate> vertex```
-
-[Learn more about RDF triples](https://www.w3.org/TR/rdf-concepts/#:~:text=An%20RDF%20triple%20contains%20three,literal%20or%20a%20blank%20node)
-
+CogDB is a triple store; it models data as `vertex edge vertex` or in other words `subject predicate object`. Triples are a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
+and generally graph databases that model graphs this way are known as RDF databases. CogDB is inspired by RDF databases, but it does not follow a strict RDF format.
 
 ### Creating a graph
+
+#### Using `put` to insert triples
 
 ```python
 from cog.torque import Graph
@@ -47,6 +43,14 @@ g.put("bob","score","5")
 g.put("greg","score","10")
 g.put("alice","score","7")
 g.put("dani","score","100")
+```
+
+#### Using `putj` to insert JSONs
+
+```python
+f = Graph("followers")
+f.putj('{"name" : "bob", "status" : "cool_person", "follows" : ["fred", "dani"]}')
+f.putj('{"name" : "fred", "status" : "cool_person", "follows" : ["alice", "greg"]}')
 ```
 
 ### Torque query examples
@@ -148,6 +152,32 @@ g.v("emily").out("follows", func=lambda x: x.startswith("f")).all()
 ```
 > {'result': [{'id': 'fred'}]}
 
+
+#### json example
+
+```python
+#### Using `putj` to insert JSONs
+f = Graph("followers")
+f.putj('{"name" : "bob", "status" : "cool_person", "follows" : ["fred", "dani"]}')
+f.putj('{"name" : "fred", "status" : "cool_person", "follows" : ["alice", "greg"]}')
+```
+
+```python 
+f.v().has('name','bob').out('follows').all()
+```
+
+> {'result': [{'id': 'dani'}, {'id': 'fred'}]}
+
+```python
+f.v().has('name','fred').out('follows').all()
+```
+
+> {'result': [{'id': 'greg'}, {'id': 'alice'}]}
+
+In a json, CogDB treats `_id` property as a unique identifier for each object. If `_id` is not provided, a randomly generated `_id` is created for each object with in a JSON object.
+`_id` field is used to update a JSON object, see example below.
+
+
 ## Loading data from a file
 
 ### Create a graph from CSV file
@@ -163,6 +193,15 @@ g.v().out("average_rating", func=lambda x: float(x) > 4.0).inc().out("title").al
 ```
 
 #### Triples file
+
+CogDB can load a graph stored as N-Triples, a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
+
+In short, an N-Triple is sequence of subject, predicate and object in a single line that defines a connection between two vertices:
+
+  ```vertex <predicate> vertex```
+
+[Learn more about RDF triples](https://www.w3.org/TR/rdf-concepts/#:~:text=An%20RDF%20triple%20contains%20three,literal%20or%20a%20blank%20node)
+
 ```python
 from cog.torque import Graph
 g = Graph(graph_name="people")
