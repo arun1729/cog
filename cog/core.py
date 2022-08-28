@@ -82,7 +82,6 @@ class Record:
     def marshal(self):
         key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
         serialized = self.serialize()
-        # print("string:" + str(self) + " serialized: " + str(serialized))
         m_record = key_link_bytes \
                 + self.tombstone.encode() \
                 + self.value_type.encode() \
@@ -93,7 +92,6 @@ class Record:
             if self.value_link is not None:
                 m_record += str(self.value_link).encode()
         m_record += RECORD_SEP
-        # print("marshall: "+str(m_record))
         return m_record
 
     def is_empty(self):
@@ -128,7 +126,7 @@ class Record:
         value = store_bytes[end_pos+1: end_pos+1 + value_len]
         record = marshal.loads(value)
 
-        value_link = None
+        value_link = Record.VALUE_LINK_NULL
         if value_type == 'l':
             value_link, end_pos = cls.__read_until(end_pos + value_len + 1,  store_bytes, RECORD_SEP)
             value_link = int(value_link.decode())

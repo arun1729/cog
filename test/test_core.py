@@ -31,7 +31,7 @@ class TestCore(unittest.TestCase):
         self.assertEqual(record.tombstone, unmarshalled_record.tombstone)
         self.assertEqual(record.key_link, unmarshalled_record.key_link)
         self.assertEqual(record.value_type, unmarshalled_record.value_type)
-        self.assertEqual(None, unmarshalled_record.value_link)
+        self.assertEqual(Record.RECORD_LINK_NULL, unmarshalled_record.value_link)
 
     def test_record2(self):
         record = Record("rocket", "saturn-v", tombstone='0', store_position=25,  key_link=5, value_type='l', value_link=54378)

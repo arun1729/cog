@@ -20,6 +20,7 @@ import xxhash
 import csv
 import shlex
 
+
 # functions
 
 def out_nodes(v):
@@ -28,6 +29,7 @@ def out_nodes(v):
 
 def in_nodes(v):
     return (v + "__:in:__")
+
 
 # https://www.w3.org/TR/n-triples/#sec-n-triples-language
 def hash_predicate(predicate):
@@ -61,9 +63,9 @@ class Cog:
         self.shared_cache = shared_cache
         '''creates Cog instance files.'''
         if os.path.exists(self.config.cog_instance_sys_file()):
-            f=open(self.config.cog_instance_sys_file(),"rb")
-            self.m_info=pickle.load(f)
-            self.instance_id=self.m_info["m_instance_id"]
+            f = open(self.config.cog_instance_sys_file(), "rb")
+            self.m_info = pickle.load(f)
+            self.instance_id = self.m_info["m_instance_id"]
             f.close()
         else:
             self.instance_id = self.init_instance(config.COG_DEFAULT_NAMESPACE)
@@ -76,7 +78,6 @@ class Cog:
             if name not in self.namespaces:
                 self.namespaces[name] = None
 
-
     def init_instance(self, namespace):
         '''
         Initiates cog instance - called the 'c instance' for the first time
@@ -84,16 +85,16 @@ class Cog:
         :return:
         '''
 
-        instance_id=str(uuid.uuid4())
+        instance_id = str(uuid.uuid4())
         if not os.path.exists(self.config.cog_instance_sys_dir()): os.makedirs(self.config.cog_instance_sys_dir())
 
-        m_file=dict()
+        m_file = dict()
         m_file["m_instance_id"] = instance_id
         m_file["host_name"] = socket.gethostname()
         m_file["host_ip"] = socket.gethostname()
 
-        f=open(self.config.cog_instance_sys_file(),'wb')
-        pickle.dump(m_file,f)
+        f = open(self.config.cog_instance_sys_file(), 'wb')
+        pickle.dump(m_file, f)
         f.close()
         self.logger.info("Cog sys file created.")
         os.mkdir(self.config.cog_data_dir(namespace))
@@ -104,11 +105,11 @@ class Cog:
     def create_or_load_namespace(self, namespace):
         if not os.path.exists(self.config.cog_data_dir(namespace)):
             os.mkdir(self.config.cog_data_dir(namespace))
-            self.logger.info("Created new namespace: "+self.config.cog_data_dir(namespace))
+            self.logger.info("Created new namespace: " + self.config.cog_data_dir(namespace))
             '''add namespace to dict'''
             self.namespaces[namespace] = {}
         else:
-            self.logger.info("Using existing namespace: "+self.config.cog_data_dir(namespace))
+            self.logger.info("Using existing namespace: " + self.config.cog_data_dir(namespace))
             self.load_namespace(namespace)
 
         self.current_namespace = namespace
@@ -123,26 +124,29 @@ class Cog:
         self.namespaces[namespace][table_name] = table
 
     def load_namespace(self, namespace):
-        for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
-            table_names = set()
-            if self.config.INDEX in index_file_name:
-                id = self.config.index_id(index_file_name)
-                table_name = config.get_table_name(index_file_name)
-                if table_name not in table_names:
-                    table_names.add(table_name)
-                    self.logger.debug("loading index: id: {}, table name: {}".format(id, table_name))
-                    self.load_table(table_name, namespace)
-                    self.refresh_cache(table_name, namespace)
+        if namespace not in self.namespaces:
+            self.namespaces[namespace] = {}
+            for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
+                table_names = set()
+                if self.config.INDEX in index_file_name:
+                    id = self.config.index_id(index_file_name)
+                    table_name = config.get_table_name(index_file_name)
+                    if table_name not in table_names:
+                        table_names.add(table_name)
+                        self.logger.info("loading index: id: {}, table name: {}".format(id, table_name))
+                        self.load_table(table_name, namespace)
+                        self.refresh_cache(table_name, namespace)
         self.current_namespace = namespace
 
     def load_table(self, name, namespace):
         # this method should not refresh cache since it's used in many places, this is basically "context switch" method.
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
-        self.logger.debug("loading table: "+name)
+        self.logger.debug("loading table: " + name)
 
         if name not in self.namespaces[namespace]:
-            self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
+            self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config,
+                                                     shared_cache=self.shared_cache)
             self.logger.debug("created new table: " + name)
 
         self.current_table = self.namespaces[namespace][name]
@@ -163,19 +167,20 @@ class Cog:
             pass
 
     def print_cache_info(self):
-        print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name, str(self.current_table.store.store_cache.size_list())))
+        print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name,
+                                                     str(self.current_table.store.store_cache.size_list())))
 
     def close(self):
         for name, space in self.namespaces.items():
             if space is None:
                 continue
             for name, table in space.items():
-                self.logger.info("closing.. : "+table.table_meta.name)
+                self.logger.info("closing.. : " + table.table_meta.name)
                 table.close()
 
     def list_tables(self):
         p = set(())
-        self.logger.debug("LIST TABLES, current namespace: "+str(self.current_namespace))
+        self.logger.debug("LIST TABLES, current namespace: " + str(self.current_namespace))
         path = self.config.cog_data_dir(self.current_namespace)
         if not os.path.exists(path):
             return p
@@ -194,11 +199,10 @@ class Cog:
         :param namespace:
         :return:
         '''
-
         if name not in self.namespaces[self.current_namespace] or self.namespaces[self.current_namespace][name]:
             self.load_table(name, self.current_namespace)
         else:
-            self.current_table=self.namespaces[self.current_namespace][name]
+            self.current_table = self.namespaces[self.current_namespace][name]
 
         return self
 
@@ -210,7 +214,7 @@ class Cog:
 
     def put_list(self, data):
         '''
-        Creates or appends to a list. If the key does now exist a new list is created, else it appends.
+        Creates or appends to a list. If the key does not exist a new list is created, else it appends.
         :param data:
         :return:
         '''
@@ -225,7 +229,7 @@ class Cog:
 
     def put_set(self, data):
         '''
-        Creates or appends to a set. If the key does now exist a new list is created, else it adds to the set.
+        Creates or appends to a set. If the key does not exist a new list is created, else it adds to the set.
         :param data:
         :return:
         '''
@@ -235,7 +239,7 @@ class Cog:
         # skip insert into store-list if value already present.
         new_record = Record(data.key, data.value, value_type='l')
         if record is not None:
-            if data.value not in record.value: # record value is a linked list.
+            if data.value not in record.value:  # record value is a linked list.
                 new_record.set_value_link(record.store_position)
                 position = self.current_table.store.save(new_record)
                 self.current_table.indexer.put(new_record.key, position, self.current_table.store)
@@ -248,7 +252,8 @@ class Cog:
         return self.current_table.indexer.get(key, self.current_table.store)
 
     def scanner(self, table=None, scan_filter=None):
-        scan_itr = self.current_table.indexer.scanner(self.current_table.store) if not table else table.indexer.scanner(table.store)
+        scan_itr = self.current_table.indexer.scanner(self.current_table.store) if not table else table.indexer.scanner(
+            table.store)
         for r in scan_itr:
             if scan_filter:
                 yield scan_filter.process(r.key)
@@ -256,8 +261,49 @@ class Cog:
                 yield r
 
     def delete(self, key):
-        self.table.indexer.delete(key, self.current_table.store)
+        self.current_table.indexer.delete(key, self.current_table.store)
 
+    def delete_edge(self, vertex1, predicate, vertex2):
+        """
+        Deletes edge in both directions.
+        :param vertex1:
+        :param predicate:
+        :param vertex2:
+        :return:
+        """
+        predicate_hashed = hash_predicate(predicate)
+        out_object = self.use_table(predicate_hashed).get(out_nodes(vertex1))
+
+        # if out vertex1 points to a list, then update else delete.
+        if out_object:
+            if out_object.value_type == 'l':
+                other_values = []
+                for v in out_object.value:
+                    if v != vertex2:
+                        other_values.append(v)
+
+                # update: delete and put_set
+                self.use_table(predicate_hashed).delete(out_nodes(vertex1))
+                for ov in other_values:
+                    self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), ov))
+            else:
+                self.use_table(predicate_hashed).delete(out_nodes(vertex1))
+
+        in_object = self.use_table(predicate_hashed).get(in_nodes(vertex2))
+        # if in vertex2 points to a list, then update else delete.
+        if in_object:
+            if in_object.value_type == 'l':
+                other_values = []
+                for v in in_object.value:
+                    if v != vertex1:
+                        other_values.append(v)
+
+                # update: delete and put_set
+                self.use_table(predicate_hashed).delete(in_nodes(vertex2))
+                for ov in other_values:
+                    self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), ov))
+            else:
+                self.use_table(predicate_hashed).delete(in_nodes(vertex2))
 
     def put_node(self, vertex1, predicate, vertex2):
         """
@@ -270,7 +316,7 @@ class Cog:
         A - B
         A - C
         B - C
-        B - Dput_node
+        B - D put_node
         C - D
         ======
         A => [B,C]
@@ -286,17 +332,63 @@ class Cog:
         self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), vertex2))
         self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), vertex1))
 
+    def put_new_edge(self, vertex1, predicate, vertex2):
+        """
+        Graph method
+        :param vertex1: string
+        :param predicate:
+        :param vertex2:
+        :return:
+        """
+        predicate_hashed = hash_predicate(predicate)
+        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""))
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
+        self.use_table(predicate_hashed).put(Record(out_nodes(vertex1), vertex2))
+        self.use_table(predicate_hashed).put(Record(in_nodes(vertex2), vertex1))
+
+    def update_edge(self, vertex1, predicate, vertex2, update_list_item=False):
+        """
+        :param vertex1: string
+        :param predicate:
+        :param vertex2:
+        :return:
+        """
+        predicate_hashed = hash_predicate(predicate)
+
+        # delete out edge from v1 to v2
+        out_object = self.use_table(predicate_hashed).get(out_nodes(vertex1))
+        if out_object:
+            self.__delete_links(out_object, predicate_hashed)
+
+        # delete in edge from v2 to v1
+        in_object = self.use_table(predicate_hashed).get(in_nodes(vertex2))
+        if in_object:
+            self.__delete_links(in_object, predicate_hashed)
+
+        # create new edge (both ways)
+        self.put_node(vertex1, predicate, vertex2)
+
+    def __delete_links(self, vertex_object, predicate_hashed):
+        if vertex_object.value_type == 'l':
+            for v in vertex_object.value:
+                self.use_table(predicate_hashed).delete(out_nodes(v))
+                self.use_table(predicate_hashed).delete(in_nodes(v))
+        else:
+            self.use_table(predicate_hashed).delete(out_nodes(vertex_object.value))
+            self.use_table(predicate_hashed).delete(in_nodes(vertex_object.value))
+
     def load_triples(self, graph_data_path, graph_name):
-       """
+        """
        :param graph_data_path: 
        :param graph_name: 
        :param delimiter:
        :return: 
        """
-       self.create_or_load_namespace(graph_name)
-       self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
-       with open(graph_data_path) as f:
-           for line in f:
+        self.create_or_load_namespace(graph_name)
+        self.load_table(self.config.GRAPH_NODE_SET_TABLE_NAME, graph_name)
+        with open(graph_data_path) as f:
+            for line in f:
                 subject, predicate, object, context = parse_tripple(line)
                 self.load_table(hash_predicate(predicate), graph_name)
                 self.put_node(subject, predicate, object)
@@ -338,5 +430,3 @@ class Cog:
                     obj = row[k]
                     self.put_node(subject, predicate, obj)
                     self.logger.info("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))
-
-
