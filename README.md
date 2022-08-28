@@ -5,10 +5,12 @@
 # Embedded Graph Database Library for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release!: 3.0.1
+> New release!: 3.0.2
 >
-> - Ability to use lambda in graph queries.
-> - Adjustable height and width for views.  
+> - Ability to put JSON into a graph.
+> - Ability to update JSON in a graph.
+> - Ability to drop edges.
+> - Option to disable in memory caching.
 
 ![ScreenShot](notes/ex2.png)
 
