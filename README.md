@@ -45,12 +45,23 @@ g.put("alice","score","7")
 g.put("dani","score","100")
 ```
 
+#### Drop Edge ###
+
+```python
+g.drop("bob", "follows", "fred")
+```
+
 #### Using `putj` to insert JSONs
 
 ```python
 f = Graph("followers")
 f.putj('{"name" : "bob", "status" : "cool_person", "follows" : ["fred", "dani"]}')
-f.putj('{"name" : "fred", "status" : "cool_person", "follows" : ["alice", "greg"]}')
+f.putj('{"_id":  "1", "name" : "fred", "status" : "cool_person", "follows" : ["alice", "greg"]}')
+```
+
+#### Using `updatej` to update JSONs
+```python
+g.updatej('{"_id" : "1", "status" : "not_cool"}')
 ```
 
 ### Torque query examples
