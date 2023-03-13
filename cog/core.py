@@ -243,7 +243,7 @@ class Index:
 
 
     def get_index(self, key):
-        num = self.cog_hash(key) % ((sys.maxsize + 1) * 2)
+        num = cog_hash(key, self.config.INDEX_CAPACITY) % ((sys.maxsize + 1) * 2)
         self.logger.debug("hash for: " + key + " : " + str(num))
         # there may be diff when using mem slice vs write (+1 needed)
         index = (self.config.INDEX_BLOCK_LEN *
@@ -489,3 +489,7 @@ class Indexer:
                 return True
             else:
                 return False
+
+
+def cog_hash(string, index_capacity):
+    return xxhash.xxh32(string, seed=2).intdigest() % index_capacity

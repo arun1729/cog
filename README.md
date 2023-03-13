@@ -5,12 +5,10 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release!: 3.0.2
->
-> - Ability to put JSON into a graph.
-> - Ability to update JSON in a graph.
-> - Ability to drop edges.
-> - Option to disable in memory caching.
+> New release: 3.0.5
+> - New word embedding API
+> - Similarity filtering using word embeddings
+> - Filter step
 
 ![ScreenShot](notes/ex2.png)
 
@@ -147,21 +145,21 @@ g.v("bob").inc().all()
 ```
 > {'result': [{'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
 
-#### Using lambda to chose vertices while traversing the graph.
+#### Filtering
 
 ```python
-g.v(func=lambda x: x.startswith("d")).all()
+g.v().filter(func=lambda x: x.startswith("d")).all()
 ```
 > {'result': [{'id': 'dani'}]}
 
 
 ```python
-g.v().out("score", func=lambda x: int(x) > 5).inc().all()
+g.v().out("score").filter(func=lambda x: int(x) > 5).inc().all()
 ```
 > {'result': [{'id': 'alice'}, {'id': 'dani'}, {'id': 'greg'}]}
 
 ```python
-g.v("emily").out("follows", func=lambda x: x.startswith("f")).all()
+g.v("emily").out("follows").filter(func=lambda x: x.startswith("f")).all()
 ```
 > {'result': [{'id': 'fred'}]}
 
@@ -190,6 +188,43 @@ f.v().has('name','fred').out('follows').all()
 In a json, CogDB treats `_id` property as a unique identifier for each object. If `_id` is not provided, a randomly generated `_id` is created for each object with in a JSON object.
 `_id` field is used to update a JSON object, see example below.
 
+## Using word embeddings
+
+CogDB supports word embeddings. Word embeddings are a way to represent words as vectors. Word embeddings are useful for many NLP tasks. 
+There are various types of word embeddings, including popular ones like [GloVe](https://nlp.stanford.edu/projects/glove/) and [FastText](https://fasttext.cc/).
+
+#### Add a word embedding:
+
+```python
+g.put_embedding("orange", [0.1, 0.2, 0.3, 0.4, 0.5])
+```
+
+#### Get a word embedding:
+
+```python
+g.get_embedding("orange")
+```
+
+> [0.1, 0.2, 0.3, 0.4, 0.5]
+#### Delete a word embedding:
+
+```python
+g.delete_embedding("orange")
+```
+
+#### Use word embeddings in a query:
+
+```python 
+g.v(func="sim('orange') > 0.35").all()
+```
+> {'result': [{'id': 'clementines'}, {'id': 'tangerine'}, {'id': 'orange'}]}
+
+```python
+g.v(func="sim('orange') in [0.25, 0.35]").all()
+```
+> {'result': [{'id': 'banana'}, {'id': 'apple'}]}
+
+In the above code, the sim method is used to filter vertices based on their cosine similarity with the word embedding for "orange". The operator and threshold arguments determine how the similarity is compared to the threshold value, which can be a single value or a list of values.
 
 ## Loading data from a file
 
@@ -226,42 +261,6 @@ g.load_triples("/path/to/triples.nt", "people")
 from cog.torque import Graph
 g = Graph(graph_name="people")
 g.load_edgelist("/path/to/edgelist", "people")
-```
-
-## Low level key-value store API:
-Every record inserted into Cog's key-value store is directly persisted on to disk. It stores and retrieves data based 
-on hash values of the keys, it can perform fast look ups (O(1) avg) and fast (O(1) avg) inserts.
-
-```python
-
-from cog.database import Cog
-
-cogdb = Cog('path/to/dbdir')
-
-# create a namespace
-cogdb.create_or_load_namespace("my_namespace")
-
-# create new table
-cogdb.create_table("new_db", "my_namespace")
-
-# put some data
-cogdb.put(('key', 'val'))
-
-# retrieve data 
-cogdb.get('key')
-
-# put some more data
-cogdb.put(('key2', 'val2'))
-
-# scan
-scanner = cogdb.scanner()
-for r in scanner:
- print
- r
-
-# delete data
-cogdb.delete('key1')
-
 ```
 
 ## Config

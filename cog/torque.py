@@ -1,5 +1,6 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate
+from cog.core import cog_hash, Record
 import json
 import logging
 from logging.config import dictConfig
@@ -9,6 +10,8 @@ import os
 from os import listdir
 import time
 import random
+from math import isclose
+import warnings
 
 NOTAG = "NOTAG"
 
@@ -35,7 +38,6 @@ CHARS = u'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 
 class BlankNode(object):
-
     ID_PREFIX = "_id_"
 
     def __init__(self, label=None):
@@ -51,7 +53,7 @@ class BlankNode(object):
     @classmethod
     def is_id(cls, label):
         # print("--- > is_id", label)
-        return label.startswith("_:"+BlankNode.ID_PREFIX)
+        return label.startswith("_:" + BlankNode.ID_PREFIX)
 
 
 class Graph:
@@ -235,6 +237,8 @@ class Graph:
         return self
 
     def v(self, vertex=None, func=None):
+        if func:
+            warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
         if vertex is not None:
             if isinstance(vertex, list):
                 self.last_visited_vertices = [Vertex(v) for v in vertex]
@@ -258,6 +262,7 @@ class Graph:
         '''
 
         if func:
+            warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
             assert callable(func), "func must be a lambda. Example: func = lambda d: int(d) > 5"
             assert not isinstance(predicates, list), "func cannot be used with a list of predicates"
 
@@ -280,6 +285,7 @@ class Graph:
         '''
 
         if func:
+            warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
             assert callable(func), "func must be a lambda. Example: func = lambda d: int(d) > 5"
             assert not isinstance(predicates, list), "func cannot be used with a list of predicates"
 
@@ -412,6 +418,102 @@ class Graph:
                             traverse_vertex.append(v_adjacent_obj)
         self.last_visited_vertices = traverse_vertex
 
+    def filter(self, func):
+        '''
+            Applies a filter function to the vertices and removes any vertices that do not pass the filter.
+        '''
+        for v in self.last_visited_vertices:
+            if not func(v.id):
+                self.last_visited_vertices.remove(v)
+        return self
+
+    def sim(self, word, operator, threshold, strict=False):
+        """
+            Applies cosine similarity filter to the vertices and removes any vertices that do not pass the filter.
+
+            Parameters:
+            -----------
+            word: str
+                The word to compare to the other vertices.
+            operator: str
+                The comparison operator to use. One of "==", ">", "<", ">=", "<=", or "in".
+            threshold: float or list of 2 floats
+                The threshold value(s) to use for the comparison. If operator is "==", ">", "<", ">=", or "<=", threshold should be a float. If operator is "in", threshold should be a list of 2 floats.
+            strict: bool, optional
+                If True, raises an exception if a word embedding is not found for either word. If False, assigns a similarity of 0.0 to any word embedding that is not found.
+
+            Returns:
+            --------
+            self: GraphTraversal
+                Returns self to allow for method chaining.
+
+            Raises:
+            -------
+            ValueError:
+                If operator is not a valid comparison operator or if threshold is not a valid threshold value for the given operator.
+                If strict is True and a word embedding is not found for either word.
+    """
+        if not isinstance(threshold, (float, int, list)):
+            raise ValueError("Invalid threshold value: {}".format(threshold))
+
+        if operator == 'in':
+            if not isinstance(threshold, list) or len(threshold) != 2:
+                raise ValueError("Invalid threshold value: {}".format(threshold))
+            if not all(isinstance(t, (float, int)) for t in threshold):
+                raise ValueError("Invalid threshold value: {}".format(threshold))
+
+        filtered_vertices = []
+        for v in self.last_visited_vertices:
+            similarity = self.__cosine_similarity(word, v.id)
+            if not similarity:
+                # similarity is None if a word embedding is not found for either word.
+                if strict:
+                    raise ValueError("Missing word embedding for either '{}' or '{}'".format(word, v.id))
+                else:
+                    # Treat vertices without word embeddings as if they have no similarity to any other vertex.
+                    similarity = 0.0
+            if operator == '=':
+                if isclose(similarity, threshold):
+                    filtered_vertices.append(v)
+            elif operator == '>':
+                if similarity > threshold:
+                    filtered_vertices.append(v)
+            elif operator == '<':
+                if similarity < threshold:
+                    filtered_vertices.append(v)
+            elif operator == '>=':
+                if similarity >= threshold:
+                    filtered_vertices.append(v)
+            elif operator == '<=':
+                if similarity <= threshold:
+                    filtered_vertices.append(v)
+            elif operator == 'in':
+                if not threshold[0] <= similarity <= threshold[1]:
+                    continue
+                filtered_vertices.append(v)
+            else:
+                raise ValueError("Invalid operator: {}".format(operator))
+        self.last_visited_vertices = filtered_vertices
+        return self
+
+    def __cosine_similarity(self, word1, word2):
+        x = self.get_embedding(word1)
+        y = self.get_embedding(word2)
+
+        if x is None or y is None:
+            return None
+
+        dot_product = 0
+        x_norm = 0
+        y_norm = 0
+        for i in range(len(x)):
+            dot_product += x[i] * y[i]
+            x_norm += x[i] ** 2
+            y_norm += y[i] ** 2
+        x_norm = x_norm ** (1 / 2)
+        y_norm = y_norm ** (1 / 2)
+        return dot_product / (x_norm * y_norm)
+
     def tag(self, tag_name):
         '''
         Saves vertices with a tag name. Used to capture vertices while traversing a graph.
@@ -474,6 +576,34 @@ class Graph:
 
     def get_new_graph_instance(self):
         return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)
+
+    def put_embedding(self, word, embedding):
+        """
+        Saves a word embedding.
+        """
+
+        assert isinstance(word, str), "word must be a string"
+        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
+            str(cog_hash(word, self.config.INDEX_CAPACITY)), embedding))
+
+    def get_embedding(self, word):
+        """
+        Returns a word embedding.
+        """
+        assert isinstance(word, str), "word must be a string"
+        record = self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).get(
+            str(cog_hash(word, self.config.INDEX_CAPACITY)))
+        if record is None:
+            return None
+        return record.value
+
+    def delete_embedding(self, word):
+        """
+        Deletes a word embedding.
+        """
+        assert isinstance(word, str), "word must be a string"
+        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).delete(
+            str(cog_hash(word, self.config.INDEX_CAPACITY)))
 
 
 class View(object):
