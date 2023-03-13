@@ -23,53 +23,79 @@ class TorqueTest(unittest.TestCase):
         if not os.path.exists("/tmp/" + DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
-        TorqueTest.g = Graph(graph_name="peopletest", cog_home=DIR_NAME)
-
     def test_torque_drop_1(self):
+        g = Graph(graph_name="test_drop", cog_home=DIR_NAME)
         expected = {'result': [{'id': 'greg'}]}
-        TorqueTest.g.put("bob", "friends", "greg")
-        actual = TorqueTest.g.v("bob").out("friends").all()
+        g.put("bob", "friends", "greg")
+        actual = g.v("bob").out("friends").all()
         self.assertTrue(expected == actual)
 
-        TorqueTest.g.drop("bob", "friends", "greg")
-        actual = TorqueTest.g.v("bob").out("friends").all()
+        g.drop("bob", "friends", "greg")
+        actual = g.v("bob").out("friends").all()
         self.assertTrue({'result': []} == actual)
+        g.close()
 
     def test_torque_drop_2(self):
-        TorqueTest.g.put("bob", "friends", "greg")
-        TorqueTest.g.put("bob", "friends", "alice")
+        g = Graph(graph_name="test2", cog_home=DIR_NAME)
+        g.put("bob", "friends", "greg")
+        g.put("bob", "friends", "alice")
 
         expected = {'result': [{'id': 'alice'}, {'id': 'greg'}]}
-        actual = TorqueTest.g.v("bob").out("friends").all()
+        actual = g.v("bob").out("friends").all()
         self.assertTrue(expected == actual)
 
         expected = {'result': [{'id': 'alice'}]}
-        TorqueTest.g.drop("bob", "friends", "greg")
-        actual = TorqueTest.g.v("bob").out("friends").all()
+        g.drop("bob", "friends", "greg")
+        actual = g.v("bob").out("friends").all()
         self.assertTrue(expected == actual)
 
-        actual = TorqueTest.g.v("greg").inc("friends").all()
+        actual = g.v("greg").inc("friends").all()
         self.assertTrue({'result': []} == actual)
+        g.close()
 
     def test_torque_drop_3(self):
-        TorqueTest.g.put("bob", "friends", "greg")
-        TorqueTest.g.put("bob", "friends", "alice")
-        TorqueTest.g.put("bob", "neighbour", "alice")
+        g = Graph(graph_name="test3", cog_home=DIR_NAME)
+        g.put("bob", "friends", "greg")
+        g.put("bob", "friends", "alice")
+        g.put("bob", "neighbour", "alice")
 
-        TorqueTest.g.drop("bob", "friends", "alice")
+        g.drop("bob", "friends", "alice")
 
         expected = {'result': [{'id': 'alice'}]}
-        actual = TorqueTest.g.v("bob").out("neighbour").all()
+        actual = g.v("bob").out("neighbour").all()
         self.assertTrue(expected == actual)
 
         expected = {'result': [{'id': 'bob', 'edges': ['neighbour']}]}
-        actual = TorqueTest.g.v("alice").inc().all('e')
+        actual = g.v("alice").inc().all('e')
         self.assertTrue(ordered(expected) == ordered(actual))
+        g.close()
 
+    def test_filter_string(self):
+        g = Graph(graph_name="test4", cog_home=DIR_NAME)
+        g.put("bob", "friends", "greg")
+        g.put("bob", "friends", "alice")
+        g.put("bob", "neighbour", "alice")
+
+        expected = {'result': [{'id': 'alice'}]}
+        actual = g.v("bob").out("friends").filter(func=lambda x: x == 'alice').all()
+        self.assertTrue(expected == actual)
+        g.close()
+
+    def test_filter_int(self):
+        g = Graph(graph_name="test5", cog_home=DIR_NAME)
+        g.put("bob", "friends", "greg")
+        g.put("bob", "friends", "alice")
+        g.put("bob", "score", "10")
+        g.put("alice", "score", "20")
+        g.put("greg", "score", "30")
+
+        expected = {'result': [{'id': 'alice'}, {'id': 'greg'}]}
+        actual = g.v().out("score").filter(func=lambda x: int(x) > 10).inc().all()
+        self.assertTrue(expected == actual)
+        g.close()
 
     @classmethod
     def tearDownClass(cls):
-        TorqueTest.g.close()
         shutil.rmtree("/tmp/" + DIR_NAME)
         print("*** deleted test data.")
 

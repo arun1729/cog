@@ -33,6 +33,7 @@ class TorqueTest(unittest.TestCase):
         jlist = json.loads(TorqueTest.f.read())
         for obj in jlist:
             TorqueTest.g.putj(obj)
+        TorqueTest.f.close()
 
     def test_torque_json_1(self):
         expected = {'result': [{'id': 'fred'}, {'id': 'joe'}, {'id': 'alice'}]}

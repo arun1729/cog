@@ -207,8 +207,7 @@ class Cog:
         return self
 
     def put(self, data):
-        assert type(data.key) is str, "Only string type is supported."
-        assert type(data.value) is str, "Only string type is supported."
+        assert type(data.key) is str, "key must be a string."
         position = self.current_table.store.save(data)
         self.current_table.indexer.put(data.key, position, self.current_table.store)
 
