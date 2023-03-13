@@ -6,7 +6,7 @@
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
 > New release: 3.0.5
-> - New word embedding API
+> - New word embeddings API
 > - Similarity filtering using word embeddings
 > - Filter step
 
@@ -215,16 +215,16 @@ g.delete_embedding("orange")
 #### Use word embeddings in a query:
 
 ```python 
-g.v(func="sim('orange') > 0.35").all()
+g.v().sim('orange', '>', 0.35).all()
 ```
 > {'result': [{'id': 'clementines'}, {'id': 'tangerine'}, {'id': 'orange'}]}
 
 ```python
-g.v(func="sim('orange') in [0.25, 0.35]").all()
+g.v().sim('orange', 'in', [0.25, 0.35]).all()
 ```
 > {'result': [{'id': 'banana'}, {'id': 'apple'}]}
 
-In the above code, the sim method is used to filter vertices based on their cosine similarity with the word embedding for "orange". The operator and threshold arguments determine how the similarity is compared to the threshold value, which can be a single value or a list of values.
+In the above code, the sim method is used to filter vertices based on their cosine similarity with the word embedding for "orange". The operator and threshold arguments determine how the similarity is compared to the threshold value, which can be a single value or a range.
 
 ## Loading data from a file
 
