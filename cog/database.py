@@ -19,16 +19,17 @@ from . import config
 import xxhash
 import csv
 import shlex
+from collections import OrderedDict
 
 
 # functions
 
 def out_nodes(v):
-    return (v + "__:out:__")
+    return v + "__:out:__"
 
 
 def in_nodes(v):
-    return (v + "__:in:__")
+    return v + "__:in:__"
 
 
 # https://www.w3.org/TR/n-triples/#sec-n-triples-language
@@ -49,6 +50,16 @@ def parse_tripple(tripple):
     return subject, predicate, object, context
 
 
+class CacheData:
+    def __init__(self, position, value):
+        self.store_position = position
+        self.value = value
+
+    def __str__(self):
+        return f"CacheData(position: {self.store_position}, value: {self.value})"
+
+    __repr__ = __str__
+
 class Cog:
     """
         Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
@@ -61,6 +72,7 @@ class Cog:
         self.namespaces = {}
         self.current_table = None
         self.shared_cache = shared_cache
+        self.cache = OrderedDict()
         '''creates Cog instance files.'''
         if os.path.exists(self.config.cog_instance_sys_file()):
             f = open(self.config.cog_instance_sys_file(), "rb")
@@ -227,27 +239,41 @@ class Cog:
         self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
     def put_set(self, data):
-        '''
-        Creates or appends to a set. If the key does not exist a new list is created, else it adds to the set.
-        :param data:
-        :return:
-        '''
-        assert type(data.key) is str, "Only string type is supported."
-        assert type(data.value) is str, "Only string type is supported."
-        record = self.current_table.indexer.get(data.key, self.current_table.store)
-        # skip insert into store-list if value already present.
-        new_record = Record(data.key, data.value, value_type='l')
-        if record is not None:
-            if data.value not in record.value:  # record value is a linked list.
-                new_record.set_value_link(record.store_position)
-                position = self.current_table.store.save(new_record)
-                self.current_table.indexer.put(new_record.key, position, self.current_table.store)
+        assert isinstance(data.key, str), "Only string type is supported."
+        assert isinstance(data.value, str), "Only string type is supported."
+
+        # use (table name, key) as the cache key
+        cache_key = (self.current_table.table_meta.name, data.key)
+
+        if cache_key in self.cache:
+            record = self.cache[cache_key]
         else:
-            # insert new record
+            record = self.current_table.indexer.get(data.key, self.current_table.store)
+            if len(self.cache) > self.config.LEVEL_2_CACHE_SIZE:
+                self.cache.popitem(last=False)
+
+        new_record = Record(data.key, data.value, value_type='l')
+
+        if record is not None and data.value not in record.value:
+            new_record.set_value_link(record.store_position)
             position = self.current_table.store.save(new_record)
             self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
+            if cache_key in self.cache and data.value not in self.cache[cache_key].value:
+                self.cache[cache_key].value.add(data.value)
+                self.cache[cache_key].store_position = position
+            else:
+                self.cache[cache_key] = CacheData(position, {data.value})
+
+        elif record is None:
+            position = self.current_table.store.save(new_record)
+            self.current_table.indexer.put(new_record.key, position, self.current_table.store)
+            self.cache[cache_key] = CacheData(position, {data.value})
+        self.cache.move_to_end(cache_key)
+
     def get(self, key):
+        if key in self.cache:
+            return self.cache[key]
         return self.current_table.indexer.get(key, self.current_table.store)
 
     def scanner(self, table=None, scan_filter=None):
@@ -261,6 +287,9 @@ class Cog:
 
     def delete(self, key):
         self.current_table.indexer.delete(key, self.current_table.store)
+        cache_key = (self.current_table.table_meta.name, key)
+        if cache_key in self.cache:
+            del self.cache[cache_key]
 
     def delete_edge(self, vertex1, predicate, vertex2):
         """

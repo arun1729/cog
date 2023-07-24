@@ -17,6 +17,9 @@ class TorqueTest2(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if os.path.exists("/tmp/"+DIR_NAME):
+            shutil.rmtree("/tmp/"+DIR_NAME)
+
         if not os.path.exists("/tmp/"+DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 

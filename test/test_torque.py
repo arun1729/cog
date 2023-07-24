@@ -5,7 +5,8 @@ import shutil
 
 DIR_NAME = "TorqueTest"
 
-#target api set
+
+# target api set
 # in("predicate"), out("predicate"), all, count, tag
 # next release .forEach(function), this can do filter, adding values etc.
 
@@ -22,8 +23,8 @@ DIR_NAME = "TorqueTest"
 # // Result is {"id": "cool_person", "pred": "<status>"}
 # g.V("<dani>").Out(g.V("<status>"), "pred").All()
 
-#https://docs.janusgraph.org/latest/gremlin.html
-#https://tinkerpop.apache.org/gremlin.html
+# https://docs.janusgraph.org/latest/gremlin.html
+# https://tinkerpop.apache.org/gremlin.html
 
 
 def ordered(obj):
@@ -41,7 +42,10 @@ class TorqueTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        if not os.path.exists("/tmp/"+DIR_NAME):
+        if os.path.exists("/tmp/" + DIR_NAME):
+            shutil.rmtree("/tmp/" + DIR_NAME)
+
+        if not os.path.exists("/tmp/" + DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
         data_dir = "test/test-data/test.nq"
@@ -51,7 +55,7 @@ class TorqueTest(unittest.TestCase):
 
         TorqueTest.g = Graph(graph_name="people", cog_home=DIR_NAME)
         TorqueTest.g.load_triples(data_dir, "people")
-        #print TorqueTest.g.v().all()
+        # print TorqueTest.g.v().all()
         print(">>> test setup complete.\n")
 
     def test_torque_1(self):
@@ -68,17 +72,23 @@ class TorqueTest(unittest.TestCase):
         self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_4(self):
-        expected = {'result': [{'source': 'cool_person', 'id': '<bob>', 'target': '<bob>'}, {'source': 'cool_person', 'id': '<dani>', 'target': '<dani>'}, {'source': 'cool_person', 'id': '<greg>', 'target': '<greg>'}, {'source': '<fred>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<fred>', 'id': '<emily>', 'target': '<emily>'}]}
+        expected = {'result': [{'source': 'cool_person', 'id': '<bob>', 'target': '<bob>'},
+                               {'source': 'cool_person', 'id': '<dani>', 'target': '<dani>'},
+                               {'source': 'cool_person', 'id': '<greg>', 'target': '<greg>'},
+                               {'source': '<fred>', 'id': '<bob>', 'target': '<bob>'},
+                               {'source': '<fred>', 'id': '<emily>', 'target': '<emily>'}]}
         actual = TorqueTest.g.v("<bob>").out().tag("source").inc().tag("target").all()
         self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_5(self):
-        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
+        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'},
+                               {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
         self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_6(self):
-        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'}, {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
+        expected = {'result': [{'source': '<greg>', 'id': '<dani>', 'target': '<dani>'},
+                               {'source': '<greg>', 'id': '<fred>', 'target': '<fred>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().tag("target").all()
         self.assertEqual(ordered(expected), ordered(actual))
 
@@ -88,7 +98,10 @@ class TorqueTest(unittest.TestCase):
         self.assertEqual(ordered(expected), ordered(actual))
 
     def test_torque_8(self):
-        expected = {'result': [{'source': '<greg>', 'id': 'cool_person', 'target': 'cool_person'}, {'source': '<greg>', 'id': '<bob>', 'target': '<bob>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}, {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}]}
+        expected = {'result': [{'source': '<greg>', 'id': 'cool_person', 'target': 'cool_person'},
+                               {'source': '<greg>', 'id': '<bob>', 'target': '<bob>'},
+                               {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'},
+                               {'source': '<greg>', 'id': '<greg>', 'target': '<greg>'}]}
         actual = TorqueTest.g.v("<fred>").out().tag("source").inc().out().tag("target").all()
         self.assertEqual(ordered(expected), ordered(actual))
 
@@ -109,11 +122,11 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_12(self):
-        expected = {'result': [{'id': '<bob>'}, {'id': '<dani>'}, {'id': '<emily>'}, {'id': '"cool_person"'}, {'id': '<greg>'}, {'id': '<fred>'}, {'id': '<alice>'}, {'id': '<charlie>'}]}
-        actual = TorqueTest.g.scan(3,'v')
+        actual = TorqueTest.g.scan(3, 'v')
+        print(actual)
         self.assertTrue(3 == len(actual['result']))
         with self.assertRaises(AssertionError):
-            TorqueTest.g.scan('v',3)
+            TorqueTest.g.scan('v', 3)
 
     def test_torque_13(self):
         expected = {'result': [{'id': '<greg>'}, {'id': '<dani>'}, {'id': '<bob>'}]}
@@ -121,7 +134,9 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
 
     def test_torque_14(self):
-        expected = {'result': [{'id': '<fred>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<alice>'}]}
+        expected = {
+            'result': [{'id': '<fred>'}, {'id': '<dani>'}, {'id': '<charlie>'}, {'id': '<dani>'}, {'id': '<charlie>'},
+                       {'id': '<alice>'}]}
         actual = TorqueTest.g.v().inc(["<status>"]).inc("<follows>").all()
         self.assertTrue(expected == actual)
 
@@ -159,14 +174,15 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
 
     def test_torque_21(self):
-        expected = {'result': [{'id': '<dani>', 'edges': ['<follows>']}, {'id': '<charlie>', 'edges': ['<follows>']}, {'id': '<alice>', 'edges': ['<follows>']}]}
+        expected = {'result': [{'id': '<dani>', 'edges': ['<follows>']}, {'id': '<charlie>', 'edges': ['<follows>']},
+                               {'id': '<alice>', 'edges': ['<follows>']}]}
         actual = TorqueTest.g.v().has("<follows>", "<fred>").inc().all('e')
         self.assertTrue(expected == actual)
 
     @classmethod
     def tearDownClass(cls):
         TorqueTest.g.close()
-        shutil.rmtree("/tmp/"+DIR_NAME)
+        shutil.rmtree("/tmp/" + DIR_NAME)
         print("*** deleted test data.")
 
 

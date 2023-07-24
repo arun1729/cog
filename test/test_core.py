@@ -149,6 +149,35 @@ class TestCore(unittest.TestCase):
         #set original config back
         config.INDEX_CAPACITY = orig_conf
 
+    def test_collision_large(self):
+        orig_conf = config.INDEX_CAPACITY
+        dictConfig(config.logging_config)
+        logger = logging.getLogger()
+
+        table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
+        config.INDEX_CAPACITY = 4
+        print(config.COG_HOME)
+        store = table.store
+        index = table.indexer.index_list[0]
+
+        num_records = 1000  # Increase this as per your requirements
+        expected_data_list = [Record(f"rocket{i}", f"rocket_name_{i}") for i in range(num_records)]
+
+        for rec in expected_data_list:
+            position = store.save(rec)
+            index.put(rec.key, position, store)
+
+        for rec in expected_data_list:
+            returned_data = index.get(rec.key, store)
+            print(f"retrieved data for key {rec.key}: {str(returned_data)}")
+            self.assertTrue(rec.is_equal_val(returned_data))
+
+        index.close()
+        store.close()
+
+        # set original config back
+        config.INDEX_CAPACITY = orig_conf
+
     def test_put_get_list(self):
         dictConfig(config.logging_config)
         logger = logging.getLogger()

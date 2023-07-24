@@ -52,7 +52,6 @@ class BlankNode(object):
 
     @classmethod
     def is_id(cls, label):
-        # print("--- > is_id", label)
         return label.startswith("_:" + BlankNode.ID_PREFIX)
 
 
