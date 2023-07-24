@@ -26,8 +26,6 @@ class Cache:
             return None
 
     def partial_update_from_zero_index(self, key, partial_value):
-        # print("cache: "+ str(self.cache))
-        # print("parital update: " + str(key) + " -> " + str(partial_value))
         end_pos = len(partial_value)
         if key not in self.cache:
             return
