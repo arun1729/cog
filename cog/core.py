@@ -259,7 +259,6 @@ class Index:
                         # update in place the key link pointer of pervios record, ! need to add fixed length padding.
                         store.update_record_link_inplace(prev_record.store_position, existing_record.key_link)
                         key_link = existing_record.key_link
-                        break
                     prev_record = existing_record
 
         self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
