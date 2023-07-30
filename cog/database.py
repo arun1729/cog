@@ -252,25 +252,27 @@ class Cog:
                 self.cache.popitem(last=False)
 
         new_record = Record(data.key, data.value, value_type='l')
+        position = None  # initialize position
 
-        if record is not None and data.value not in record.value:
-            new_record.set_value_link(record.store_position)
+        if record is None:
             position = self.current_table.store.save(new_record)
             self.current_table.indexer.put(new_record.key, position, self.current_table.store)
+        else:
+            if data.value not in record.value:
+                new_record.set_value_link(record.store_position)
+                position = self.current_table.store.save(new_record)
+                self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
-            if cache_key in self.cache and data.value not in self.cache[cache_key].value:
+        if cache_key in self.cache:
+            if record and data.value not in self.cache[cache_key].value:
                 self.cache[cache_key].value.add(data.value)
-                self.cache[cache_key].store_position = position
+                if position is not None:  # Update position if new record saved
+                    self.cache[cache_key].store_position = position
+        else:
+            if record:
+                self.cache[cache_key] = CacheData(record.store_position, set(record.value))
             else:
                 self.cache[cache_key] = CacheData(position, {data.value})
-
-        elif record is None:
-            position = self.current_table.store.save(new_record)
-            self.current_table.indexer.put(new_record.key, position, self.current_table.store)
-            self.cache[cache_key] = CacheData(position, {data.value})
-        else:
-            if cache_key not in self.cache:  # handling the condition when the data.value is already present in record.value
-                self.cache[cache_key] = CacheData(record.store_position, {data.value})
 
         self.cache.move_to_end(cache_key)
 

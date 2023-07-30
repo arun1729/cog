@@ -75,9 +75,10 @@ class TestDB2(unittest.TestCase):
 
         cogdb.put_set(Record('key1', 'value1'))
         cogdb.put_set(Record('key1', 'value1'))
+        cogdb.put_set(Record('key1', 'value2'))
 
         record = cogdb.get('key1')
-        self.assertEqual(record.value, ['value1'])  # record value should still be 'value1'
+        self.assertEqual(record.value, ['value2', 'value1'])
 
         cogdb.close()
 
