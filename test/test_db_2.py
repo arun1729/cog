@@ -60,7 +60,29 @@ class TestDB2(unittest.TestCase):
 
         cogdb.close()
 
+    def test_put_same_value_multiple_times(self):
+        db_path = '/tmp/cogtestdb4'
+        try:
+            os.makedirs(db_path)
+        except OSError:
+            if not os.path.isdir(db_path):
+                raise
+        config.CUSTOM_COG_DB_PATH = db_path
+
+        cogdb = Cog()
+        cogdb.create_or_load_namespace("my_namespace_5")
+        cogdb.create_table("new_db", "my_namespace_5")
+
+        cogdb.put_set(Record('key1', 'value1'))
+        cogdb.put_set(Record('key1', 'value1'))
+
+        record = cogdb.get('key1')
+        self.assertEqual(record.value, ['value1'])  # record value should still be 'value1'
+
+        cogdb.close()
+
     def test_zzz_after_all_tests(self):
         shutil.rmtree('/tmp/cogtestdb2')
         shutil.rmtree('/tmp/cogtestdb3')
+        shutil.rmtree('/tmp/cogtestdb4')
         print("*** deleted test data.")

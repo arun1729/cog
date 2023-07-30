@@ -242,7 +242,6 @@ class Cog:
         assert isinstance(data.key, str), "Only string type is supported."
         assert isinstance(data.value, str), "Only string type is supported."
 
-        # use (table name, key) as the cache key
         cache_key = (self.current_table.table_meta.name, data.key)
 
         if cache_key in self.cache:
@@ -269,6 +268,10 @@ class Cog:
             position = self.current_table.store.save(new_record)
             self.current_table.indexer.put(new_record.key, position, self.current_table.store)
             self.cache[cache_key] = CacheData(position, {data.value})
+        else:
+            if cache_key not in self.cache:  # handling the condition when the data.value is already present in record.value
+                self.cache[cache_key] = CacheData(record.store_position, {data.value})
+
         self.cache.move_to_end(cache_key)
 
     def get(self, key):
