@@ -178,6 +178,13 @@ class Cog:
         for r in self.scanner():
             pass
 
+    def flush_all(self):
+        for space in self.namespaces.values():
+            if space is None:
+                continue
+            for table in space.values():
+                table.store.flush()
+
     def print_cache_info(self):
         print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name,
                                                      str(self.current_table.store.store_cache.size_list())))
@@ -218,12 +225,12 @@ class Cog:
 
         return self
 
-    def put(self, data):
+    def put(self, data, flush=True):
         assert type(data.key) is str, "key must be a string."
-        position = self.current_table.store.save(data)
+        position = self.current_table.store.save(data, flush=flush)
         self.current_table.indexer.put(data.key, position, self.current_table.store)
 
-    def put_list(self, data):
+    def put_list(self, data, flush=True):
         '''
         Creates or appends to a list. If the key does not exist a new list is created, else it appends.
         :param data:
@@ -235,10 +242,10 @@ class Cog:
         new_record = Record(data.key, data.value, value_type='l')
         if record is not None:
             new_record.set_value_link(record.store_position)
-        position = self.current_table.store.save(new_record)
+        position = self.current_table.store.save(new_record, flush=flush)
         self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
-    def put_set(self, data):
+    def put_set(self, data, flush=True):
         assert isinstance(data.key, str), "Only string type is supported."
         assert isinstance(data.value, str), "Only string type is supported."
 
@@ -255,12 +262,12 @@ class Cog:
         position = None  # initialize position
 
         if record is None:
-            position = self.current_table.store.save(new_record)
+            position = self.current_table.store.save(new_record, flush=flush)
             self.current_table.indexer.put(new_record.key, position, self.current_table.store)
         else:
             if data.value not in record.value:
                 new_record.set_value_link(record.store_position)
-                position = self.current_table.store.save(new_record)
+                position = self.current_table.store.save(new_record, flush=flush)
                 self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
         if cache_key in self.cache:
@@ -338,7 +345,7 @@ class Cog:
             else:
                 self.use_table(predicate_hashed).delete(in_nodes(vertex2))
 
-    def put_node(self, vertex1, predicate, vertex2):
+    def put_node(self, vertex1, predicate, vertex2, flush=True):
         """
          Graph method
         :param vertex1: string
@@ -359,13 +366,13 @@ class Cog:
         """
         # add to node set
         predicate_hashed = hash_predicate(predicate)
-        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
-        self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), vertex2))
-        self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), vertex1))
+        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate), flush=flush)
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""), flush=flush)
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""), flush=flush)
+        self.use_table(predicate_hashed).put_set(Record(out_nodes(vertex1), vertex2), flush=flush)
+        self.use_table(predicate_hashed).put_set(Record(in_nodes(vertex2), vertex1), flush=flush)
 
-    def put_new_edge(self, vertex1, predicate, vertex2):
+    def put_new_edge(self, vertex1, predicate, vertex2, flush=True):
         """
         Graph method
         :param vertex1: string
@@ -374,13 +381,13 @@ class Cog:
         :return:
         """
         predicate_hashed = hash_predicate(predicate)
-        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""))
-        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""))
-        self.use_table(predicate_hashed).put(Record(out_nodes(vertex1), vertex2))
-        self.use_table(predicate_hashed).put(Record(in_nodes(vertex2), vertex1))
+        self.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(str(predicate_hashed), predicate), flush=flush)
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex1, ""), flush=flush)
+        self.use_table(self.config.GRAPH_NODE_SET_TABLE_NAME).put(Record(vertex2, ""), flush=flush)
+        self.use_table(predicate_hashed).put(Record(out_nodes(vertex1), vertex2), flush=flush)
+        self.use_table(predicate_hashed).put(Record(in_nodes(vertex2), vertex1), flush=flush)
 
-    def update_edge(self, vertex1, predicate, vertex2, update_list_item=False):
+    def update_edge(self, vertex1, predicate, vertex2, update_list_item=False, flush=True):
         """
         :param vertex1: string
         :param predicate:
@@ -400,7 +407,7 @@ class Cog:
             self.__delete_links(in_object, predicate_hashed)
 
         # create new edge (both ways)
-        self.put_node(vertex1, predicate, vertex2)
+        self.put_node(vertex1, predicate, vertex2, flush=flush)
 
     def __delete_links(self, vertex_object, predicate_hashed):
         if vertex_object.value_type == 'l':
@@ -424,7 +431,8 @@ class Cog:
             for line in f:
                 subject, predicate, object, context = parse_tripple(line)
                 self.load_table(hash_predicate(predicate), graph_name)
-                self.put_node(subject, predicate, object)
+                self.put_node(subject, predicate, object, flush=False)
+        self.flush_all()
 
     def load_edgelist(self, edgelist_file_path, graph_name, predicate="none"):
         """
@@ -442,7 +450,8 @@ class Cog:
                 v1 = tokens[0].strip()
                 v2 = tokens[1].strip()
                 self.create_or_load_table(predicate, graph_name)
-                self.put_node(v1, predicate, v2)
+                self.put_node(v1, predicate, v2, flush=False)
+        self.flush_all()
 
     def load_csv(self, file_name, id_column_name, graph_name):
         """
@@ -461,5 +470,6 @@ class Cog:
                     subject = row[id_column_name]
                     predicate = k
                     obj = row[k]
-                    self.put_node(subject, predicate, obj)
+                    self.put_node(subject, predicate, obj, flush=False)
                     self.logger.info("""loaded: __:{0} {1} {2} .""".format(subject, predicate, obj))
+        self.flush_all()

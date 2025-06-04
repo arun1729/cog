@@ -5,7 +5,7 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.0.5
+> New release: 3.0.8
 > - New word embeddings API
 > - Similarity filtering using word embeddings
 > - Filter step
