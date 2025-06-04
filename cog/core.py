@@ -374,7 +374,6 @@ class Store:
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         self.store_cache = Cache(self.store, shared_cache)
-        self._write_count = 0
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
@@ -393,10 +392,8 @@ class Store:
         record.set_store_position(store_position)
         marshalled_record = record.marshal()
         self.store_file.write(marshalled_record)
-        self._write_count += len(marshalled_record)
         if flush:
             self.store_file.flush()
-            self._write_count = 0
         if self.caching_enabled:
             self.store_cache.put(store_position, marshalled_record)
         return store_position
