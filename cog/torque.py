@@ -309,7 +309,7 @@ class Graph:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
             elif direction == 'in':
                 in_record = self.cog.use_table(predicate).get(in_nodes(vertex.id))
-                if not in_record is not None:
+                if in_record is not None:
                     for v_adj in in_record.value:
                         adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
 

@@ -179,6 +179,11 @@ class TorqueTest(unittest.TestCase):
         actual = TorqueTest.g.v().has("<follows>", "<fred>").inc().all('e')
         self.assertTrue(expected == actual)
 
+    def test_torque_22(self):
+        expected = {'result': [{'id': '<bob>'}]}
+        actual = TorqueTest.g.v().hasr("<follows>", "<alice>").all()
+        self.assertEqual(expected, actual)
+
     @classmethod
     def tearDownClass(cls):
         TorqueTest.g.close()
