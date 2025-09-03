@@ -421,9 +421,7 @@ class Graph:
         '''
             Applies a filter function to the vertices and removes any vertices that do not pass the filter.
         '''
-        for v in self.last_visited_vertices:
-            if not func(v.id):
-                self.last_visited_vertices.remove(v)
+        self.last_visited_vertices = [v for v in self.last_visited_vertices if func(v.id)]
         return self
 
     def sim(self, word, operator, threshold, strict=False):
