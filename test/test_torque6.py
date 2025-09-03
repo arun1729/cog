@@ -97,6 +97,15 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
         g.close()
 
+    def test_filter_multiple_non_matches(self):
+        g = Graph(graph_name="test6", cog_home=DIR_NAME)
+        traversal = g.v(["greg", "tom", "alice"])
+        returned = traversal.filter(func=lambda x: x == 'alice')
+        self.assertIs(returned, traversal)
+        expected = {'result': [{'id': 'alice'}]}
+        self.assertTrue(expected == returned.all())
+        g.close()
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("/tmp/" + DIR_NAME)
