@@ -377,6 +377,15 @@ class Store:
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
+        # Use memory mapping for faster reads on large files
+        try:
+            if os.path.getsize(self.store) > 0:
+                self.store_mem = mmap.mmap(self.store_file.fileno(), 0)
+            else:
+                self.store_mem = None
+        except (ValueError, OSError):
+            self.store_mem = None
+            self.logger.warning("Could not create memory map for store, falling back to file I/O")
         logger.info("Store for file init: " + self.store)
 
     def close(self):
@@ -418,8 +427,12 @@ class Store:
             if cached_record is not None:
                 return cached_record
 
-        self.store_file.seek(position)
-        record = self.__read_until()
+        # Use memory-mapped file if available for faster reads
+        if self.store_mem is not None:
+            record = self.__read_until_mmap(position)
+        else:
+            self.store_file.seek(position)
+            record = self.__read_until()
 
         if self.caching_enabled:
             self.store_cache.put(position, record)
@@ -450,6 +463,44 @@ class Store:
             else:
                 data += chunk
         self.logger.debug("store __read_until: " + str(data))
+        return data
+
+    # @profile
+    def __read_until_mmap(self, position):
+        """Read from memory-mapped file until RECORD_SEP"""
+        self.logger.debug("store __read_until_mmap at position: " + str(position))
+        data = None
+        cursor = position
+        
+        while True:
+            # Read chunk from memory-mapped file
+            end_pos = min(cursor + self.config.STORE_READ_BUFFER_SIZE, len(self.store_mem))
+            chunk = self.store_mem[cursor:end_pos]
+            
+            if len(chunk) == 0:
+                return data
+            
+            i = chunk.find(RECORD_SEP)
+            
+            if i >= 0:
+                chunk = chunk[:i + 1]
+                if data is None:
+                    data = chunk
+                else:
+                    data += chunk
+                break
+            
+            if data is None:
+                data = chunk
+            else:
+                data += chunk
+            
+            cursor = end_pos
+            
+            if cursor >= len(self.store_mem):
+                break
+        
+        self.logger.debug("store __read_until_mmap: " + str(data))
         return data
 
 
