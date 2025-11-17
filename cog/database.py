@@ -51,12 +51,13 @@ def parse_tripple(tripple):
 
 
 class CacheData:
-    def __init__(self, position, value):
+    def __init__(self, position, value, value_type='s'):
         self.store_position = position
         self.value = value
+        self.value_type = value_type
 
     def __str__(self):
-        return f"CacheData(position: {self.store_position}, value: {self.value})"
+        return f"CacheData(position: {self.store_position}, value: {self.value}, value_type: {self.value_type})"
 
     __repr__ = __str__
 
@@ -265,21 +266,44 @@ class Cog:
 
         if cache_key in self.cache:
             if record and data.value not in self.cache[cache_key].value:
-                self.cache[cache_key].value.add(data.value)
+                self.cache[cache_key].value.append(data.value)
                 if position is not None:  # Update position if new record saved
                     self.cache[cache_key].store_position = position
         else:
             if record:
-                self.cache[cache_key] = CacheData(record.store_position, set(record.value))
+                self.cache[cache_key] = CacheData(record.store_position, list(record.value), value_type='l')
             else:
-                self.cache[cache_key] = CacheData(position, {data.value})
+                self.cache[cache_key] = CacheData(position, [data.value], value_type='l')
 
         self.cache.move_to_end(cache_key)
 
     def get(self, key):
-        if key in self.cache:
-            return self.cache[key]
-        return self.current_table.indexer.get(key, self.current_table.store)
+        cache_key = (self.current_table.table_meta.name, key)
+
+        # Check cache first
+        if cache_key in self.cache:
+            cached_data = self.cache[cache_key]
+            self.cache.move_to_end(cache_key)  # Mark as recently used
+            # Create Record from cached data with correct value_type
+            record = Record(key, cached_data.value, value_type=cached_data.value_type)
+            record.store_position = cached_data.store_position
+            return record
+
+        # Fetch from disk
+        record = self.current_table.indexer.get(key, self.current_table.store)
+
+        # Cache multi-value results (lists and sets)
+        if record and record.value_type in ('l', 'u'):
+            if len(self.cache) >= self.config.LEVEL_2_CACHE_SIZE:
+                self.cache.popitem(last=False)
+            self.cache[cache_key] = CacheData(
+                record.store_position,
+                set(record.value) if record.value_type == 'u' else record.value,
+                value_type=record.value_type
+            )
+            self.cache.move_to_end(cache_key)
+
+        return record
 
     def scanner(self, table=None, scan_filter=None):
         scan_itr = self.current_table.indexer.scanner(self.current_table.store) if not table else table.indexer.scanner(

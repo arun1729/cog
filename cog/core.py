@@ -373,7 +373,8 @@ class Store:
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
-        self.store_cache = Cache(self.store, shared_cache)
+        self.store_cache = Cache(self.store, shared_cache,
+                                  max_size=self.config.STORE_CACHE_MAX_SIZE)
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
@@ -496,8 +497,12 @@ class Indexer:
 
     # @profile
     def get(self, key, store):
-        idx = self.index_list[0]  # only one index file.
-        return idx.get(key, store)
+        # Search all indexes for the key (newest first for recency)
+        for idx in reversed(self.index_list):
+            result = idx.get(key, store)
+            if result is not None:
+                return result
+        return None
 
     def scanner(self, store):
         for idx in self.index_list:

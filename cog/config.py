@@ -10,6 +10,7 @@ INDEX="-index-"
 INDEX_BLOCK_LEN = 32
 INDEX_CAPACITY = 100003 # must be a prime number
 STORE_READ_BUFFER_SIZE = 512
+STORE_CACHE_MAX_SIZE = 50000  # Level 1 cache max size (LRU eviction)
 LEVEL_2_CACHE_SIZE = 100000
 
 ''' TORQUE '''
