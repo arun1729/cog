@@ -35,8 +35,9 @@ class TestIndex2(unittest.TestCase):
         index = Index(tablemeta, config, logger, 0)
         test_size = 30
         for i in range(test_size):
-            key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
-            value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
+            # Use deterministic keys to avoid hash collision flakiness
+            key = f"idx_key_{i:010d}"
+            value = f"idx_value_{i:0100d}"
             expected_data = Record(key, value)
             position=store.save(expected_data)
             index.put(expected_data.key,position,store)
