@@ -5,7 +5,10 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.0.5
+> New release: 3.1.0
+> - **Batch insert mode** for significantly faster bulk graph loading
+> - New `put_batch()` method for efficient triple insertion
+> - Performance improvements: up to 1.6x faster inserts at scale
 > - New word embeddings API
 > - Similarity filtering using word embeddings
 > - Filter step
@@ -43,6 +46,22 @@ g.put("bob","score","5")
 g.put("greg","score","10")
 g.put("alice","score","7")
 g.put("dani","score","100")
+```
+
+#### Using `put_batch` for bulk inserts (faster)
+
+```python
+from cog.torque import Graph
+g = Graph("people")
+
+# Insert multiple triples at once - significantly faster for large graphs
+g.put_batch([
+    ("alice", "follows", "bob"),
+    ("bob", "follows", "charlie"),
+    ("charlie", "follows", "alice"),
+    ("alice", "likes", "pizza"),
+    ("bob", "likes", "tacos"),
+])
 ```
 
 #### Drop Edge ###
@@ -292,4 +311,19 @@ for r in scanner:
 
 ## Benchmark
 
-# ![Put Perf](notes/bench.png)
+![Put Perf](notes/bench.png)
+
+### Performance Results
+
+Run benchmarks with: `python3 test/benchmark.py`
+
+| Graph Type | Edges | Speed (edges/s) |
+|------------|-------|----------------|
+| Chain (batch) | 5,000 | 4,377 |
+| Social network | 12,492 | 3,233 |
+| Dense graph | 985 | 2,585 |
+| Chain (individual) | 5,000 | 2,712 |
+
+**Batch vs Individual Insert:**
+- 1.6x faster at 5,000 edges
+- Read performance: 20,000+ ops/second
