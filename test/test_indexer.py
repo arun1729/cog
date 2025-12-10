@@ -39,9 +39,10 @@ class TestIndexer(unittest.TestCase):
 
         max_range=100
         for i in range(max_range):
-            key= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
-            value= ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(100))
-            expected_data = Record(key,value)
+            # Use deterministic keys to avoid hash collision flakiness
+            key = f"test_key_{i:010d}"
+            value = f"test_value_{i:0100d}"
+            expected_data = Record(key, value)
 
             position=store.save(expected_data)
             indexer.put(expected_data.key,position,store)
