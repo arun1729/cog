@@ -367,6 +367,7 @@ class Store:
 
     def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None):
         self.caching_enabled = caching_enabled
+        self.batch_mode = False  # When True, defers flush() until end_batch()
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
@@ -380,7 +381,23 @@ class Store:
         logger.info("Store for file init: " + self.store)
 
     def close(self):
+        if self.batch_mode:
+            self.store_file.flush()  # Ensure pending writes are flushed on close
         self.store_file.close()
+
+    def begin_batch(self):
+        """
+        Enable batch mode - defers flush() until end_batch() is called.
+        Use this when inserting many records for significantly better performance.
+        """
+        self.batch_mode = True
+
+    def end_batch(self):
+        """
+        End batch mode and flush all pending writes to disk.
+        """
+        self.store_file.flush()
+        self.batch_mode = False
 
     def save(self, record):
         """
@@ -391,7 +408,8 @@ class Store:
         record.set_store_position(store_position)
         marshalled_record = record.marshal()
         self.store_file.write(marshalled_record)
-        self.store_file.flush()
+        if not self.batch_mode:
+            self.store_file.flush()
         if self.caching_enabled:
             self.store_cache.put(store_position, marshalled_record)
         return store_position
@@ -408,7 +426,8 @@ class Store:
 
         if self.caching_enabled:
             self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
-        self.store_file.flush()
+        if not self.batch_mode:
+            self.store_file.flush()
 
     # @profile
     def read(self, position):

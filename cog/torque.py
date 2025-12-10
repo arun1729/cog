@@ -221,6 +221,32 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
         return self
 
+    def put_batch(self, triples):
+        """
+        Insert multiple triples efficiently using batch mode.
+        Significantly faster than calling put() in a loop for large datasets.
+        
+        :param triples: List of (vertex1, predicate, vertex2) tuples
+        :return: self for method chaining
+        
+        Example:
+            g.put_batch([
+                ("alice", "follows", "bob"),
+                ("bob", "follows", "charlie"),
+                ("charlie", "follows", "alice")
+            ])
+        """
+        self.cog.use_namespace(self.graph_name)
+        self.cog.begin_batch()
+        try:
+            for v1, pred, v2 in triples:
+                self.cog.use_table(pred)
+                self.cog.put_node(v1, pred, v2)
+        finally:
+            self.cog.end_batch()
+        self.all_predicates = self.cog.list_tables()
+        return self
+
     def drop(self, vertex1, predicate, vertex2):
         """
         Drops edge between vertex1 and vertex2 for the given predicate.

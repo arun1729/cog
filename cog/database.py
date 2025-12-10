@@ -182,6 +182,25 @@ class Cog:
         print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name,
                                                      str(self.current_table.store.store_cache.size_list())))
 
+    def begin_batch(self):
+        """
+        Enable batch mode on all tables in the current namespace.
+        Defers flush() until end_batch() is called for better bulk insert performance.
+        """
+        if self.current_namespace in self.namespaces and self.namespaces[self.current_namespace]:
+            for table in self.namespaces[self.current_namespace].values():
+                if table:
+                    table.store.begin_batch()
+
+    def end_batch(self):
+        """
+        End batch mode and flush all pending writes to disk.
+        """
+        if self.current_namespace in self.namespaces and self.namespaces[self.current_namespace]:
+            for table in self.namespaces[self.current_namespace].values():
+                if table:
+                    table.store.end_batch()
+
     def close(self):
         for name, space in self.namespaces.items():
             if space is None:
