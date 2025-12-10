@@ -9,3 +9,4 @@ build/
 test.png
 .coverage
 test/.coverage
+PRIVATE_NOTES.md
