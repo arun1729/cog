@@ -1,17 +1,14 @@
 ![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8+-blue.svg)
- [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog)
+ [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog) [![Discord](https://img.shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/nqNpNGfjts)
 
 # ![logo](cog-logo.png)
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.1.0
-> - **Batch insert mode** for significantly faster bulk graph loading
-> - New `put_batch()` method for efficient triple insertion
-> - Performance improvements: up to 1.6x faster inserts at scale
-> - New word embeddings API
-> - Similarity filtering using word embeddings
-> - Filter step
+> New release: 3.2.0
+> - New Torque query methods: `both()`, `is_()`, `unique()`, `limit()`, `skip()`, `back()`
+> - Bidirectional traversal and pagination support
+> - Navigate back to tagged vertices
 
 ![ScreenShot](notes/ex2.png)
 
@@ -181,6 +178,52 @@ g.v().out("score").filter(func=lambda x: int(x) > 5).inc().all()
 g.v("emily").out("follows").filter(func=lambda x: x.startswith("f")).all()
 ```
 > {'result': [{'id': 'fred'}]}
+
+#### Bidirectional Traversal
+
+Follow edges in both directions (outgoing and incoming):
+```python
+g.v("bob").both("follows").all()
+```
+> {'result': [{'id': 'fred'}, {'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
+
+#### Filter to Specific Nodes
+
+Filter results to only include specific vertices:
+```python
+g.v("alice").out("follows").is_("bob", "dani").all()
+```
+> {'result': [{'id': 'bob'}, {'id': 'dani'}]}
+
+#### Remove Duplicates
+
+Remove duplicate vertices from results:
+```python
+g.v().out("follows").unique().all()
+```
+> {'result': [{'id': 'bob'}, {'id': 'fred'}, {'id': 'greg'}, {'id': 'dani'}]}
+
+#### Pagination with Limit and Skip
+
+Limit results to first N vertices:
+```python
+g.v().limit(3).all()
+```
+> {'result': [{'id': 'alice'}, {'id': 'bob'}, {'id': 'charlie'}]}
+
+Skip first N vertices:
+```python
+g.v().skip(2).limit(2).all()
+```
+> {'result': [{'id': 'charlie'}, {'id': 'dani'}]}
+
+#### Navigate Back to Tagged Vertex
+
+Return to a previously tagged position while preserving the traversal path:
+```python
+g.v("alice").tag("start").out("follows").out("follows").back("start").all()
+```
+> {'result': [{'start': 'alice', 'id': 'alice'}]}
 
 
 #### json example
