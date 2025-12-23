@@ -5,13 +5,10 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.1.0
-> - **Batch insert mode** for significantly faster bulk graph loading
-> - New `put_batch()` method for efficient triple insertion
-> - Performance improvements: up to 1.6x faster inserts at scale
-> - New word embeddings API
-> - Similarity filtering using word embeddings
-> - Filter step
+> New release: 3.2.0
+> - New Torque query methods: `both()`, `is_()`, `unique()`, `limit()`, `skip()`, `back()`
+> - Bidirectional traversal and pagination support
+> - Navigate back to tagged vertices
 
 ![ScreenShot](notes/ex2.png)
 

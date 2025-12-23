@@ -2,7 +2,7 @@ from setuptools import setup
 
 
 setup(name='cogdb',
-      version='3.1.0',
+      version='3.2.0',
       description='Persistent Embedded Graph Database',
       url='http://github.com/arun1729/cog',
       author='Arun Mahendra',
