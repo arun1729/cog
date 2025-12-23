@@ -182,6 +182,52 @@ g.v("emily").out("follows").filter(func=lambda x: x.startswith("f")).all()
 ```
 > {'result': [{'id': 'fred'}]}
 
+#### Bidirectional Traversal
+
+Follow edges in both directions (outgoing and incoming):
+```python
+g.v("bob").both("follows").all()
+```
+> {'result': [{'id': 'fred'}, {'id': 'alice'}, {'id': 'charlie'}, {'id': 'dani'}]}
+
+#### Filter to Specific Nodes
+
+Filter results to only include specific vertices:
+```python
+g.v("alice").out("follows").is_("bob", "dani").all()
+```
+> {'result': [{'id': 'bob'}, {'id': 'dani'}]}
+
+#### Remove Duplicates
+
+Remove duplicate vertices from results:
+```python
+g.v().out("follows").unique().all()
+```
+> {'result': [{'id': 'bob'}, {'id': 'fred'}, {'id': 'greg'}, {'id': 'dani'}]}
+
+#### Pagination with Limit and Skip
+
+Limit results to first N vertices:
+```python
+g.v().limit(3).all()
+```
+> {'result': [{'id': 'alice'}, {'id': 'bob'}, {'id': 'charlie'}]}
+
+Skip first N vertices:
+```python
+g.v().skip(2).limit(2).all()
+```
+> {'result': [{'id': 'charlie'}, {'id': 'dani'}]}
+
+#### Navigate Back to Tagged Vertex
+
+Return to a previously tagged position while preserving the traversal path:
+```python
+g.v("alice").tag("start").out("follows").out("follows").back("start").all()
+```
+> {'result': [{'start': 'alice', 'id': 'alice'}]}
+
 
 #### json example
 

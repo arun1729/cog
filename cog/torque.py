@@ -450,6 +450,114 @@ class Graph:
         self.last_visited_vertices = [v for v in self.last_visited_vertices if func(v.id)]
         return self
 
+    def both(self, predicates=None):
+        '''
+        Traverse edges in both directions (out + in).
+        :param predicates: A string or list of predicate strings to follow.
+        :return: self for method chaining.
+        '''
+        if predicates is not None:
+            if not isinstance(predicates, list):
+                predicates = [predicates]
+            predicates = list(map(hash_predicate, predicates))
+        else:
+            predicates = self.all_predicates
+
+        self.cog.use_namespace(self.graph_name)
+        traverse_vertex = []
+
+        for predicate in predicates:
+            for v in self.last_visited_vertices:
+                # Outgoing edges
+                out_record = self.cog.use_table(predicate).get(out_nodes(v.id))
+                if out_record is not None:
+                    if out_record.value_type == "s":
+                        v_adj = Vertex(str(out_record.value)).set_edge(predicate)
+                        v_adj.tags.update(v.tags)
+                        traverse_vertex.append(v_adj)
+                    elif out_record.value_type == "l":
+                        for v_adjacent in out_record.value:
+                            v_adj = Vertex(v_adjacent).set_edge(predicate)
+                            v_adj.tags.update(v.tags)
+                            traverse_vertex.append(v_adj)
+
+                # Incoming edges
+                in_record = self.cog.use_table(predicate).get(in_nodes(v.id))
+                if in_record is not None:
+                    if in_record.value_type == "s":
+                        v_adj = Vertex(str(in_record.value)).set_edge(predicate)
+                        v_adj.tags.update(v.tags)
+                        traverse_vertex.append(v_adj)
+                    elif in_record.value_type == "l":
+                        for v_adjacent in in_record.value:
+                            v_adj = Vertex(v_adjacent).set_edge(predicate)
+                            v_adj.tags.update(v.tags)
+                            traverse_vertex.append(v_adj)
+
+        self.last_visited_vertices = traverse_vertex
+        return self
+
+    def is_(self, *nodes):
+        '''
+        Filter paths to only those currently at the specified node(s).
+        :param nodes: One or more node IDs to filter to.
+        :return: self for method chaining.
+        '''
+        if len(nodes) == 1 and isinstance(nodes[0], list):
+            node_set = set(nodes[0])
+        else:
+            node_set = set(nodes)
+        self.last_visited_vertices = [v for v in self.last_visited_vertices if v.id in node_set]
+        return self
+
+    def unique(self):
+        '''
+        Remove duplicate vertices from the result set.
+        :return: self for method chaining.
+        '''
+        seen = set()
+        unique_vertices = []
+        for v in self.last_visited_vertices:
+            if v.id not in seen:
+                seen.add(v.id)
+                unique_vertices.append(v)
+        self.last_visited_vertices = unique_vertices
+        return self
+
+    def limit(self, n):
+        '''
+        Limit results to the first N vertices.
+        :param n: Maximum number of vertices to return.
+        :return: self for method chaining.
+        '''
+        self.last_visited_vertices = self.last_visited_vertices[:n]
+        return self
+
+    def skip(self, n):
+        '''
+        Skip the first N vertices in the result set.
+        :param n: Number of vertices to skip.
+        :return: self for method chaining.
+        '''
+        self.last_visited_vertices = self.last_visited_vertices[n:]
+        return self
+
+    def back(self, tag):
+        '''
+        Return to vertices saved at the given tag, preserving all constraints.
+        :param tag: A previous tag in the query to jump back to.
+        :return: self for method chaining.
+        '''
+        vertices = []
+        for v in self.last_visited_vertices:
+            if tag in v.tags:
+                tagged_vertex = Vertex(v.tags[tag])
+                tagged_vertex.tags = v.tags.copy()
+                tagged_vertex.edges = v.edges.copy()
+                vertices.append(tagged_vertex)
+        self.last_visited_vertices = vertices
+        return self
+
     def sim(self, word, operator, threshold, strict=False):
         """
             Applies cosine similarity filter to the vertices and removes any vertices that do not pass the filter.
