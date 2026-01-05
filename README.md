@@ -5,10 +5,10 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.2.0
-> - New Torque query methods: `both()`, `is_()`, `unique()`, `limit()`, `skip()`, `back()`
-> - Bidirectional traversal and pagination support
-> - Navigate back to tagged vertices
+> New release: 3.3.0
+> - SIMD-optimized vector similarity with [SimSIMD](https://github.com/ashvardanian/SimSIMD) (10-50x faster)
+> - New methods: `k_nearest()`, `load_glove()`, `load_gensim()`, `put_embeddings_batch()`
+> - Bulk embedding loading and k-nearest neighbor search
 
 ![ScreenShot](notes/ex2.png)
 
@@ -252,29 +252,45 @@ In a json, CogDB treats `_id` property as a unique identifier for each object. I
 
 ## Using word embeddings
 
-CogDB supports word embeddings. Word embeddings are a way to represent words as vectors. Word embeddings are useful for many NLP tasks. 
-There are various types of word embeddings, including popular ones like [GloVe](https://nlp.stanford.edu/projects/glove/) and [FastText](https://fasttext.cc/).
+CogDB supports word embeddings with SIMD-optimized similarity search powered by [SimSIMD](https://github.com/ashvardanian/SimSIMD). Word embeddings are useful for semantic search, recommendations, and NLP tasks.
 
-#### Add a word embedding:
+#### Load pre-trained embeddings (GloVe):
+
+```python
+# Load GloVe embeddings (one-liner!)
+count = g.load_glove("glove.6B.100d.txt", limit=50000)
+print(f"Loaded {count} embeddings")
+```
+
+#### Load from Gensim model:
+
+```python
+from gensim.models import Word2Vec
+model = Word2Vec(sentences)
+count = g.load_gensim(model)
+```
+
+#### Add embeddings manually:
 
 ```python
 g.put_embedding("orange", [0.1, 0.2, 0.3, 0.4, 0.5])
+
+# Bulk insert for better performance
+g.put_embeddings_batch([
+    ("apple", [0.1, 0.2, ...]),
+    ("banana", [0.3, 0.4, ...]),
+])
 ```
 
-#### Get a word embedding:
+#### Find k-nearest neighbors:
 
 ```python
-g.get_embedding("orange")
+# Find 5 most similar vertices to "machine_learning"
+g.v().k_nearest("machine_learning", k=5).all()
 ```
+> {'result': [{'id': 'deep_learning'}, {'id': 'neural_network'}, ...]}
 
-> [0.1, 0.2, 0.3, 0.4, 0.5]
-#### Delete a word embedding:
-
-```python
-g.delete_embedding("orange")
-```
-
-#### Use word embeddings in a query:
+#### Filter by similarity threshold:
 
 ```python 
 g.v().sim('orange', '>', 0.35).all()
@@ -286,7 +302,14 @@ g.v().sim('orange', 'in', [0.25, 0.35]).all()
 ```
 > {'result': [{'id': 'banana'}, {'id': 'apple'}]}
 
-In the above code, the sim method is used to filter vertices based on their cosine similarity with the word embedding for "orange". The operator and threshold arguments determine how the similarity is compared to the threshold value, which can be a single value or a range.
+#### Get embedding stats:
+
+```python
+g.embedding_stats()
+```
+> {'count': 50000, 'dimensions': 100}
+
+The `sim` method filters vertices based on cosine similarity. The `k_nearest` method returns the top-k most similar vertices.
 
 ## Loading data from a file
 
