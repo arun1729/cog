@@ -12,6 +12,9 @@ import time
 import random
 from math import isclose
 import warnings
+import heapq
+import simsimd
+import array
 
 NOTAG = "NOTAG"
 
@@ -628,22 +631,21 @@ class Graph:
         return self
 
     def __cosine_similarity(self, word1, word2):
-        x = self.get_embedding(word1)
-        y = self.get_embedding(word2)
+        """Compute cosine similarity using SIMD-optimized simsimd library."""
+        x_list = self.get_embedding(word1)
+        y_list = self.get_embedding(word2)
 
-        if x is None or y is None:
+        if x_list is None or y_list is None:
             return None
+        
+        # simsimd requires buffer protocol (e.g. numpy array or python array)
+        # We use python array to avoid numpy dependency
+        x = array.array('f', x_list)
+        y = array.array('f', y_list)
 
-        dot_product = 0
-        x_norm = 0
-        y_norm = 0
-        for i in range(len(x)):
-            dot_product += x[i] * y[i]
-            x_norm += x[i] ** 2
-            y_norm += y[i] ** 2
-        x_norm = x_norm ** (1 / 2)
-        y_norm = y_norm ** (1 / 2)
-        return dot_product / (x_norm * y_norm)
+        # simsimd.cosine returns distance (1 - similarity), so we convert
+        distance = simsimd.cosine(x, y)
+        return 1.0 - float(distance)
 
     def tag(self, tag_name):
         '''
@@ -735,6 +737,181 @@ class Graph:
         assert isinstance(word, str), "word must be a string"
         self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).delete(
             str(cog_hash(word, self.config.INDEX_CAPACITY)))
+
+    def put_embeddings_batch(self, word_embedding_pairs):
+        """
+        Bulk insert multiple embeddings efficiently.
+        
+        :param word_embedding_pairs: List of (word, embedding) tuples
+        :return: self for method chaining
+        
+        Example:
+            g.put_embeddings_batch([
+                ("apple", [0.1, 0.2, ...]),
+                ("orange", [0.3, 0.4, ...]),
+            ])
+        """
+        self.cog.use_namespace(self.graph_name)
+        self.cog.begin_batch()
+        try:
+            for word, embedding in word_embedding_pairs:
+                if not isinstance(word, str):
+                    raise TypeError("word must be a string")
+                self.cog.use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
+                    str(cog_hash(word, self.config.INDEX_CAPACITY)), embedding))
+        finally:
+            self.cog.end_batch()
+        return self
+
+    def scan_embeddings(self, limit=100):
+        """
+        Scan and return a list of words that have embeddings stored.
+        
+        :param limit: Maximum number of embeddings to return
+        :return: Dictionary with 'result' containing list of words with embeddings
+        
+        Note: This scans the graph vertices and checks which have embeddings.
+        """
+        result = []
+        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+        count = 0
+        for r in self.cog.scanner():
+            if count >= limit:
+                break
+            word = r.key
+            if self.get_embedding(word) is not None:
+                result.append({"id": word})
+                count += 1
+        return {"result": result}
+
+    def embedding_stats(self):
+        """
+        Return statistics about stored embeddings.
+        
+        :return: Dictionary with count and dimensions (if available)
+        """
+        count = 0
+        dimensions = None
+        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+        for r in self.cog.scanner():
+            embedding = self.get_embedding(r.key)
+            if embedding is not None:
+                count += 1
+                if dimensions is None:
+                    dimensions = len(embedding)
+        return {"count": count, "dimensions": dimensions}
+
+    def k_nearest(self, word, k=10):
+        """
+        Find the k vertices most similar to the given word based on embeddings.
+        
+        :param word: The word to find similar vertices for
+        :param k: Number of nearest neighbors to return (default 10)
+        :return: self for method chaining
+        
+        Example:
+            g.v().k_nearest("machine_learning", k=5).all()
+        """
+        target_embedding = self.get_embedding(word)
+        if target_embedding is None:
+            self.last_visited_vertices = []
+            return self
+        
+        # Calculate similarities for all vertices with embeddings
+        # Calculate similarities for all vertices with embeddings
+        # simsimd requires buffer protocol (e.g. numpy array or python array)
+        target_vec = array.array('f', target_embedding)
+        
+        similarities = []
+        for v in self.last_visited_vertices:
+            v_embedding = self.get_embedding(v.id)
+            if v_embedding is not None:
+                # simsimd.cosine returns distance (1 - similarity)
+                v_vec = array.array('f', v_embedding)
+                distance = simsimd.cosine(target_vec, v_vec)
+                similarity = 1.0 - float(distance)
+                similarities.append((similarity, v))
+        
+        # Get top k using heap for efficiency
+        top_k = heapq.nlargest(k, similarities, key=lambda x: x[0])
+        self.last_visited_vertices = [v for _, v in top_k]
+        return self
+
+    def load_glove(self, filepath, limit=None, batch_size=1000):
+        """
+        Load GloVe embeddings from a text file.
+        
+        :param filepath: Path to GloVe file (e.g., 'glove.6B.100d.txt')
+        :param limit: Maximum number of embeddings to load (None for all)
+        :param batch_size: Number of embeddings to batch before writing (default 1000)
+        :return: Number of embeddings loaded
+        
+        Example:
+            count = g.load_glove("glove.6B.100d.txt", limit=50000)
+        """
+        count = 0
+        batch = []
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                if limit is not None and count >= limit:
+                    break
+                parts = line.strip().split()
+                if len(parts) < 2:
+                    continue
+                word = parts[0]
+                embedding = [float(x) for x in parts[1:]]
+                batch.append((word, embedding))
+                count += 1
+                
+                if len(batch) >= batch_size:
+                    self.put_embeddings_batch(batch)
+                    batch = []
+        
+        # Load remaining batch
+        if batch:
+            self.put_embeddings_batch(batch)
+        
+        return count
+
+    def load_gensim(self, model, limit=None, batch_size=1000):
+        """
+        Load embeddings from a Gensim Word2Vec or FastText model.
+        
+        :param model: A Gensim model with a 'wv' attribute (Word2Vec, FastText)
+        :param limit: Maximum number of embeddings to load (None for all)
+        :param batch_size: Number of embeddings to batch before writing (default 1000)
+        :return: Number of embeddings loaded
+        
+        Example:
+            from gensim.models import Word2Vec
+            model = Word2Vec(sentences)
+            count = g.load_gensim(model)
+        """
+        count = 0
+        batch = []
+        
+        # Get word vectors from model
+        if hasattr(model, 'wv'):
+            wv = model.wv
+        else:
+            wv = model  # Already a KeyedVectors object
+        
+        for word in wv.index_to_key:
+            if limit is not None and count >= limit:
+                break
+            embedding = wv[word].tolist()
+            batch.append((word, embedding))
+            count += 1
+            
+            if len(batch) >= batch_size:
+                self.put_embeddings_batch(batch)
+                batch = []
+        
+        if batch:
+            self.put_embeddings_batch(batch)
+        
+        return count
 
 
 class View(object):

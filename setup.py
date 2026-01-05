@@ -2,12 +2,12 @@ from setuptools import setup
 
 
 setup(name='cogdb',
-      version='3.2.0',
+      version='3.3.0',
       description='Persistent Embedded Graph Database',
       url='http://github.com/arun1729/cog',
       author='Arun Mahendra',
       author_email='arunm3.141@gmail.com',
       license='MIT',
       packages=['cog'],
-      install_requires=['xxhash==3.2.0'],
+      install_requires=['xxhash==3.2.0', 'simsimd>=5.0.0'],
       zip_safe=False)

@@ -1,1 +1,2 @@
 xxhash==3.2.0
+simsimd==5.0.0

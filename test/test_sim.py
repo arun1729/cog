@@ -234,6 +234,95 @@ class TestGraphTraversal(unittest.TestCase):
         with self.assertRaises(Exception):
             TestGraphTraversal.g.v().sim('car', '>', 0.35, strict=True).all()
 
+    def test_sim_chained_with_traversal(self):
+        """Test that sim works when chained after graph traversal"""
+        # Get all fruits and filter by similarity to orange
+        result = TestGraphTraversal.g.v().has("isa", "fruit").sim('orange', '>', 0.3).all()
+        # Should include citrus fruits that are similar to orange
+        result_ids = {r['id'] for r in result['result']}
+        self.assertIn('tangerine', result_ids)
+        self.assertIn('clementines', result_ids)
+
+    def test_sim_self_similarity(self):
+        """Test that a word has similarity ~1.0 with itself"""
+        result = TestGraphTraversal.g.v("orange").sim('orange', '>=', 0.99).all()
+        self.assertEqual(len(result['result']), 1)
+        self.assertEqual(result['result'][0]['id'], 'orange')
+
+    def test_k_nearest_basic(self):
+        """Test k_nearest returns k most similar vertices"""
+        result = TestGraphTraversal.g.v().k_nearest('orange', k=3).all()
+        # Should return top 3 most similar to orange
+        self.assertEqual(len(result['result']), 3)
+        # Orange itself should be first (most similar)
+        self.assertEqual(result['result'][0]['id'], 'orange')
+
+    def test_k_nearest_ordering(self):
+        """Test k_nearest returns vertices in descending similarity order"""
+        result = TestGraphTraversal.g.v().k_nearest('orange', k=5).all()
+        ids = [r['id'] for r in result['result']]
+        # Orange should be first (self-similarity = 1.0)
+        self.assertEqual(ids[0], 'orange')
+        # Citrus fruits should be near the top
+        self.assertIn('tangerine', ids[:3])
+
+    def test_k_nearest_with_k_larger_than_results(self):
+        """Test k_nearest when k is larger than available embeddings"""
+        result = TestGraphTraversal.g.v().k_nearest('orange', k=100).all()
+        # Should return all vertices with embeddings (6 in our test set)
+        self.assertEqual(len(result['result']), 6)
+
+    def test_k_nearest_word_not_found(self):
+        """Test k_nearest returns empty when word has no embedding"""
+        result = TestGraphTraversal.g.v().k_nearest('nonexistent_word', k=3).all()
+        self.assertEqual(result['result'], [])
+
+    def test_embedding_stats(self):
+        """Test embedding_stats returns correct count and dimensions"""
+        stats = TestGraphTraversal.g.embedding_stats()
+        # We have 6 embeddings in our test setup
+        self.assertEqual(stats['count'], 6)
+        # Our test embeddings are 300-dimensional
+        self.assertEqual(stats['dimensions'], 300)
+
+    def test_scan_embeddings(self):
+        """Test scan_embeddings returns vertices with embeddings"""
+        result = TestGraphTraversal.g.scan_embeddings(limit=10)
+        # Should find some of our embedded words
+        ids = {r['id'] for r in result['result']}
+        # Check that at least some of our embedded words are found
+        self.assertTrue(len(ids) > 0)
+        # All returned items should have embeddings
+        for item in result['result']:
+            self.assertIsNotNone(TestGraphTraversal.g.get_embedding(item['id']))
+
+    def test_scan_embeddings_limit(self):
+        """Test scan_embeddings respects limit parameter"""
+        result = TestGraphTraversal.g.scan_embeddings(limit=2)
+        self.assertLessEqual(len(result['result']), 2)
+
+    def test_put_embeddings_batch(self):
+        """Test put_embeddings_batch for bulk embedding insertion"""
+        # Create test embeddings
+        test_embeddings = [
+            ("test_word_1", [0.1] * 50),
+            ("test_word_2", [0.2] * 50),
+            ("test_word_3", [0.3] * 50),
+        ]
+        
+        # Bulk insert
+        TestGraphTraversal.g.put_embeddings_batch(test_embeddings)
+        
+        # Verify all were inserted
+        for word, expected_embedding in test_embeddings:
+            retrieved = TestGraphTraversal.g.get_embedding(word)
+            self.assertIsNotNone(retrieved)
+            self.assertEqual(len(retrieved), 50)
+        
+        # Cleanup
+        for word, _ in test_embeddings:
+            TestGraphTraversal.g.delete_embedding(word)
+
     @classmethod
     def tearDownClass(cls):
         TestGraphTraversal.g.close()
