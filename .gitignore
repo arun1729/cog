@@ -12,3 +12,5 @@ test/.coverage
 PRIVATE_NOTES.md
 FEATURE_ROADMAP.md
 RELEASE_v3.3.0.md
+docs/architecture.md
+.vscode/settings.json
