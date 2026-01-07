@@ -61,13 +61,25 @@ class BlankNode(object):
 class Graph:
     """
     Creates a graph object.
+    
+    Args:
+        graph_name: Name of the graph
+        cog_home: Home directory name for the database
+        cog_path_prefix: Root directory location for Cog db
+        enable_caching: Enable in-memory caching for faster reads
+        flush_interval: Number of writes before auto-flush per store.
+                       1 = flush every write (safest, default)
+                       0 = manual flush only (fastest, use sync())
+                       N>1 = flush every N writes with async background threads
     """
 
-    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, enable_caching=True):
+    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
+                 flush_interval=1):
         '''
         :param graph_name:
         :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
+        :param flush_interval: Number of writes before auto-flush. 1 = every write (safest).
         '''
 
         self.config = cfg
@@ -86,9 +98,9 @@ class Graph:
         dictConfig(self.config.logging_config)
         self.logger = logging.getLogger("torque")
 
-        self.logger.debug("Torque init on graph: " + graph_name + " predicates: ")
+        self.logger.debug(f"Torque init on graph: {graph_name} (flush_interval={flush_interval})")
 
-        self.cog = Cog(self.cache)
+        self.cog = Cog(self.cache, flush_interval=flush_interval)
         self.cog.create_or_load_namespace(self.graph_name)
 
         self.all_predicates = self.cog.list_tables()
@@ -99,6 +111,16 @@ class Graph:
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
+
+    def sync(self):
+        """
+        Force flush all pending writes to disk.
+        Blocks until all flushes are complete.
+        
+        Use this when flush_interval > 1 or when you need to ensure 
+        data durability at a specific point.
+        """
+        self.cog.sync()
 
     def refresh(self):
         self.cog.refresh_all()

@@ -9,6 +9,10 @@ This benchmark compares:
 2. Various graph sizes (small, medium, large)
 3. Read performance after inserts
 4. Different edge densities
+
+Options:
+  --fast-flush       Use flush_interval=100 for faster writes (auto-enables async)
+  --flush-interval N Custom flush interval (>1 auto-enables async)
 """
 import os
 import shutil
@@ -25,6 +29,9 @@ from cog.torque import Graph
 from cog import config
 
 BENCHMARK_DIR = "/tmp/CogBenchmark"
+
+# Global flush settings (set by args)
+FLUSH_INTERVAL = 1
 
 
 @dataclass
@@ -86,13 +93,19 @@ def generate_social_graph(num_users: int, avg_connections: int = 10) -> List[Tup
     return triples
 
 
+def create_graph(graph_name: str) -> Graph:
+    """Create a graph with the configured flush settings"""
+    return Graph(graph_name, flush_interval=FLUSH_INTERVAL)
+
+
 def benchmark_individual_puts(graph_name: str, triples: List[Tuple[str, str, str]]) -> BenchmarkResult:
     """Benchmark inserting edges one at a time"""
-    g = Graph(graph_name)
+    g = create_graph(graph_name)
     
     start = timeit.default_timer()
     for v1, pred, v2 in triples:
         g.put(v1, pred, v2)
+    g.sync()  # Ensure all data is flushed
     elapsed = timeit.default_timer() - start
     
     g.close()
@@ -107,10 +120,11 @@ def benchmark_individual_puts(graph_name: str, triples: List[Tuple[str, str, str
 
 def benchmark_batch_puts(graph_name: str, triples: List[Tuple[str, str, str]]) -> BenchmarkResult:
     """Benchmark inserting edges using put_batch"""
-    g = Graph(graph_name)
+    g = create_graph(graph_name)
     
     start = timeit.default_timer()
     g.put_batch(triples)
+    g.sync()  # Ensure all data is flushed
     elapsed = timeit.default_timer() - start
     
     g.close()
@@ -125,7 +139,7 @@ def benchmark_batch_puts(graph_name: str, triples: List[Tuple[str, str, str]]) -
 
 def benchmark_reads(graph_name: str, sample_vertices: List[str]) -> BenchmarkResult:
     """Benchmark reading/traversing from vertices"""
-    g = Graph(graph_name)
+    g = create_graph(graph_name)
     
     start = timeit.default_timer()
     for vertex in sample_vertices:
@@ -151,6 +165,8 @@ def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
     
     print("\n" + "=" * 85)
     print("CogDB Performance Benchmark")
+    if FLUSH_INTERVAL != 1:
+        print(f"  flush_interval={FLUSH_INTERVAL} (async enabled)")
     print("=" * 85)
     
     # Benchmark 1: Chain graphs at various sizes
@@ -170,7 +186,7 @@ def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
         print(result)
         
         # Read benchmark
-        g = Graph(f"chain_batch_{size}")
+        g = create_graph(f"chain_batch_{size}")
         sample = [f"node_{i}" for i in range(0, min(size, 100), 10)]
         result = benchmark_reads(f"chain_batch_{size}", sample)
         results.append(result)
@@ -237,6 +253,8 @@ def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
 
 
 def main():
+    global FLUSH_INTERVAL
+    
     parser = argparse.ArgumentParser(description="CogDB Performance Benchmark")
     parser.add_argument("--sizes", type=int, nargs="+", default=[100, 500, 1000, 5000],
                         help="Edge counts to benchmark (default: 100 500 1000 5000)")
@@ -244,7 +262,17 @@ def main():
                         help="Skip individual put benchmarks (faster)")
     parser.add_argument("--quick", action="store_true",
                         help="Quick benchmark with smaller sizes")
+    parser.add_argument("--fast-flush", action="store_true",
+                        help="Use flush_interval=100 for faster writes (auto-enables async)")
+    parser.add_argument("--flush-interval", type=int, default=1,
+                        help="Custom flush interval (default: 1, >1 auto-enables async)")
     args = parser.parse_args()
+    
+    # Set global flush settings
+    if args.fast_flush:
+        FLUSH_INTERVAL = 100
+    elif args.flush_interval != 1:
+        FLUSH_INTERVAL = args.flush_interval
     
     sizes = [50, 100, 200] if args.quick else args.sizes
     
@@ -258,3 +286,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
