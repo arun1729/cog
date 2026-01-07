@@ -51,6 +51,8 @@ def parse_tripple(tripple):
 
 
 class CacheData:
+    __slots__ = ('store_position', 'value')
+    
     def __init__(self, position, value):
         self.store_position = position
         self.value = value
@@ -62,13 +64,21 @@ class CacheData:
 
 class Cog:
     """
-        Read index file, record records stored in 'store' and write out new store file. Update index with position in store.
+    Read index file, record records stored in 'store' and write out new store file. 
+    Update index with position in store.
+    
+    Args:
+        flush_interval: Number of writes before auto-flush per store.
+                       1 = flush every write (safest, default)
+                       0 = manual flush only (fastest, use sync())
+                       N>1 = flush every N writes with async background threads
     """
 
-    def __init__(self, shared_cache=None):
+    def __init__(self, shared_cache=None, flush_interval=1):
         self.logger = logging.getLogger('database')
         self.config = config
-        self.logger.info("Cog init.")
+        self.flush_interval = flush_interval
+        self.logger.info(f"Cog init (flush_interval={flush_interval})")
         self.namespaces = {}
         self.current_table = None
         self.shared_cache = shared_cache
@@ -130,7 +140,8 @@ class Cog:
         return os.path.exists(self.config.cog_data_dir(namespace))
 
     def create_table(self, table_name, namespace):
-        table = Table(table_name, namespace, self.instance_id, self.config, shared_cache=self.shared_cache)
+        table = Table(table_name, namespace, self.instance_id, self.config, 
+                      shared_cache=self.shared_cache, flush_interval=self.flush_interval)
         self.current_namespace = namespace
         self.current_table = table
         self.namespaces[namespace][table_name] = table
@@ -158,7 +169,8 @@ class Cog:
 
         if name not in self.namespaces[namespace]:
             self.namespaces[namespace][name] = Table(name, namespace, self.instance_id, self.config,
-                                                     shared_cache=self.shared_cache)
+                                                     shared_cache=self.shared_cache,
+                                                     flush_interval=self.flush_interval)
             self.logger.debug("created new table: " + name)
 
         self.current_table = self.namespaces[namespace][name]
@@ -200,6 +212,18 @@ class Cog:
             for table in self.namespaces[self.current_namespace].values():
                 if table:
                     table.store.end_batch()
+
+    def sync(self):
+        """
+        Force flush all pending writes to disk across all tables.
+        Blocks until all flushes are complete.
+        """
+        for name, space in self.namespaces.items():
+            if space is None:
+                continue
+            for table_name, table in space.items():
+                if table:
+                    table.sync()
 
     def close(self):
         for name, space in self.namespaces.items():
@@ -245,54 +269,72 @@ class Cog:
     def put_list(self, data):
         '''
         Creates or appends to a list. If the key does not exist a new list is created, else it appends.
+        Uses O(1) lookup instead of O(n) value chain traversal.
         :param data:
         :return:
         '''
         assert type(data.key) is str, "Only string type is supported."
         assert type(data.value) is str, "Only string type is supported."
-        record = self.current_table.indexer.get(data.key, self.current_table.store)
+        # Use O(1) head lookup instead of O(n) full record load
+        record, head_pos = self.current_table.indexer.get_head_only(data.key, self.current_table.store)
         new_record = Record(data.key, data.value, value_type='l')
         if record is not None:
-            new_record.set_value_link(record.store_position)
+            new_record.set_value_link(head_pos)
         position = self.current_table.store.save(new_record)
         self.current_table.indexer.put(new_record.key, position, self.current_table.store)
 
     def put_set(self, data):
+        """
+        Add a value to a set. Deduplicates via in-memory cache.
+        Optimized: Uses O(1) head lookup instead of O(n) value chain traversal.
+        """
         assert isinstance(data.key, str), "Only string type is supported."
         assert isinstance(data.value, str), "Only string type is supported."
 
         cache_key = (self.current_table.table_meta.name, data.key)
 
+        # Check cache for deduplication
         if cache_key in self.cache:
-            record = self.cache[cache_key]
-        else:
-            record = self.current_table.indexer.get(data.key, self.current_table.store)
-            if len(self.cache) > self.config.LEVEL_2_CACHE_SIZE:
-                self.cache.popitem(last=False)
-
-        new_record = Record(data.key, data.value, value_type='l')
-        position = None  # initialize position
-
-        if record is None:
+            cache_data = self.cache[cache_key]
+            if data.value in cache_data.value:
+                # Already exists, skip write
+                return
+            # Add to existing set
+            new_record = Record(data.key, data.value, value_type='l')
+            new_record.set_value_link(cache_data.store_position)
             position = self.current_table.store.save(new_record)
             self.current_table.indexer.put(new_record.key, position, self.current_table.store)
+            cache_data.value.add(data.value)
+            cache_data.store_position = position
+            self.cache.move_to_end(cache_key)
+            return
+
+        # Cache miss - use O(1) head lookup instead of O(n) full load
+        head_record, head_pos = self.current_table.indexer.get_head_only(data.key, self.current_table.store)
+        
+        if head_record is None:
+            # First value for this key
+            new_record = Record(data.key, data.value, value_type='l')
+            position = self.current_table.store.save(new_record)
+            self.current_table.indexer.put(new_record.key, position, self.current_table.store)
+            self.cache[cache_key] = CacheData(position, {data.value})
         else:
-            if data.value not in record.value:
-                new_record.set_value_link(record.store_position)
+            # Key exists but not in cache - load full record for deduplication
+            record = self.current_table.indexer.get(data.key, self.current_table.store)
+            existing_values = set(record.value)  # set() works on both list and set
+            if data.value not in existing_values:
+                new_record = Record(data.key, data.value, value_type='l')
+                new_record.set_value_link(head_pos)
                 position = self.current_table.store.save(new_record)
                 self.current_table.indexer.put(new_record.key, position, self.current_table.store)
-
-        if cache_key in self.cache:
-            if record and data.value not in self.cache[cache_key].value:
-                self.cache[cache_key].value.add(data.value)
-                if position is not None:  # Update position if new record saved
-                    self.cache[cache_key].store_position = position
-        else:
-            if record:
-                self.cache[cache_key] = CacheData(record.store_position, set(record.value))
+                existing_values.add(data.value)
+                self.cache[cache_key] = CacheData(position, existing_values)
             else:
-                self.cache[cache_key] = CacheData(position, {data.value})
+                self.cache[cache_key] = CacheData(head_pos, existing_values)
 
+        # Cache eviction (once, outside if/else)
+        if len(self.cache) > self.config.LEVEL_2_CACHE_SIZE:
+            self.cache.popitem(last=False)
         self.cache.move_to_end(cache_key)
 
     def get(self, key):

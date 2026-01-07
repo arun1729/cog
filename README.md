@@ -5,10 +5,11 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.3.0
-> - SIMD-optimized vector similarity with [SimSIMD](https://github.com/ashvardanian/SimSIMD) (10-50x faster)
-> - New methods: `k_nearest()`, `load_glove()`, `load_gensim()`, `put_embeddings_batch()`
-> - Bulk embedding loading and k-nearest neighbor search
+> New release: 3.4.0
+> - **52x performance boost** for hub-heavy graphs (star graphs)
+> - `flush_interval` parameter for tunable write performance
+> - `sync()` method for manual flush control
+> - Architecture docs: [docs/architecture.md](docs/architecture.md)
 
 ![ScreenShot](notes/ex2.png)
 
@@ -60,6 +61,29 @@ g.put_batch([
     ("bob", "likes", "tacos"),
 ])
 ```
+
+### Performance Tuning
+
+Control flush behavior for faster bulk inserts:
+
+```python
+# Default: flush every write (safest)
+g = Graph("mydb")
+
+# Fast mode: flush every 100 writes (auto-enables async)
+g = Graph("mydb", flush_interval=100)
+
+# Manual flush only (fastest for bulk loads)
+g = Graph("mydb", flush_interval=0)
+g.put_batch(large_dataset)
+g.sync()  # Flush when done
+```
+
+| `flush_interval` | Behavior | Use Case |
+|------------------|----------|----------|
+| `1` (default) | Flush every write | Interactive, safe |
+| `> 1` | Async flush every N writes | Bulk inserts |
+| `0` | Manual only (`sync()`) | Maximum speed |
 
 #### Drop Edge ###
 

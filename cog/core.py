@@ -4,6 +4,8 @@ import os
 import os.path
 import sys
 import logging
+import threading
+import queue
 # from profilehooks import profile
 from cog.cache import Cache
 import xxhash
@@ -13,6 +15,7 @@ UNIT_SEP = b'\xAC'
 
 
 class TableMeta:
+    __slots__ = ('name', 'namespace', 'db_instance_id', 'column_mode')
 
     def __init__(self, name, namespace, db_instance_id, column_mode):
         self.name = name
@@ -23,10 +26,12 @@ class TableMeta:
 
 class Table:
 
-    def __init__(self, name, namespace, db_instance_id, config, column_mode=False, shared_cache=None):
+    def __init__(self, name, namespace, db_instance_id, config, column_mode=False, shared_cache=None,
+                 flush_interval=1):
         self.logger = logging.getLogger('table')
         self.config = config
         self.shared_cache = shared_cache
+        self.flush_interval = flush_interval
         self.table_meta = TableMeta(name, namespace, db_instance_id, column_mode)
         self.indexer = self.__create_indexer()
         self.store = self.__create_store(shared_cache)
@@ -35,7 +40,12 @@ class Table:
         return Indexer(self.table_meta, self.config, self.logger)
 
     def __create_store(self, shared_cache):
-        return Store(self.table_meta, self.config, self.logger, shared_cache=shared_cache)
+        return Store(self.table_meta, self.config, self.logger, shared_cache=shared_cache,
+                     flush_interval=self.flush_interval)
+
+    def sync(self):
+        """Force flush pending writes to disk."""
+        self.store.sync()
 
     def close(self):
         self.indexer.close()
@@ -48,6 +58,8 @@ class Record:
     Record is the basic unit of storage in cog.
     value_type: s - string, l - list, u - set
     '''
+    __slots__ = ('key', 'value', 'tombstone', 'store_position', 'key_link', 'value_link', 'value_type')
+    
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
@@ -229,9 +241,9 @@ class Index:
             self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # there are records in the bucket
-            # read existing record from the store
-            existing_record = Record.load_from_store(int(index_value), store)
-            existing_record.set_store_position(int(index_value))  # this is a bit confusing, should clean up.
+            # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
+            existing_record = Record.unmarshal(store.read(int(index_value)))
+            existing_record.set_store_position(int(index_value))
 
             if existing_record.key == key:
                 # the record at the top of the bucket has the same key, update the record in place.
@@ -248,7 +260,8 @@ class Index:
                 # check if this record exists in the bucket, if yes remove pointer.
                 prev_record = None
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
-                    existing_record = Record.load_from_store(existing_record.key_link, store)
+                    # Use unmarshal (O(1)) instead of load_from_store (O(n))
+                    existing_record = Record.unmarshal(store.read(existing_record.key_link))
                     existing_record.set_store_position(existing_record.key_link)
                     if existing_record.key == key and prev_record is not None:
                         """
@@ -298,6 +311,34 @@ class Index:
                 if record.key == key:
                     return record
         return None
+
+    def get_head_only(self, key, store):
+        """
+        Get only the head record without traversing the value chain.
+        This is O(1) compared to get() which is O(n) for multi-value keys.
+        
+        Returns: (record, store_position) or (None, None)
+        """
+        index_position, raw_hash = self.get_index(key)
+        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
+        if data_at_index_position == self.empty_block:
+            return None, None
+        store_position = int(data_at_index_position)
+        # Only unmarshal, don't load value chain
+        record = Record.unmarshal(store.read(store_position))
+        record.set_store_position(store_position)
+        
+        if record.key == key:
+            return record, store_position
+        else:
+            # Hash collision - follow key_link chain
+            while record.key_link != Record.RECORD_LINK_NULL:
+                store_position = record.key_link
+                record = Record.unmarshal(store.read(store_position))
+                record.set_store_position(store_position)
+                if record.key == key:
+                    return record, store_position
+        return None, None
 
     '''
         Iterates through record in itr_store.
@@ -364,13 +405,26 @@ class Index:
 
 
 class Store:
+    """
+    Store manages persistence of records to disk with configurable flush behavior.
+    
+    Args:
+        flush_interval: Number of writes before auto-flush. 
+                       1 = flush every write (safest, default)
+                       0 = manual flush only (fastest, use sync())
+                       N>1 = flush every N writes with async background thread
+    """
 
-    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None):
+    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None, 
+                 flush_interval=1):
         self.caching_enabled = caching_enabled
         self.batch_mode = False  # When True, defers flush() until end_batch()
         self.logger = logging.getLogger('store')
         self.tablemeta = tablemeta
         self.config = config
+        self.flush_interval = flush_interval
+        self.write_count = 0
+        self._closed = False
         self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
@@ -378,12 +432,98 @@ class Store:
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
-        logger.info("Store for file init: " + self.store)
+        
+        # Thread safety
+        self._lock = threading.Lock()
+        
+        # Auto-enable async flush when interval > 1
+        self._use_async = flush_interval > 1
+        if self._use_async:
+            self._flush_queue = queue.Queue()
+            self._flush_thread = threading.Thread(target=self._flush_worker, daemon=True)
+            self._flush_thread.start()
+            self._shutdown = False
+        
+        logger.info(f"Store init: {self.store} (flush_interval={flush_interval})")
+
+    def _flush_worker(self):
+        """Background thread that processes flush requests."""
+        while True:
+            try:
+                # Wait for flush signal (blocks until item available)
+                item = self._flush_queue.get(timeout=1.0)
+                if item == "SHUTDOWN":
+                    # Drain remaining items and shutdown
+                    while not self._flush_queue.empty():
+                        try:
+                            self._flush_queue.get_nowait()
+                            self._flush_queue.task_done()
+                        except queue.Empty:
+                            break
+                    self._flush_queue.task_done()
+                    break
+                # Perform actual flush (check if not closed)
+                if not self._closed:
+                    with self._lock:
+                        if not self._closed:
+                            self.store_file.flush()
+                self._flush_queue.task_done()
+            except queue.Empty:
+                # Timeout - check if we should continue
+                if getattr(self, '_shutdown', False):
+                    break
+                continue
+
+    def _request_flush(self):
+        """Request a flush - async if interval > 1, sync otherwise."""
+        if self._closed:
+            return
+        if self._use_async:
+            self._flush_queue.put("FLUSH")
+        else:
+            self.store_file.flush()
+
+    def _handle_write_flush(self):
+        """Increment write count and trigger flush if threshold reached."""
+        if not self.batch_mode:
+            self.write_count += 1
+            if self.flush_interval > 0 and self.write_count >= self.flush_interval:
+                self._request_flush()
+                self.write_count = 0
+
+    def sync(self):
+        """
+        Force flush all pending writes to disk.
+        Blocks until flush is complete.
+        """
+        if self._closed:
+            return
+        with self._lock:
+            if not self._closed:
+                self.store_file.flush()
+        if self._use_async:
+            # Wait for async queue to drain
+            self._flush_queue.join()
 
     def close(self):
-        if self.batch_mode:
-            self.store_file.flush()  # Ensure pending writes are flushed on close
-        self.store_file.close()
+        """Close the store, ensuring all data is flushed."""
+        if self._closed:
+            return
+            
+        # Mark as closed first
+        self._closed = True
+        
+        if self._use_async:
+            self._shutdown = True
+            self._flush_queue.put("SHUTDOWN")
+            self._flush_thread.join(timeout=5.0)
+        
+        with self._lock:
+            try:
+                self.store_file.flush()
+                self.store_file.close()
+            except ValueError:
+                pass  # File already closed
 
     def begin_batch(self):
         """
@@ -396,22 +536,27 @@ class Store:
         """
         End batch mode and flush all pending writes to disk.
         """
-        self.store_file.flush()
+        with self._lock:
+            self.store_file.flush()
         self.batch_mode = False
 
     def save(self, record):
         """
-        Store data
+        Store data with configurable flush behavior.
         """
-        self.store_file.seek(0, 2)
-        store_position = self.store_file.tell()
-        record.set_store_position(store_position)
-        marshalled_record = record.marshal()
-        self.store_file.write(marshalled_record)
-        if not self.batch_mode:
-            self.store_file.flush()
-        if self.caching_enabled:
-            self.store_cache.put(store_position, marshalled_record)
+        with self._lock:
+            self.store_file.seek(0, 2)
+            store_position = self.store_file.tell()
+            record.set_store_position(store_position)
+            marshalled_record = record.marshal()
+            self.store_file.write(marshalled_record)
+            
+            if self.caching_enabled:
+                self.store_cache.put(store_position, marshalled_record)
+            
+            # Handle flush based on interval
+            self._handle_write_flush()
+        
         return store_position
 
     def update_record_link_inplace(self, start_pos, int_value):
@@ -421,13 +566,15 @@ class Store:
 
         byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
         self.logger.debug('update_record_link_inplace: ' + str(byte_value))
-        self.store_file.seek(start_pos)
-        self.store_file.write(byte_value)
+        
+        with self._lock:
+            self.store_file.seek(start_pos)
+            self.store_file.write(byte_value)
 
-        if self.caching_enabled:
-            self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
-        if not self.batch_mode:
-            self.store_file.flush()
+            if self.caching_enabled:
+                self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
+            
+            self._handle_write_flush()
 
     # @profile
     def read(self, position):
@@ -518,6 +665,11 @@ class Indexer:
         idx = self.index_list[0]  # only one index file.
         return idx.get(key, store)
 
+    def get_head_only(self, key, store):
+        """Get head record only, O(1) - doesn't traverse value chain."""
+        idx = self.index_list[0]
+        return idx.get_head_only(key, store)
+
     def scanner(self, store):
         for idx in self.index_list:
             self.logger.debug("SCAN: index: " + idx.name)
@@ -530,7 +682,6 @@ class Indexer:
                 return True
             else:
                 return False
-
 
 def cog_hash(string, index_capacity):
     return xxhash.xxh32(string, seed=2).intdigest() % index_capacity
