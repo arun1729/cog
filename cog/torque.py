@@ -840,21 +840,13 @@ class Graph:
         
         # simsimd requires buffer protocol (e.g. numpy array or python array)
         target_vec = array.array('f', target_embedding)
+        similarities = []
         
-        # If we have visited vertices, search within them
-        # Otherwise, scan the entire embedding table
-        if self.last_visited_vertices:
-            similarities = []
-            for v in self.last_visited_vertices:
-                v_embedding = self.get_embedding(v.id)
-                if v_embedding is not None:
-                    v_vec = array.array('f', v_embedding)
-                    distance = simsimd.cosine(target_vec, v_vec)
-                    similarity = 1.0 - float(distance)
-                    similarities.append((similarity, v))
-        else:
+        # None = no prior traversal, scan entire embedding table
+        # [] = prior traversal returned empty, preserve empty semantics
+        # [...] = search within visited vertices
+        if self.last_visited_vertices is None:
             # Scan embedding table directly for all embeddings
-            similarities = []
             self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME)
             for r in self.cog.scanner():
                 if r.value is not None:
@@ -862,6 +854,16 @@ class Graph:
                     distance = simsimd.cosine(target_vec, v_vec)
                     similarity = 1.0 - float(distance)
                     similarities.append((similarity, Vertex(r.key)))
+        elif self.last_visited_vertices:
+            # Search within visited vertices
+            for v in self.last_visited_vertices:
+                v_embedding = self.get_embedding(v.id)
+                if v_embedding is not None:
+                    v_vec = array.array('f', v_embedding)
+                    distance = simsimd.cosine(target_vec, v_vec)
+                    similarity = 1.0 - float(distance)
+                    similarities.append((similarity, v))
+        # else: empty list, similarities stays empty
         
         # Get top k using heap for efficiency
         top_k = heapq.nlargest(k, similarities, key=lambda x: x[0])

@@ -220,7 +220,9 @@ class TestHashCollisions(unittest.TestCase):
             g.put_embedding(word, embedding)
 
         # Find k-nearest to word_50 (cluster 0)
-        result = g.v().k_nearest("word_50", k=5).all()
+        # Note: Don't call g.v() first - that returns empty list (no graph vertices)
+        # Instead, call k_nearest directly which scans the embedding table
+        result = g.k_nearest("word_50", k=5).all()
         
         # All nearest neighbors should be from cluster 0 (words 0-99)
         self.assertEqual(len(result['result']), 5)
