@@ -10,7 +10,6 @@
 > - **52x performance boost** for hub-heavy graphs (star graphs)
 > - `flush_interval` parameter for tunable write performance
 > - `sync()` method for manual flush control
-> - Architecture docs: [docs/architecture.md](docs/architecture.md)
 
 ![ScreenShot](notes/ex2.png)
 
