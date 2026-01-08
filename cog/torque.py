@@ -13,8 +13,15 @@ import random
 from math import isclose
 import warnings
 import heapq
-import simsimd
 import array
+import math
+
+# Optional simsimd for SIMD-optimized similarity
+try:
+    import simsimd
+    _HAS_SIMSIMD = True
+except ImportError:
+    _HAS_SIMSIMD = False
 
 NOTAG = "NOTAG"
 
@@ -652,21 +659,33 @@ class Graph:
         self.last_visited_vertices = filtered_vertices
         return self
 
+    def __cosine_distance(self, x, y):
+        """Compute cosine distance (1 - similarity) with simsimd or pure Python fallback."""
+        if _HAS_SIMSIMD:
+            return simsimd.cosine(x, y)
+        else:
+            # Pure Python fallback for Pyodide/environments without simsimd
+            dot = sum(a * b for a, b in zip(x, y))
+            norm_x = math.sqrt(sum(a * a for a in x))
+            norm_y = math.sqrt(sum(b * b for b in y))
+            if norm_x == 0 or norm_y == 0:
+                return 1.0  # Max distance if either vector is zero
+            return 1.0 - (dot / (norm_x * norm_y))
+
     def __cosine_similarity(self, word1, word2):
-        """Compute cosine similarity using SIMD-optimized simsimd library."""
+        """Compute cosine similarity using SIMD-optimized simsimd library or pure Python fallback."""
         x_list = self.get_embedding(word1)
         y_list = self.get_embedding(word2)
 
         if x_list is None or y_list is None:
             return None
         
-        # simsimd requires buffer protocol (e.g. numpy array or python array)
-        # We use python array to avoid numpy dependency
+        # Use python array for buffer protocol (compatible with simsimd)
         x = array.array('f', x_list)
         y = array.array('f', y_list)
 
-        # simsimd.cosine returns distance (1 - similarity), so we convert
-        distance = simsimd.cosine(x, y)
+        # cosine distance = 1 - similarity, so we convert
+        distance = self.__cosine_distance(x, y)
         return 1.0 - float(distance)
 
     def tag(self, tag_name):
@@ -838,7 +857,7 @@ class Graph:
             self.last_visited_vertices = []
             return self
         
-        # simsimd requires buffer protocol (e.g. numpy array or python array)
+        # simsimd/fallback requires buffer protocol (e.g. numpy array or python array)
         target_vec = array.array('f', target_embedding)
         similarities = []
         
@@ -851,7 +870,7 @@ class Graph:
             for r in self.cog.scanner():
                 if r.value is not None:
                     v_vec = array.array('f', r.value)
-                    distance = simsimd.cosine(target_vec, v_vec)
+                    distance = self.__cosine_distance(target_vec, v_vec)
                     similarity = 1.0 - float(distance)
                     similarities.append((similarity, Vertex(r.key)))
         elif self.last_visited_vertices:
@@ -860,7 +879,7 @@ class Graph:
                 v_embedding = self.get_embedding(v.id)
                 if v_embedding is not None:
                     v_vec = array.array('f', v_embedding)
-                    distance = simsimd.cosine(target_vec, v_vec)
+                    distance = self.__cosine_distance(target_vec, v_vec)
                     similarity = 1.0 - float(distance)
                     similarities.append((similarity, v))
         # else: empty list, similarities stays empty
