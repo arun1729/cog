@@ -297,41 +297,61 @@ count = g.load_gensim(model)
 #### Add embeddings manually:
 
 ```python
-g.put_embedding("orange", [0.1, 0.2, 0.3, 0.4, 0.5])
+from cog.torque import Graph
+g = Graph("fruits")
 
-# Bulk insert for better performance
-g.put_embeddings_batch([
-    ("apple", [0.1, 0.2, ...]),
-    ("banana", [0.3, 0.4, ...]),
-])
+# Add items to graph AND store their embeddings
+g.put("orange", "type", "citrus")
+g.put("tangerine", "type", "citrus")
+g.put("apple", "type", "pome")
+g.put("banana", "type", "tropical")
+
+g.put_embedding("orange", [0.9, 0.8, 0.2, 0.1])
+g.put_embedding("tangerine", [0.85, 0.75, 0.25, 0.15])
+g.put_embedding("apple", [0.5, 0.5, 0.5, 0.5])
+g.put_embedding("banana", [0.2, 0.3, 0.8, 0.7])
 ```
 
 #### Find k-nearest neighbors:
 
 ```python
-# Find 5 most similar vertices to "machine_learning"
-g.v().k_nearest("machine_learning", k=5).all()
+# Search within graph vertices
+g.v().k_nearest("orange", k=2).all()
 ```
-> {'result': [{'id': 'deep_learning'}, {'id': 'neural_network'}, ...]}
+> {'result': [{'id': 'orange'}, {'id': 'tangerine'}]}
+
+```python
+# Or search ALL embeddings directly (no g.v() needed)
+g.k_nearest("orange", k=2).all()
+```
 
 #### Filter by similarity threshold:
 
 ```python 
-g.v().sim('orange', '>', 0.35).all()
+g.v().sim('orange', '>', 0.9).all()
 ```
-> {'result': [{'id': 'clementines'}, {'id': 'tangerine'}, {'id': 'orange'}]}
+> {'result': [{'id': 'tangerine'}, {'id': 'orange'}]}
 
 ```python
-g.v().sim('orange', 'in', [0.25, 0.35]).all()
+# Find items in a similarity range
+g.v().sim('orange', 'in', [0.5, 0.8]).all()
 ```
-> {'result': [{'id': 'banana'}, {'id': 'apple'}]}
+> {'result': [{'id': 'apple'}]}
+
+#### Combine graph traversal with similarity:
+
+```python
+# Find citrus fruits similar to orange
+g.v().has("type", "citrus").sim("orange", ">", 0.8).all()
+```
+> {'result': [{'id': 'tangerine'}, {'id': 'orange'}]}
 
 #### Get embedding stats:
 
 ```python
 g.embedding_stats()
 ```
-> {'count': 50000, 'dimensions': 100}
+> {'count': 4, 'dimensions': 4}
 
 The `sim` method filters vertices based on cosine similarity. The `k_nearest` method returns the top-k most similar vertices.
 
