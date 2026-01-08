@@ -341,7 +341,7 @@ class Index:
         return None, None
 
     '''
-        Iterates through record in itr_store.
+        Iterates through all records in the index, following key_link chains for hash collisions.
     '''
 
     def scanner(self, store):
@@ -355,11 +355,17 @@ class Index:
                 scan_cursor += self.config.INDEX_BLOCK_LEN
                 self.logger.debug("GET: skipping empty block during iteration.")
                 continue
-            record = Record.load_from_store(int(data_at_position), store)
-            if record is None:  # EOF store
-                self.logger.error("Store EOF reached! Iteration terminated.")
-                return
-            yield Record(record.key, record.value, record.tombstone)
+            
+            # Load head record and follow key_link chain to get all records in this bucket
+            store_position = int(data_at_position)
+            while store_position != Record.RECORD_LINK_NULL:
+                record = Record.load_from_store(store_position, store)
+                if record is None:  # EOF store
+                    self.logger.error("Store EOF reached! Iteration terminated.")
+                    return
+                yield Record(record.key, record.value, record.tombstone)
+                store_position = record.key_link
+            
             scan_cursor += self.config.INDEX_BLOCK_LEN
 
     def delete(self, key, store):
