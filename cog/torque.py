@@ -739,7 +739,7 @@ class Graph:
 
         assert isinstance(word, str), "word must be a string"
         self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
-            str(cog_hash(word, self.config.INDEX_CAPACITY)), embedding))
+            word, embedding))
 
     def get_embedding(self, word):
         """
@@ -747,7 +747,7 @@ class Graph:
         """
         assert isinstance(word, str), "word must be a string"
         record = self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).get(
-            str(cog_hash(word, self.config.INDEX_CAPACITY)))
+            word)
         if record is None:
             return None
         return record.value
@@ -758,7 +758,7 @@ class Graph:
         """
         assert isinstance(word, str), "word must be a string"
         self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).delete(
-            str(cog_hash(word, self.config.INDEX_CAPACITY)))
+            word)
 
     def put_embeddings_batch(self, word_embedding_pairs):
         """
@@ -780,7 +780,7 @@ class Graph:
                 if not isinstance(word, str):
                     raise TypeError("word must be a string")
                 self.cog.use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
-                    str(cog_hash(word, self.config.INDEX_CAPACITY)), embedding))
+                    word, embedding))
         finally:
             self.cog.end_batch()
         return self
@@ -814,13 +814,12 @@ class Graph:
         """
         count = 0
         dimensions = None
-        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+        # Scan the embedding table directly
+        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME)
         for r in self.cog.scanner():
-            embedding = self.get_embedding(r.key)
-            if embedding is not None:
-                count += 1
-                if dimensions is None:
-                    dimensions = len(embedding)
+            count += 1
+            if dimensions is None and r.value is not None:
+                dimensions = len(r.value)
         return {"count": count, "dimensions": dimensions}
 
     def k_nearest(self, word, k=10):
@@ -839,20 +838,32 @@ class Graph:
             self.last_visited_vertices = []
             return self
         
-        # Calculate similarities for all vertices with embeddings
-        # Calculate similarities for all vertices with embeddings
         # simsimd requires buffer protocol (e.g. numpy array or python array)
         target_vec = array.array('f', target_embedding)
-        
         similarities = []
-        for v in self.last_visited_vertices:
-            v_embedding = self.get_embedding(v.id)
-            if v_embedding is not None:
-                # simsimd.cosine returns distance (1 - similarity)
-                v_vec = array.array('f', v_embedding)
-                distance = simsimd.cosine(target_vec, v_vec)
-                similarity = 1.0 - float(distance)
-                similarities.append((similarity, v))
+        
+        # None = no prior traversal, scan entire embedding table
+        # [] = prior traversal returned empty, preserve empty semantics
+        # [...] = search within visited vertices
+        if self.last_visited_vertices is None:
+            # Scan embedding table directly for all embeddings
+            self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME)
+            for r in self.cog.scanner():
+                if r.value is not None:
+                    v_vec = array.array('f', r.value)
+                    distance = simsimd.cosine(target_vec, v_vec)
+                    similarity = 1.0 - float(distance)
+                    similarities.append((similarity, Vertex(r.key)))
+        elif self.last_visited_vertices:
+            # Search within visited vertices
+            for v in self.last_visited_vertices:
+                v_embedding = self.get_embedding(v.id)
+                if v_embedding is not None:
+                    v_vec = array.array('f', v_embedding)
+                    distance = simsimd.cosine(target_vec, v_vec)
+                    similarity = 1.0 - float(distance)
+                    similarities.append((similarity, v))
+        # else: empty list, similarities stays empty
         
         # Get top k using heap for efficiency
         top_k = heapq.nlargest(k, similarities, key=lambda x: x[0])
