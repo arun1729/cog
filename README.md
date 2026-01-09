@@ -46,45 +46,6 @@ g.put("alice","score","7")
 g.put("dani","score","100")
 ```
 
-#### Using `put_batch` for bulk inserts (faster)
-
-```python
-from cog.torque import Graph
-g = Graph("people")
-
-# Insert multiple triples at once - significantly faster for large graphs
-g.put_batch([
-    ("alice", "follows", "bob"),
-    ("bob", "follows", "charlie"),
-    ("charlie", "follows", "alice"),
-    ("alice", "likes", "pizza"),
-    ("bob", "likes", "tacos"),
-])
-```
-
-### Performance Tuning
-
-Control flush behavior for faster bulk inserts:
-
-```python
-# Default: flush every write (safest)
-g = Graph("mydb")
-
-# Fast mode: flush every 100 writes (auto-enables async)
-g = Graph("mydb", flush_interval=100)
-
-# Manual flush only (fastest for bulk loads)
-g = Graph("mydb", flush_interval=0)
-g.put_batch(large_dataset)
-g.sync()  # Flush when done
-```
-
-| `flush_interval` | Behavior | Use Case |
-|------------------|----------|----------|
-| `1` (default) | Flush every write | Interactive, safe |
-| `> 1` | Async flush every N writes | Bulk inserts |
-| `0` | Manual only (`sync()`) | Maximum speed |
-
 #### Drop Edge ###
 
 ```python
@@ -248,6 +209,45 @@ Return to a previously tagged position while preserving the traversal path:
 g.v("alice").tag("start").out("follows").out("follows").back("start").all()
 ```
 > {'result': [{'start': 'alice', 'id': 'alice'}]}
+
+#### Using `put_batch` for bulk inserts (faster)
+
+```python
+from cog.torque import Graph
+g = Graph("people")
+
+# Insert multiple triples at once - significantly faster for large graphs
+g.put_batch([
+    ("alice", "follows", "bob"),
+    ("bob", "follows", "charlie"),
+    ("charlie", "follows", "alice"),
+    ("alice", "likes", "pizza"),
+    ("bob", "likes", "tacos"),
+])
+```
+
+### Performance Tuning
+
+Control flush behavior for faster bulk inserts:
+
+```python
+# Default: flush every write (safest)
+g = Graph("mydb")
+
+# Fast mode: flush every 100 writes (auto-enables async)
+g = Graph("mydb", flush_interval=100)
+
+# Manual flush only (fastest for bulk loads)
+g = Graph("mydb", flush_interval=0)
+g.put_batch(large_dataset)
+g.sync()  # Flush when done
+```
+
+| `flush_interval` | Behavior | Use Case |
+|------------------|----------|----------|
+| `1` (default) | Flush every write | Interactive, safe |
+| `> 1` | Async flush every N writes | Bulk inserts |
+| `0` | Manual only (`sync()`) | Maximum speed |
 
 
 #### json example
