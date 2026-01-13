@@ -643,31 +643,30 @@ class Graph:
         while queue:
             current, depth = queue.popleft()
 
-            # Check until condition - if met, include vertex and stop exploring from it
             if until and until(current.id):
                 if depth >= min_depth:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
+                    result_vertex.edges = current.edges.copy()
                     result_vertices.append(result_vertex)
                 continue
 
-            # Include vertex if within depth range (exclude starting vertices at depth 0)
             if depth > 0 and depth >= min_depth:
                 if max_depth is None or depth <= max_depth:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
+                    result_vertex.edges = current.edges.copy()
                     result_vertices.append(result_vertex)
 
             # Stop exploring if at max depth
             if max_depth is not None and depth >= max_depth:
                 continue
 
-            # Get adjacent vertices and add to queue
             adjacent = self.__get_adjacent(current, predicates, direction)
             for adj in adjacent:
-                if unique and adj.id in visited:
-                    continue
                 if unique:
+                    if adj.id in visited:
+                        continue
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
                 queue.append((adj, depth + 1))
@@ -716,31 +715,30 @@ class Graph:
         while stack:
             current, depth = stack.pop()  # LIFO for DFS
 
-            # Check until condition
             if until and until(current.id):
                 if depth >= min_depth:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
+                    result_vertex.edges = current.edges.copy()
                     result_vertices.append(result_vertex)
                 continue
 
-            # Include vertex if within depth range (exclude starting vertices at depth 0)
             if depth > 0 and depth >= min_depth:
                 if max_depth is None or depth <= max_depth:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
+                    result_vertex.edges = current.edges.copy()
                     result_vertices.append(result_vertex)
 
             # Stop exploring if at max depth
             if max_depth is not None and depth >= max_depth:
                 continue
 
-            # Get adjacent vertices and add to stack
             adjacent = self.__get_adjacent(current, predicates, direction)
             for adj in adjacent:
-                if unique and adj.id in visited:
-                    continue
                 if unique:
+                    if adj.id in visited:
+                        continue
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
                 stack.append((adj, depth + 1))
