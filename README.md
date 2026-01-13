@@ -6,10 +6,8 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.4.0
-> - **52x performance boost** for hub-heavy graphs (star graphs)
-> - `flush_interval` parameter for tunable write performance
-> - `sync()` method for manual flush control
+> New release: 3.4.4
+> - `bfs()` and `dfs()` graph traversal methods
 
 ![ScreenShot](notes/ex2.png)
 
@@ -209,6 +207,35 @@ Return to a previously tagged position while preserving the traversal path:
 g.v("alice").tag("start").out("follows").out("follows").back("start").all()
 ```
 > {'result': [{'start': 'alice', 'id': 'alice'}]}
+
+#### BFS and DFS Traversal
+
+Breadth-first search (level by level, finds shortest paths):
+```python
+g.v("alice").bfs(predicates="follows", max_depth=2).all()
+```
+> {'result': [{'id': 'bob'}, {'id': 'charlie'}]}
+
+Depth-first search (explores deep before backtracking):
+```python
+g.v("alice").dfs(predicates="follows", max_depth=3).all()
+```
+
+Filter by depth range:
+```python
+# Only vertices at exactly depth 2
+g.v("alice").bfs(max_depth=2, min_depth=2).all()
+```
+
+Stop at a target:
+```python
+g.v("alice").bfs(until=lambda v: v == "fred").all()
+```
+
+Bidirectional traversal:
+```python
+g.v("bob").bfs(direction="both", max_depth=2).all()
+```
 
 #### Using `put_batch` for bulk inserts (faster)
 
