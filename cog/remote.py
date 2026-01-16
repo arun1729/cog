@@ -77,7 +77,7 @@ class RemoteGraph:
             except json.JSONDecodeError:
                 raise RuntimeError(str(e))
         except urllib.error.URLError as e:
-            raise ConnectionError(f"Failed to connect to {self.url}: {e.reason}")
+            raise ConnectionError(f"Failed to connect to {self.base_url}/{self.graph_name}: {e.reason}")
     
     def _format_arg(self, arg):
         """Format an argument for the query string."""

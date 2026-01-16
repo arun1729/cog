@@ -532,9 +532,14 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
             
             query_str = body['q']
             graph = state['graph']
+            query_lock = state.get('query_lock')
             
-            # Execute the query safely
-            result = self._execute_query(graph, query_str)
+            # Execute the query safely with lock for thread safety
+            if query_lock:
+                with query_lock:
+                    result = self._execute_query(graph, query_str)
+            else:
+                result = self._execute_query(graph, query_str)
             
             # Update stats
             state['queries_served'] += 1
@@ -553,6 +558,10 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
         
         if not any(query_stripped.startswith(s) for s in allowed_starts):
             raise ValueError(f"Query must start with one of: {allowed_starts}")
+        
+        # SECURITY: Block dunder attributes (prevents __globals__, __init__ RCE attacks)
+        if '__' in query_str:
+            raise ValueError("Query contains forbidden pattern '__'")
         
         # Validate method chain - only allow known traversal methods
         allowed_methods = {
@@ -662,7 +671,8 @@ class CogDBServer:
                 'start_time': time.time(),
                 'queries_served': 0,
                 'last_query_time': None,
-                'writable': writable
+                'writable': writable,
+                'query_lock': threading.Lock()  # Per-graph lock for thread-safe queries
             }
             # Update server's graph reference
             if self.server:
@@ -698,7 +708,7 @@ class CogDBServer:
             except KeyboardInterrupt:
                 pass
             finally:
-                self.exit()
+                self.stop()
         else:
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
