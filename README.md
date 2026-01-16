@@ -6,8 +6,8 @@
 # CogDB - Micro Graph Database for Python Applications
 > Documents and examples at [cogdb.io](https://cogdb.io)
 
-> New release: 3.4.4
-> - `bfs()` and `dfs()` graph traversal methods
+> New release: 3.5.0
+> - Added ability to serve graph and query graphs on other CogDB instances over network
 
 ![ScreenShot](notes/ex2.png)
 
@@ -275,6 +275,39 @@ g.sync()  # Flush when done
 | `1` (default) | Flush every write | Interactive, safe |
 | `> 1` | Async flush every N writes | Bulk inserts |
 | `0` | Manual only (`sync()`) | Maximum speed |
+
+### Serving a Graph Over Network
+
+Serve a graph over HTTP and query it from another process or machine:
+
+```python
+from cog.torque import Graph
+
+# Create and serve a graph
+g = Graph("social")
+g.put("alice", "follows", "bob")
+g.put("bob", "follows", "charlie")
+g.serve(port=8080)
+```
+
+Query from another Python process:
+
+```python
+from cog.torque import Graph
+
+# Connect to remote graph
+remote = Graph.connect("http://localhost:8080/social")
+
+# Query just like a local graph
+remote.v("alice").out("follows").all()
+# {'result': [{'id': 'bob'}]}
+```
+
+Stop the server:
+
+```python
+g.stop()
+```
 
 
 #### json example
