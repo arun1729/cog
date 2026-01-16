@@ -45,15 +45,6 @@ class RemoteGraph:
         self.timeout = timeout
         self._query_parts = []
     
-    def _clone(self):
-        """Create a new instance with the same connection but empty query."""
-        new = RemoteGraph.__new__(RemoteGraph)
-        new.graph_name = self.graph_name
-        new.base_url = self.base_url
-        new.timeout = self.timeout
-        new._query_parts = self._query_parts.copy()
-        return new
-    
     def _request(self, endpoint, data=None, method='GET'):
         """Make an HTTP request to the server."""
         # Prepend graph name to endpoint
@@ -98,21 +89,23 @@ class RemoteGraph:
             return repr(arg)
     
     def _add_method(self, method_name, *args, **kwargs):
-        """Add a method call to the query chain."""
-        new = self._clone()
-        
+        """Add a method call to the query chain (mutates self, like local Graph)."""
         # Format arguments
         arg_parts = [self._format_arg(a) for a in args]
         for k, v in kwargs.items():
             arg_parts.append(f"{k}={self._format_arg(v)}")
         
         arg_str = ', '.join(arg_parts)
-        new._query_parts.append(f"{method_name}({arg_str})")
-        return new
+        self._query_parts.append(f"{method_name}({arg_str})")
+        return self
     
     def _execute(self):
         """Execute the current query chain and return results."""
         query = '.'.join(self._query_parts)
+        
+        # Clear query parts for reuse (like local Graph)
+        self._query_parts = []
+        
         response = self._request('/query', {'q': query}, method='POST')
         
         if not response.get('ok'):
