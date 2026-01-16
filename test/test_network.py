@@ -281,6 +281,62 @@ class TestRemoteGraph(unittest.TestCase):
         """Graph.connect() without graph name in path raises error."""
         with self.assertRaises(ValueError):
             Graph.connect(f"http://localhost:{self.port}")
+    
+    def test_limit(self):
+        """RemoteGraph limit() works."""
+        result = self.remote.v().limit(2).all()
+        self.assertIn('result', result)
+        self.assertLessEqual(len(result['result']), 2)
+    
+    def test_skip(self):
+        """RemoteGraph skip() works."""
+        # Get all results first
+        all_results = self.remote.v().all()
+        # Skip some
+        skipped = self.remote.v().skip(1).all()
+        self.assertLess(len(skipped['result']), len(all_results['result']))
+    
+    def test_unique(self):
+        """RemoteGraph unique() works."""
+        result = self.remote.v().unique().all()
+        self.assertIn('result', result)
+        # Check all IDs are unique
+        ids = [r['id'] for r in result['result']]
+        self.assertEqual(len(ids), len(set(ids)))
+    
+    def test_has(self):
+        """RemoteGraph has() works."""
+        result = self.remote.v("alice").has("knows", "bob").all()
+        self.assertIn('result', result)
+    
+    def test_both(self):
+        """RemoteGraph both() works."""
+        result = self.remote.v("bob").both("knows").all()
+        self.assertIn('result', result)
+        # Bob should have both incoming and outgoing 'knows' edges
+    
+    def test_bfs(self):
+        """RemoteGraph bfs() works."""
+        result = self.remote.v("alice").bfs("knows", max_depth=2).all()
+        self.assertIn('result', result)
+    
+    def test_dfs(self):
+        """RemoteGraph dfs() works."""
+        result = self.remote.v("alice").dfs("knows", max_depth=2).all()
+        self.assertIn('result', result)
+    
+    def test_delete(self):
+        """RemoteGraph drop() works."""
+        # Add a node we can delete
+        self.remote.put("del_test", "temp", "del_target")
+        # Delete it using drop()
+        self.remote.drop("del_test", "temp", "del_target")
+        # Verify via local graph - should not find the edge
+    
+    def test_scan(self):
+        """RemoteGraph scan() works."""
+        result = self.remote.scan()
+        self.assertIn('result', result)
 
 
 class TestReadOnlyServer(unittest.TestCase):

@@ -566,7 +566,7 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
         # Validate method chain - only allow known traversal methods
         allowed_methods = {
             'v', 'out', 'inc', 'both', 'has', 'hasr', 'tag', 'back',
-            'all', 'count', 'scan', 'filter', 'unique', 'limit', 'skip',
+            'all', 'count', 'first', 'one', 'scan', 'filter', 'unique', 'limit', 'skip',
             'is_', 'bfs', 'dfs', 'sim', 'k_nearest'
         }
         

@@ -177,6 +177,11 @@ class RemoteGraph:
         """Skip first N vertices."""
         return self._add_method('skip', n)
     
+    def filter(self, func_str):
+        """Filter vertices by a function string.
+        Note: For remote execution, pass the function as a string."""
+        return self._add_method('filter', func_str)
+    
     # === Graph algorithms ===
     
     def bfs(self, predicates=None, max_depth=None, min_depth=0,
@@ -229,6 +234,16 @@ class RemoteGraph:
         # count() returns {'result': N} or just N
         r = result.get('result', 0)
         return r if isinstance(r, int) else 0
+    
+    def first(self):
+        """Execute query and return first result."""
+        self._query_parts.append("first()")
+        return self._execute()
+    
+    def one(self):
+        """Execute query and return exactly one result."""
+        self._query_parts.append("one()")
+        return self._execute()
     
     def scan(self, limit=10, scan_type='v'):
         """Scan vertices or edges."""
