@@ -118,6 +118,101 @@ class Graph:
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
+        self._server_port = None  # Port this graph is being served on
+
+    # === Network Methods ===
+    
+    def serve(self, port=8080, host="0.0.0.0", blocking=False, writable=False):
+        """
+        Start HTTP server for this graph instance.
+        
+        Multiple graphs can be served on the same port - each graph is accessible
+        at /{graph_name}/ path. The index page at / lists all available graphs.
+        
+        Args:
+            port: HTTP port to listen on (default 8080)
+            host: Bind address (default "0.0.0.0" for all interfaces)
+            blocking: If True, blocks forever (for dedicated servers)
+            writable: If True, allows write operations via API
+        
+        Returns:
+            self for method chaining
+        
+        Example:
+            # Serve single graph
+            g.serve(port=8080)
+            
+            # Serve multiple graphs on same port
+            g1.serve(port=8080)
+            g2.serve(port=8080)  # Both accessible at /{graph_name}/
+            
+            # Allow remote writes
+            g.serve(port=8080, writable=True)
+        """
+        from cog.server import get_or_create_server
+        
+        if self._server_port is not None:
+            raise RuntimeError(f"Graph '{self.graph_name}' already being served. Call stop() first.")
+        
+        # Get or create shared server on this port
+        server, is_new = get_or_create_server(port, host)
+        
+        # Check if this graph name is already registered
+        if server.has_graph(self.graph_name):
+            raise RuntimeError(f"Graph '{self.graph_name}' already registered on port {port}")
+        
+        # Register this graph
+        server.register_graph(self, writable=writable)
+        self._server_port = port
+        
+        # Start server if it's new
+        if is_new:
+            server.start(blocking=blocking)
+            
+            # If blocking mode exited, clean up
+            if blocking:
+                self._server_port = None
+        
+        return self
+    
+    def stop(self):
+        """
+        Stop serving this graph.
+        
+        If this is the last graph on the server, the server shuts down.
+        
+        Returns:
+            self for method chaining
+        """
+        from cog.server import unregister_from_server
+        
+        if self._server_port is not None:
+            unregister_from_server(self._server_port, self.graph_name)
+            self._server_port = None
+        return self
+    
+    @classmethod
+    def connect(cls, url, timeout=30):
+        """
+        Connect to a remote CogDB server.
+        
+        Args:
+            url: HTTP(S) URL including graph name path
+                 (e.g., "http://localhost:8080/my_graph")
+            timeout: Request timeout in seconds (default 30)
+        
+        Returns:
+            RemoteGraph instance that can be used like a local Graph
+        
+        Example:
+            remote = Graph.connect("http://192.168.1.5:8080/social")
+            remote.v("alice").out("knows").all()
+            
+            # Via ngrok
+            remote = Graph.connect("https://abc123.ngrok.io/my_graph")
+        """
+        from cog.remote import RemoteGraph
+        return RemoteGraph(url, timeout=timeout)
 
     def sync(self):
         """
