@@ -1,24 +1,71 @@
-![](https://static.pepy.tech/badge/cogdb) [![PyPI version](https://badge.fury.io/py/cogdb.svg)](https://badge.fury.io/py/cogdb) ![Python 3.8](https://img.shields.io/badge/python-3.8+-blue.svg)
- [![Build Status](https://travis-ci.org/arun1729/cog.svg?branch=master)](https://travis-ci.org/arun1729/cog) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![codecov](https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg)](https://codecov.io/gh/arun1729/cog) [![Discord](https://img.shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/nqNpNGfjts)
+<p align="center">
+  <img src="cog-logo.png" alt="CogDB Logo" width="350">
+</p>
 
-<img src="cog-logo.png" alt="CogDB Logo" width="350">
 
-# CogDB - Micro Graph Database for Python Applications
-> Documents and examples at [cogdb.io](https://cogdb.io)
+<p align="center">
+  <a href="https://pepy.tech/project/cogdb"><img src="https://static.pepy.tech/badge/cogdb" alt="Downloads"></a>
+  <a href="https://badge.fury.io/py/cogdb"><img src="https://badge.fury.io/py/cogdb.svg" alt="PyPI version"></a>
+  <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+</p>
 
-> New release: 3.5.0
-> - Added ability to serve graph and query graphs on other CogDB instances over network
+<p align="center">
+  <a href="https://travis-ci.org/arun1729/cog"><img src="https://travis-ci.org/arun1729/cog.svg?branch=master" alt="Build Status"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://codecov.io/gh/arun1729/cog"><img src="https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg" alt="codecov"></a>
+  <a href="https://discord.gg/nqNpNGfjts"><img src="https://img.shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white" alt="Discord"></a>
+</p>
 
-![ScreenShot](notes/ex2.png)
+<p align="center">
+  A persistent graph database that lives inside your Python process.<br>
+  <strong>Quick setup. No server. Runs in notebooks, apps, even your browser.</strong>
+</p>
 
-## Installing Cog
-```
+---
+
+### Quick Start
+
+```bash
 pip install cogdb
 ```
-CogDB is a persistent, embedded graph database library implemented purely in Python.  Torque is CogDB's graph query language, it is implemented as a Python API. CogDB is an ideal choice if you need a database that is easy to use and that has no setup overhead. All you need to do is to import it into your Python application. CogDB can be used interactively in an IPython environment like Jupyter notebooks.
 
-CogDB is a triple store; it models data as `vertex edge vertex` or in other words `subject predicate object`. Triples are a serialization format for RDF. See [Wikipedia](https://en.wikipedia.org/wiki/N-Triples), [W3C](https://www.w3.org/TR/n-triples/) for details. 
-and generally graph databases that model graphs this way are known as RDF databases. CogDB is inspired by RDF databases, but it does not follow a strict RDF format.
+```python
+from cog.torque import Graph
+
+# Create a graph and add data
+g = Graph("social")
+g.put("alice", "follows", "bob")
+g.put("bob", "follows", "charlie")
+g.put("bob", "status", "active")
+
+# Query
+g.v("alice").out("follows").all()           # → {'result': [{'id': 'bob'}]}
+g.v().has("status", "active").all()         # → {'result': [{'id': 'bob'}]}
+g.v("alice").out("follows").out().all()     # → {'result': [{'id': 'charlie'}]}
+
+# Serve your graph over HTTP
+g.serve()  # Now queryable at http://localhost:8080
+
+# Expose to the internet with ngrok
+# $ ngrok http 8080
+# Query your graph from anywhere: https://your-ngrok-url.ngrok.io
+```
+
+> Full documentation at [cogdb.io](https://cogdb.io)
+
+---
+
+## Overview
+
+CogDB is a persistent, embedded graph database implemented in Python. It comes with its own graph traversal language called Torque. Torque is a fluent, chainable API that lives in your Python code. There are no query strings and no context switching, you write graph queries the same way you write normal Python.
+
+CogDB is designed to be easy to use and quick to integrate. There is no server to run and no setup overhead. You simply import it into your Python application. CogDB also works well in interactive environments such as IPython and Jupyter notebooks.
+
+CogDB is a triple store. It models data as `Node → Edge → Node` (eg: `Alice → Follows → Bob`).
+
+Key-value pairs let you store facts; triples let you store relationships. With a source, a destination, and a label, you get the full expressive power of a graph with only one step more structure than a key-value store.
+
+## Documentation
 
 ### Creating a graph
 
