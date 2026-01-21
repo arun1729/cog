@@ -39,9 +39,9 @@ g.put("bob", "follows", "charlie")
 g.put("bob", "status", "active")
 
 # Query
-g.v("alice").out("follows").all()           # → {'result': [{'id': 'bob'}]}
-g.v().has("status", "active").all()         # → {'result': [{'id': 'bob'}]}
-g.v("alice").out("follows").out().all()     # → {'result': [{'id': 'charlie'}]}
+g.v("alice").out("follows").all()                    # → {'result': [{'id': 'bob'}]}
+g.v().has("status", "active").all()                  # → {'result': [{'id': 'bob'}]}
+g.v("alice").out("follows").out("follows").all()     # → {'result': [{'id': 'charlie'}]}
 
 # Serve your graph over HTTP
 g.serve()  # Now queryable at http://localhost:8080
