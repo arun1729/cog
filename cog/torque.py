@@ -410,7 +410,7 @@ class Graph:
         Traverse forward through edges.
         :param func:
         :param predicates: A string or a List of strings.
-        :return:self for method chaining.
+        :return: self for method chaining.
         '''
 
         if func:
@@ -432,8 +432,8 @@ class Graph:
     def inc(self, predicates=None, func=None):
         '''
         Traverse backward through edges.
-        :param predicates:List of predicates
-        :return:self for method chaining.
+        :param predicates: List of predicates
+        :return: self for method chaining.
         '''
 
         if func:
@@ -473,7 +473,7 @@ class Graph:
         Filters all outgoing edges from a vertex that matches a list of predicates.
         :param predicates: List of predicates
         :param vertex: Vertex ID
-        :return:self for method chaining.
+        :return: self for method chaining.
         """
 
         if predicates is not None:
@@ -494,8 +494,8 @@ class Graph:
     def hasr(self, predicates, vertex):
         """
         'Has' in reverse. Filters all incoming edges from a vertex that matches a list of predicates.
-        :param predicates:List of predicates
-        :param vertex:Vertex ID
+        :param predicates: List of predicates
+        :param vertex: Vertex ID
         :return: self for method chaining.
         """
 
@@ -517,10 +517,9 @@ class Graph:
     def scan(self, limit=10, scan_type='v'):
         '''
         Scan vertices or edges in the current graph namespace and return them as Vertex objects.
-        :param limit:Maximum number of items to return from the scan
+        :param limit: Maximum number of items to return from the scan
         :param scan_type: use 'v' to scan the vertex set or 'e' to scan the edge set
-        :return: List of Vertex instances corresponding to the scanned items, in the order yielded by the
-        underlying Cog scanner.
+        :return: A dictionary containing a list of scanned item(vertex) IDs, e.g., `{'result': [{'id': '...'}]}`.
         '''
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
