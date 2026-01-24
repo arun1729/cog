@@ -235,7 +235,7 @@ class Graph:
         Shorthand for put_json
         :param update:
         :param json_object:
-        :return:
+        :return: None
         """
         self.put_json(json_object, update)
 
@@ -306,7 +306,7 @@ class Graph:
 
         :param graph_data_path:
         :param graph_name:
-        :return:
+        :return: None
         """
 
         graph_name = self.graph_name if graph_name is None else graph_name
@@ -323,7 +323,7 @@ class Graph:
         :param csv_path:
         :param id_column_name:
         :param graph_name:
-        :return:
+        :return: None
         """
 
         if id_column_name is None:
@@ -380,7 +380,7 @@ class Graph:
         :param vertex1:
         :param predicate:
         :param vertex2:
-        :return:
+        :return: None
         """
         self.cog.delete_edge(vertex1, predicate, vertex2)
 
@@ -410,7 +410,7 @@ class Graph:
         Traverse forward through edges.
         :param func:
         :param predicates: A string or a List of strings.
-        :return:
+        :return:self for method chaining.
         '''
 
         if func:
@@ -432,8 +432,8 @@ class Graph:
     def inc(self, predicates=None, func=None):
         '''
         Traverse backward through edges.
-        :param predicates:
-        :return:
+        :param predicates:List of predicates
+        :return:self for method chaining.
         '''
 
         if func:
@@ -471,9 +471,9 @@ class Graph:
     def has(self, predicates, vertex):
         """
         Filters all outgoing edges from a vertex that matches a list of predicates.
-        :param predicates:
-        :param vertex:
-        :return:
+        :param predicates: List of predicates
+        :param vertex: Vertex ID
+        :return:self for method chaining.
         """
 
         if predicates is not None:
@@ -494,9 +494,9 @@ class Graph:
     def hasr(self, predicates, vertex):
         """
         'Has' in reverse. Filters all incoming edges from a vertex that matches a list of predicates.
-        :param predicates:
-        :param vertex:
-        :return:
+        :param predicates:List of predicates
+        :param vertex:Vertex ID
+        :return: self for method chaining.
         """
 
         if predicates is not None:
@@ -516,10 +516,11 @@ class Graph:
 
     def scan(self, limit=10, scan_type='v'):
         '''
-        Scans vertices or edges in a graph.
-        :param limit:
-        :param scan_type:
-        :return:
+        Scan vertices or edges in the current graph namespace and return them as Vertex objects.
+        :param limit:Maximum number of items to return from the scan
+        :param scan_type: use 'v' to scan the vertex set or 'e' to scan the edge set
+        :return: List of Vertex instances corresponding to the scanned items, in the order yielded by the
+        underlying Cog scanner.
         '''
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
@@ -943,7 +944,7 @@ class Graph:
         '''
         Saves vertices with a tag name. Used to capture vertices while traversing a graph.
         :param tag_name:
-        :return:
+        :return:self for method chaining.
         '''
         for v in self.last_visited_vertices:
             v.tags[tag_name] = v.id
