@@ -82,12 +82,12 @@ class Graph:
 
     def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
                  flush_interval=1):
-        '''
+        """
         :param graph_name:
         :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         :param flush_interval: Number of writes before auto-flush. 1 = every write (safest).
-        '''
+        """
 
         self.config = cfg
         self.config.COG_HOME = cog_home
@@ -235,7 +235,7 @@ class Graph:
         Shorthand for put_json
         :param update:
         :param json_object:
-        :return:
+        :return: None
         """
         self.put_json(json_object, update)
 
@@ -306,7 +306,7 @@ class Graph:
 
         :param graph_data_path:
         :param graph_name:
-        :return:
+        :return: None
         """
 
         graph_name = self.graph_name if graph_name is None else graph_name
@@ -323,7 +323,7 @@ class Graph:
         :param csv_path:
         :param id_column_name:
         :param graph_name:
-        :return:
+        :return: None
         """
 
         if id_column_name is None:
@@ -380,7 +380,7 @@ class Graph:
         :param vertex1:
         :param predicate:
         :param vertex2:
-        :return:
+        :return: None
         """
         self.cog.delete_edge(vertex1, predicate, vertex2)
 
@@ -406,12 +406,12 @@ class Graph:
         return self
 
     def out(self, predicates=None, func=None):
-        '''
+        """
         Traverse forward through edges.
         :param func:
         :param predicates: A string or a List of strings.
-        :return:
-        '''
+        :return: self for method chaining.
+        """
 
         if func:
             warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
@@ -430,11 +430,11 @@ class Graph:
         return self
 
     def inc(self, predicates=None, func=None):
-        '''
+        """
         Traverse backward through edges.
-        :param predicates:
-        :return:
-        '''
+        :param predicates: List of predicates
+        :return: self for method chaining.
+        """
 
         if func:
             warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
@@ -471,9 +471,9 @@ class Graph:
     def has(self, predicates, vertex):
         """
         Filters all outgoing edges from a vertex that matches a list of predicates.
-        :param predicates:
-        :param vertex:
-        :return:
+        :param predicates: List of predicates
+        :param vertex: Vertex ID
+        :return: self for method chaining.
         """
 
         if predicates is not None:
@@ -494,9 +494,9 @@ class Graph:
     def hasr(self, predicates, vertex):
         """
         'Has' in reverse. Filters all incoming edges from a vertex that matches a list of predicates.
-        :param predicates:
-        :param vertex:
-        :return:
+        :param predicates: List of predicates
+        :param vertex: Vertex ID
+        :return: self for method chaining.
         """
 
         if predicates is not None:
@@ -515,12 +515,12 @@ class Graph:
         return self
 
     def scan(self, limit=10, scan_type='v'):
-        '''
-        Scans vertices or edges in a graph.
-        :param limit:
-        :param scan_type:
-        :return:
-        '''
+        """
+        Scan vertices or edges in the current graph namespace and return their IDs.
+        :param limit: Maximum number of items to return from the scan
+        :param scan_type: use 'v' to scan the vertex set or 'e' to scan the edge set
+        :return: A dictionary containing a list of scanned item(vertex) IDs, e.g., `{'result': [{'id': '...'}]}`.
+        """
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
@@ -571,18 +571,18 @@ class Graph:
         self.last_visited_vertices = traverse_vertex
 
     def filter(self, func):
-        '''
+        """
             Applies a filter function to the vertices and removes any vertices that do not pass the filter.
-        '''
+        """
         self.last_visited_vertices = [v for v in self.last_visited_vertices if func(v.id)]
         return self
 
     def both(self, predicates=None):
-        '''
+        """
         Traverse edges in both directions (out + in).
         :param predicates: A string or list of predicate strings to follow.
         :return: self for method chaining.
-        '''
+        """
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
@@ -625,11 +625,11 @@ class Graph:
         return self
 
     def is_(self, *nodes):
-        '''
+        """
         Filter paths to only those currently at the specified node(s).
         :param nodes: One or more node IDs to filter to.
         :return: self for method chaining.
-        '''
+        """
         if len(nodes) == 1 and isinstance(nodes[0], list):
             node_set = set(nodes[0])
         else:
@@ -638,10 +638,10 @@ class Graph:
         return self
 
     def unique(self):
-        '''
+        """
         Remove duplicate vertices from the result set.
         :return: self for method chaining.
-        '''
+        """
         seen = set()
         unique_vertices = []
         for v in self.last_visited_vertices:
@@ -652,29 +652,29 @@ class Graph:
         return self
 
     def limit(self, n):
-        '''
+        """
         Limit results to the first N vertices.
         :param n: Maximum number of vertices to return.
         :return: self for method chaining.
-        '''
+        """
         self.last_visited_vertices = self.last_visited_vertices[:n]
         return self
 
     def skip(self, n):
-        '''
+        """
         Skip the first N vertices in the result set.
         :param n: Number of vertices to skip.
         :return: self for method chaining.
-        '''
+        """
         self.last_visited_vertices = self.last_visited_vertices[n:]
         return self
 
     def back(self, tag):
-        '''
+        """
         Return to vertices saved at the given tag, preserving all constraints.
         :param tag: A previous tag in the query to jump back to.
         :return: self for method chaining.
-        '''
+        """
         vertices = []
         for v in self.last_visited_vertices:
             if tag in v.tags:
@@ -940,11 +940,11 @@ class Graph:
         return 1.0 - float(distance)
 
     def tag(self, tag_name):
-        '''
+        """
         Saves vertices with a tag name. Used to capture vertices while traversing a graph.
         :param tag_name:
-        :return:
-        '''
+        :return: self for method chaining.
+        """
         for v in self.last_visited_vertices:
             v.tags[tag_name] = v.id
         return self
@@ -1224,12 +1224,12 @@ class View(object):
         self.html = html
 
     def render(self, height=700, width=700):
-        '''
+        """
         :param self:
         :param height:
         :param width:
         :return:
-        '''
+        """
         iframe_html = r"""  <iframe srcdoc='{0}' width="{1}" height="{2}"> </iframe> """.format(self.html, width,
                                                                                                 height)
         from IPython.core.display import display, HTML
