@@ -387,23 +387,30 @@ class Index:
         record.set_store_position(data_at_index_position)
         self.logger.debug("read record " + str(record))
         if record.key == key:
-            """delete bucket => map hash table to empty block"""
-            self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+            """delete bucket => map hash table to empty block, or point to next in chain"""
+            if record.key_link != Record.RECORD_LINK_NULL:
+                # Point index to next record in chain
+                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(record.key_link)
+            else:
+                # No more records in chain, clear the bucket
+                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
         else:
             """search bucket"""
-            prev_record = None
+            prev_record = record  # Initialize to the head record
             while record.key_link != Record.RECORD_LINK_NULL:
-                record = Record.load_from_store(record.key_link, store)
-                record.set_store_position(record.key_link)
-                if record.key == key:
+                next_record = Record.load_from_store(record.key_link, store)
+                next_record.set_store_position(record.key_link)
+                if next_record.key == key:
                     """
                     if same key found in bucket, update previous record in chain to point to key_link of this record
                     prev_rec -> current rec.key_link
                     curr_rec will not be linked in the bucket anymore.
                     """
-                    # update in place the key link pointer of pervios record, ! need to add fixed length padding.
-                    store.update_record_link_inplace(prev_record.store_position, record.key_link)
-                prev_record = record
+                    # update in place the key link pointer of previous record
+                    store.update_record_link_inplace(prev_record.store_position, next_record.key_link)
+                    return True
+                prev_record = next_record
+                record = next_record
         return True
 
     def flush(self):

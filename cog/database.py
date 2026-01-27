@@ -441,36 +441,51 @@ class Cog:
         self.use_table(predicate_hashed).put(Record(out_nodes(vertex1), vertex2))
         self.use_table(predicate_hashed).put(Record(in_nodes(vertex2), vertex1))
 
-    def update_edge(self, vertex1, predicate, vertex2, update_list_item=False):
+    def update_edge(self, vertex1, predicate, vertex2):
         """
-        :param vertex1: string
-        :param predicate:
-        :param vertex2:
+        Replace all edges from vertex1 (for this predicate) with a single edge to vertex2.
+        
+        This is an internal method used by Graph.put(update=True). It:
+        1. Removes all existing outgoing edges from vertex1
+        2. Removes vertex1 from all old targets' incoming edge lists
+        3. Creates a new edge from vertex1 to vertex2
+        
+        :param vertex1: source vertex
+        :param predicate: edge predicate  
+        :param vertex2: new target vertex (replaces all existing targets)
         :return:
         """
         predicate_hashed = hash_predicate(predicate)
 
-        # delete out edge from v1 to v2
+        # Get vertex1's current outgoing edges (the old targets)
         out_object = self.use_table(predicate_hashed).get(out_nodes(vertex1))
         if out_object:
-            self.__delete_links(out_object, predicate_hashed)
+            # Collect old targets to clean up their incoming edges
+            if out_object.value_type == 'l' or out_object.value_type == 'u':
+                old_targets = list(out_object.value)
+            else:
+                old_targets = [out_object.value]
+            
+            # Delete vertex1's outgoing edges
+            self.use_table(predicate_hashed).delete(out_nodes(vertex1))
+            
+            # Remove vertex1 from each old target's incoming edge list
+            for old_target in old_targets:
+                in_object = self.use_table(predicate_hashed).get(in_nodes(old_target))
+                if in_object:
+                    if in_object.value_type == 'l' or in_object.value_type == 'u':
+                        # Multi-value: keep all incoming edges except from vertex1
+                        other_sources = [v for v in in_object.value if v != vertex1]
+                        self.use_table(predicate_hashed).delete(in_nodes(old_target))
+                        for src in other_sources:
+                            self.use_table(predicate_hashed).put_set(Record(in_nodes(old_target), src))
+                    else:
+                        # Single value: delete only if it's from vertex1
+                        if in_object.value == vertex1:
+                            self.use_table(predicate_hashed).delete(in_nodes(old_target))
 
-        # delete in edge from v2 to v1
-        in_object = self.use_table(predicate_hashed).get(in_nodes(vertex2))
-        if in_object:
-            self.__delete_links(in_object, predicate_hashed)
-
-        # create new edge (both ways)
+        # Create the new edge (both directions)
         self.put_node(vertex1, predicate, vertex2)
-
-    def __delete_links(self, vertex_object, predicate_hashed):
-        if vertex_object.value_type == 'l':
-            for v in vertex_object.value:
-                self.use_table(predicate_hashed).delete(out_nodes(v))
-                self.use_table(predicate_hashed).delete(in_nodes(v))
-        else:
-            self.use_table(predicate_hashed).delete(out_nodes(vertex_object.value))
-            self.use_table(predicate_hashed).delete(in_nodes(vertex_object.value))
 
     def load_triples(self, graph_data_path, graph_name):
         """
