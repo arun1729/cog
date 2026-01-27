@@ -454,6 +454,13 @@ class Cog:
         :param predicate: edge predicate  
         :param vertex2: new target vertex (replaces all existing targets)
         :return:
+        
+        WARNING: Thread Safety
+        This method is NOT atomic. The sequence of read-delete-reinsert operations
+        on incoming edge lists is susceptible to race conditions in concurrent
+        environments. If another thread adds an edge to the same target between
+        the read and delete operations, that edge may be lost. For concurrent
+        access, external synchronization (e.g., locking) is required.
         """
         predicate_hashed = hash_predicate(predicate)
 

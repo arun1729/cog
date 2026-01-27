@@ -394,6 +394,7 @@ class Index:
             else:
                 # No more records in chain, clear the bucket
                 self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+            return True
         else:
             """search bucket"""
             prev_record = record  # Initialize to the head record
@@ -411,7 +412,7 @@ class Index:
                     return True
                 prev_record = next_record
                 record = next_record
-        return True
+        return False
 
     def flush(self):
         self.db_mem.flush()

@@ -282,7 +282,7 @@ class TestIndexDelete:
         # Delete non-existent key should not crash
         result = cog.current_table.indexer.delete("does_not_exist", cog.current_table.store)
         # Should return False for not found
-        assert result == False or result is None or result == True  # Depending on implementation
+        assert result is False
 
 
 class TestGraphIntegration:
