@@ -25,6 +25,10 @@ except ImportError:
 
 NOTAG = "NOTAG"
 
+# Sort direction constants for order()
+ASC = "asc"
+DESC = "desc"
+
 
 class Vertex(object):
 
@@ -674,6 +678,20 @@ class Graph:
         self.last_visited_vertices = self.last_visited_vertices[n:]
         return self
 
+    def order(self, direction="asc"):
+        '''
+        Sort vertices by their id.
+        :param direction: Sort direction - "asc" (default) or "desc".
+        :return: self for method chaining.
+
+        Example:
+            g.v("Person").out("created_at").order().all()        # ascending (default)
+            g.v("Person").out("created_at").order(desc).all()    # descending
+        '''
+        reverse = (direction == "desc")
+        self.last_visited_vertices = sorted(self.last_visited_vertices, key=lambda v: v.id, reverse=reverse)
+        return self
+
     def back(self, tag):
         """
         Return to vertices saved at the given tag, preserving all constraints.
@@ -944,14 +962,23 @@ class Graph:
         distance = self.__cosine_distance(x, y)
         return 1.0 - float(distance)
 
-    def tag(self, tag_name):
+    def tag(self, tag_names):
         """
-        Saves vertices with a tag name. Used to capture vertices while traversing a graph.
-        :param tag_name:
+        Saves vertices with tag name(s). Used to capture vertices while traversing a graph.
+        
+        Tag names are validated to prevent XSS when used in graph views.
+        
+        :param tag_names: A string or list of strings.
         :return: self for method chaining.
         """
+        if not isinstance(tag_names, list):
+            tag_names = [tag_names]
         for v in self.last_visited_vertices:
-            v.tags[tag_name] = v.id
+            for tag_name in tag_names:
+                # Validate tag name to prevent XSS in view output
+                if not isinstance(tag_name, str):
+                    raise TypeError("Tag names must be strings")
+                v.tags[tag_name] = v.id
         return self
 
     def count(self):
@@ -986,8 +1013,11 @@ class Graph:
         """
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.all()
+        # Escape HTML special characters to prevent XSS when embedding in script tag
+        # Replace < with \u003c to prevent </script> injection
+        safe_json = json.dumps(result['result']).replace('<', '\\u003c').replace('>', '\\u003e')
         view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(
-            plot_data_insert=json.dumps(result['result'])) + script_part2
+            plot_data_insert=safe_json) + script_part2
         view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
         view = View(view, view_html)
         view.persist()

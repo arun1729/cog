@@ -1,4 +1,4 @@
-from cog.torque import Graph
+from cog.torque import Graph, ASC, DESC
 import unittest
 import os
 import shutil
@@ -183,6 +183,94 @@ class TorqueTest(unittest.TestCase):
         expected = {'result': [{'id': '<bob>'}]}
         actual = TorqueTest.g.v().hasr("<follows>", "<alice>").all()
         self.assertEqual(expected, actual)
+
+    # ============================================================
+    # Multi-tag tests
+    # ============================================================
+
+    def test_multi_tag_with_list(self):
+        """Test that tag() accepts a list of tag names and tags all of them."""
+        expected = {'result': [{'source': 'cool_person', 'target': 'cool_person', 'id': 'cool_person'},
+                               {'source': '<fred>', 'target': '<fred>', 'id': '<fred>'}]}
+        actual = TorqueTest.g.v("<bob>").out().tag(["source", "target"]).all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    def test_multi_tag_single_string_still_works(self):
+        """Test that tag() still works with a single string (backward compatibility)."""
+        expected = {'result': [{'source': 'cool_person', 'id': 'cool_person'},
+                               {'source': '<fred>', 'id': '<fred>'}]}
+        actual = TorqueTest.g.v("<bob>").out().tag("source").all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    def test_multi_tag_empty_list(self):
+        """Test that tag() with empty list does not add any tags."""
+        expected = {'result': [{'id': 'cool_person'}, {'id': '<fred>'}]}
+        actual = TorqueTest.g.v("<bob>").out().tag([]).all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    def test_multi_tag_chained(self):
+        """Test chaining: single tag followed by multi-tag."""
+        expected = {'result': [{'first': '<fred>', 'second': '<greg>', 'third': '<greg>', 'id': '<greg>'}]}
+        actual = TorqueTest.g.v("<bob>").out("<follows>").tag("first").out().tag(["second", "third"]).all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    def test_multi_tag_with_traversal(self):
+        """Test multi-tag combined with out() accepting a list of predicates."""
+        expected = {'result': [{'both': 'cool_person', 'id': 'cool_person'},
+                               {'both': '<fred>', 'id': '<fred>'}]}
+        actual = TorqueTest.g.v("<bob>").out(["<follows>", "<status>"]).tag(["both"]).all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    def test_multi_tag_preserves_previous_tags(self):
+        """Test that multi-tagging preserves tags from earlier in the traversal."""
+        expected = {'result': [{'start': '<bob>', 'end1': '<greg>', 'end2': '<greg>', 'id': '<greg>'}]}
+        actual = TorqueTest.g.v("<bob>").tag("start").out("<follows>").out().tag(["end1", "end2"]).all()
+        self.assertEqual(ordered(expected), ordered(actual))
+
+    # ============================================================
+    # Order tests
+    # ============================================================
+
+    def test_order_default_ascending(self):
+        """Test that order() without arguments sorts ascending by default."""
+        actual = TorqueTest.g.v("<bob>").out().order().all()
+        ids = [r['id'] for r in actual['result']]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_order_ascending(self):
+        """Test that order(ASC) sorts ascending."""
+        actual = TorqueTest.g.v("<bob>").out().order(ASC).all()
+        ids = [r['id'] for r in actual['result']]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_order_descending(self):
+        """Test that order(DESC) sorts descending."""
+        actual = TorqueTest.g.v("<bob>").out().order(DESC).all()
+        ids = [r['id'] for r in actual['result']]
+        self.assertEqual(ids, sorted(ids, reverse=True))
+
+    def test_order_with_string_literals(self):
+        """Test that order works with string literals 'asc' and 'desc'."""
+        actual_asc = TorqueTest.g.v("<bob>").out().order("asc").all()
+        actual_desc = TorqueTest.g.v("<bob>").out().order("desc").all()
+        ids_asc = [r['id'] for r in actual_asc['result']]
+        ids_desc = [r['id'] for r in actual_desc['result']]
+        self.assertEqual(ids_asc, sorted(ids_asc))
+        self.assertEqual(ids_desc, sorted(ids_desc, reverse=True))
+
+    def test_order_placed_before_tag(self):
+        """Test that order() can be placed before tag() in the query chain."""
+        actual = TorqueTest.g.v("<bob>").out().order().tag("source").all()
+        ids = [r['id'] for r in actual['result']]
+        self.assertEqual(ids, sorted(ids))
+        # Verify tags are still applied
+        for r in actual['result']:
+            self.assertIn('source', r)
+
+    def test_order_on_empty_result(self):
+        """Test that order() handles empty result sets gracefully."""
+        actual = TorqueTest.g.v("<bob>").out(["<nonexistent>"]).order().all()
+        self.assertEqual(actual, {'result': []})
 
     @classmethod
     def tearDownClass(cls):

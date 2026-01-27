@@ -71,13 +71,16 @@ class RemoteGraph:
             raise ConnectionError(f"Failed to connect to {self.base_url}/{self.graph_name}: {e.reason}")
     
     def _format_arg(self, arg):
-        """Format an argument for the query string."""
+        """Format an argument for the query string.
+        
+        Uses proper escaping to prevent injection attacks.
+        """
         if arg is None:
             return 'None'
         elif isinstance(arg, str):
-            # Escape quotes in strings
-            escaped = arg.replace("'", "\\'")
-            return f"'{escaped}'"
+            # Use json.dumps for its string escaping (handles backslashes, quotes, etc.)
+            # Not expecting JSON input - just leveraging its robust escape logic
+            return json.dumps(arg)
         elif isinstance(arg, bool):
             return 'True' if arg else 'False'
         elif isinstance(arg, (int, float)):
@@ -86,7 +89,8 @@ class RemoteGraph:
             formatted = ', '.join(self._format_arg(a) for a in arg)
             return f"[{formatted}]"
         else:
-            return repr(arg)
+            # Use json.dumps as a safe fallback
+            return json.dumps(arg)
     
     def _add_method(self, method_name, *args, **kwargs):
         """Add a method call to the query chain (mutates self, like local Graph)."""
@@ -151,9 +155,9 @@ class RemoteGraph:
     
     # === Tagging and navigation ===
     
-    def tag(self, tag_name):
-        """Tag current vertices."""
-        return self._add_method('tag', tag_name)
+    def tag(self, tag_names):
+        """Tag current vertices with one or more tag names."""
+        return self._add_method('tag', tag_names)
     
     def back(self, tag):
         """Return to tagged vertices."""
