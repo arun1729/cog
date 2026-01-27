@@ -261,12 +261,12 @@ class Graph:
     def _traverse_json(self, jsn, update=False):
         new_edge_created = set()
 
-        def traverse(json_obj, subject, predicate=None, update_object=False, sub_list_item=False):
+        def traverse(json_obj, subject, predicate=None, update_object=False, in_list=False):
 
             if type(json_obj) is dict:
                 # every object has an id
                 if "_id" in json_obj:
-                    if sub_list_item and update_object:
+                    if in_list and update_object:
                         raise Exception("Updating a sub object or list item with an _id is not supported.")
                     child_id = str(BlankNode(json_obj["_id"]))
                 else:
@@ -274,9 +274,12 @@ class Graph:
                     child_id = str(BlankNode())
                 if predicate:
                     # this is to skip the first iteration where predicate is None.
-                    self.put(subject, predicate, child_id, update_object)
+                    # For items inside a list, always add (don't replace) even during updates
+                    effective_update = update_object and not in_list
+                    self.put(subject, predicate, child_id, effective_update)
                 for a in json_obj:
-                    traverse(json_obj[a], child_id, a, update_object, sub_list_item=True)
+                    # Properties of a dict are NOT in a list - reset in_list to False
+                    traverse(json_obj[a], child_id, a, update_object, in_list=False)
 
             elif type(json_obj) is list:
                 # create a new blank node for each list.
@@ -284,15 +287,17 @@ class Graph:
                 self.put(subject, predicate, list_id, update_object)
                 # new_edge_created.add((str(subject), str(predicate)))
 
-                # traverse the list.
+                # traverse the list - mark items as being in a list
                 for obj in json_obj:
-                    traverse(obj, list_id, predicate, update_object, sub_list_item=True)
+                    traverse(obj, list_id, predicate, update_object, in_list=True)
 
             else:
+                # For items inside a list, always add (don't replace) even during updates
+                effective_update = update_object and not in_list
                 if (str(subject), str(predicate)) in new_edge_created:
-                    self.put(subject, predicate, json_obj, update_object)
+                    self.put(subject, predicate, json_obj, effective_update)
                 else:
-                    self.put(subject, predicate, json_obj, update_object)
+                    self.put(subject, predicate, json_obj, effective_update)
                     new_edge_created.add((str(subject), str(predicate)))
 
         if "_id" in jsn:

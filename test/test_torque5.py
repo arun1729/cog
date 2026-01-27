@@ -63,24 +63,24 @@ class TorqueTest(unittest.TestCase):
         actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
         self.assertTrue(ordered(expected) == ordered(actual))
 
-        # example of mistake that can be made by updating an object with existing _id at a different location in the json.
+        # Update the nested object directly by its _id - this now correctly replaces the city
         TorqueTest.g.updatej('{"_id" : "11", "city" : "edmonton"}')
 
-        expected = {'result': [{'id': 'edmonton'}, {'id': 'vancouver'}]}
-        actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
-        self.assertTrue(ordered(expected) == ordered(actual))
-
-        # the correct way to update that json is to update root object, note that location does not have an _id
         expected = {'result': [{'id': 'edmonton'}]}
-        TorqueTest.g.updatej('{"_id":  "1", "name" : "fred", "location" : {"city" : "edmonton"}}')
         actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
         self.assertTrue(ordered(expected) == ordered(actual))
 
-        with self.assertRaises(Exception) as excp:
-            TorqueTest.g.updatej('{"_id":  "1", "name" : "fred", "location" : {"_id" : "11", "city" : "edmonton"}}')
-            actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
+        # Alternative way: update via the root object
+        expected = {'result': [{'id': 'calgary'}]}
+        TorqueTest.g.updatej('{"_id":  "1", "name" : "fred", "location" : {"city" : "calgary"}}')
+        actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
 
-        self.assertTrue(str(excp.exception), "Updating a sub object or list item with an _id is not supported.")
+        # Update via root with nested _id - this now works correctly 
+        expected = {'result': [{'id': 'toronto'}]}
+        TorqueTest.g.updatej('{"_id":  "1", "name" : "fred", "location" : {"_id" : "11", "city" : "toronto"}}')
+        actual = TorqueTest.g.v("fred").inc().out("location").out("city").all()
+        self.assertTrue(ordered(expected) == ordered(actual))
 
     def test_torque_json_update_2(self):
         """
