@@ -8,6 +8,7 @@ Tests for edge update operations and index deletion with hash collisions.
 import pytest
 import os
 import shutil
+import uuid
 from cog.torque import Graph
 from cog.database import Cog, hash_predicate, in_nodes, out_nodes
 from cog.core import Table, Record, Index, cog_hash
@@ -19,25 +20,38 @@ COG_HOME = "test_edge_operations_home"
 
 @pytest.fixture
 def clean_graph():
-    """Create a fresh graph for each test."""
-    if os.path.exists("/tmp/" + COG_HOME):
-        shutil.rmtree("/tmp/" + COG_HOME)
-    g = Graph("test_graph", cog_home=COG_HOME)
+    """Create a fresh graph for each test with complete isolation."""
+    unique_dir = COG_HOME + "_" + str(uuid.uuid4())[:8]
+    full_path = "/tmp/" + unique_dir
+    
+    if os.path.exists(full_path):
+        shutil.rmtree(full_path)
+    os.makedirs(full_path)
+    config.CUSTOM_COG_DB_PATH = full_path
+    
+    g = Graph("test_graph")
     yield g
     g.close()
-    if os.path.exists("/tmp/" + COG_HOME):
-        shutil.rmtree("/tmp/" + COG_HOME)
+    if os.path.exists(full_path):
+        shutil.rmtree(full_path)
 
 
 @pytest.fixture
 def clean_cog():
     """Create a fresh Cog instance for low-level tests."""
-    if os.path.exists("/tmp/" + COG_HOME):
-        shutil.rmtree("/tmp/" + COG_HOME)
-    config.COG_HOME = COG_HOME
+    unique_dir = COG_HOME + "_" + str(uuid.uuid4())[:8]
+    full_path = "/tmp/" + unique_dir
+    
+    if os.path.exists(full_path):
+        shutil.rmtree(full_path)
+    os.makedirs(full_path)
+    config.CUSTOM_COG_DB_PATH = full_path
+    
     cog = Cog()
     yield cog
     cog.close()
+    if os.path.exists(full_path):
+        shutil.rmtree(full_path)
     if os.path.exists("/tmp/" + COG_HOME):
         shutil.rmtree("/tmp/" + COG_HOME)
 
