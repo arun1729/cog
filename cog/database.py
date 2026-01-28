@@ -524,7 +524,7 @@ class Cog:
                 tokens = line.split()
                 v1 = tokens[0].strip()
                 v2 = tokens[1].strip()
-                self.create_or_load_table(predicate, graph_name)
+                # put_node handles table loading internally, no need to call load_table here
                 self.put_node(v1, predicate, v2)
 
     def load_csv(self, file_name, id_column_name, graph_name):
