@@ -374,5 +374,155 @@ class TestReadOnlyServer(unittest.TestCase):
             self.assertEqual(e.code, 403)
 
 
+class TestRemoteGraphErrorHandling(unittest.TestCase):
+    """Test RemoteGraph error handling and edge cases."""
+    
+    def test_connection_error_unreachable_host(self):
+        """RemoteGraph raises ConnectionError when server is unreachable."""
+        from cog.remote import RemoteGraph
+        
+        # Connect to a port that should not be running
+        remote = RemoteGraph("http://localhost:59999/nonexistent", timeout=1)
+        
+        with self.assertRaises(ConnectionError) as ctx:
+            remote.v().all()
+        
+        # Check error message contains connection info
+        self.assertIn("Failed to connect", str(ctx.exception))
+        self.assertIn("localhost", str(ctx.exception))
+    
+    def test_http_error_with_json_body(self):
+        """RemoteGraph extracts error message from JSON error response."""
+        import urllib.request
+        import urllib.error
+        from unittest.mock import patch, MagicMock
+        from cog.remote import RemoteGraph
+        
+        remote = RemoteGraph("http://localhost:8080/test_graph")
+        
+        # Mock an HTTPError with JSON error body
+        mock_error = urllib.error.HTTPError(
+            url="http://localhost:8080/test_graph/query",
+            code=400,
+            msg="Bad Request",
+            hdrs={},
+            fp=None
+        )
+        mock_error.read = MagicMock(return_value=b'{"error": "Custom error message from server"}')
+        
+        with patch('urllib.request.urlopen', side_effect=mock_error):
+            with self.assertRaises(RuntimeError) as ctx:
+                remote.v().all()
+            
+            # Should extract error message from JSON
+            self.assertEqual(str(ctx.exception), "Custom error message from server")
+    
+    def test_http_error_with_non_json_body(self):
+        """RemoteGraph handles non-JSON error responses."""
+        import urllib.request
+        import urllib.error
+        from unittest.mock import patch, MagicMock
+        from cog.remote import RemoteGraph
+        
+        remote = RemoteGraph("http://localhost:8080/test_graph")
+        
+        # Mock an HTTPError with non-JSON body
+        mock_error = urllib.error.HTTPError(
+            url="http://localhost:8080/test_graph/query",
+            code=500,
+            msg="Internal Server Error",
+            hdrs={},
+            fp=None
+        )
+        mock_error.read = MagicMock(return_value=b'This is not JSON')
+        
+        with patch('urllib.request.urlopen', side_effect=mock_error):
+            with self.assertRaises(RuntimeError) as ctx:
+                remote.v().all()
+            
+            # Should fall back to HTTPError string representation
+            self.assertIn("500", str(ctx.exception))
+
+
+class TestRemoteGraphFormatArg(unittest.TestCase):
+    """Test RemoteGraph._format_arg method for various types."""
+    
+    @classmethod
+    def setUpClass(cls):
+        if os.path.exists("/tmp/" + DIR_NAME + "4"):
+            shutil.rmtree("/tmp/" + DIR_NAME + "4")
+        os.makedirs("/tmp/" + DIR_NAME + "4", exist_ok=True)
+        
+        cls.g = Graph(graph_name="format_test", cog_home=DIR_NAME + "4")
+        cls.g.put("alice", "knows", "bob")
+        cls.g.put("bob", "knows", "charlie")
+        cls.g.put("alice", "age", "30")
+        
+        cls.port = 18083
+        cls.g.serve(port=cls.port, writable=True)
+        time.sleep(0.2)
+        
+        cls.remote = Graph.connect(f"http://localhost:{cls.port}/format_test")
+    
+    @classmethod
+    def tearDownClass(cls):
+        cls.g.stop()
+        cls.g.close()
+        shutil.rmtree("/tmp/" + DIR_NAME + "4")
+    
+    def test_format_arg_boolean_true(self):
+        """_format_arg correctly formats True boolean."""
+        from cog.remote import RemoteGraph
+        remote = RemoteGraph("http://localhost:8080/test")
+        
+        result = remote._format_arg(True)
+        self.assertEqual(result, "True")
+    
+    def test_format_arg_boolean_false(self):
+        """_format_arg correctly formats False boolean."""
+        from cog.remote import RemoteGraph
+        remote = RemoteGraph("http://localhost:8080/test")
+        
+        result = remote._format_arg(False)
+        self.assertEqual(result, "False")
+    
+    def test_format_arg_list(self):
+        """_format_arg correctly formats lists."""
+        from cog.remote import RemoteGraph
+        remote = RemoteGraph("http://localhost:8080/test")
+        
+        result = remote._format_arg(["a", "b", "c"])
+        self.assertEqual(result, '["a", "b", "c"]')
+    
+    def test_format_arg_list_mixed_types(self):
+        """_format_arg correctly formats lists with mixed types."""
+        from cog.remote import RemoteGraph
+        remote = RemoteGraph("http://localhost:8080/test")
+        
+        result = remote._format_arg(["text", 42, True])
+        self.assertEqual(result, '["text", 42, True]')
+    
+    def test_format_arg_dict_fallback(self):
+        """_format_arg uses json.dumps fallback for dicts."""
+        from cog.remote import RemoteGraph
+        remote = RemoteGraph("http://localhost:8080/test")
+        
+        result = remote._format_arg({"key": "value"})
+        # Should use json.dumps for dicts
+        self.assertEqual(result, '{"key": "value"}')
+    
+    def test_query_with_boolean_param(self):
+        """RemoteGraph handles boolean parameters in queries."""
+        # Use unique=False to trigger boolean formatting
+        result = self.remote.v("alice").out("knows").dfs(unique=False).all()
+        self.assertIn('result', result)
+    
+    def test_query_with_list_param(self):
+        """RemoteGraph handles list parameters in queries."""
+        # Use is_() with list of nodes to filter
+        result = self.remote.v().is_("alice", "bob").all()
+        self.assertIn('result', result)
+
+
 if __name__ == '__main__':
     unittest.main()

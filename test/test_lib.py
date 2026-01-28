@@ -1,5 +1,6 @@
 from cog.core import Record
 from cog.database import Cog
+from cog import cog
 import unittest
 import os
 import shutil
@@ -14,6 +15,11 @@ class TestLib(unittest.TestCase):
         if not os.path.exists("/tmp/"+DIR_NAME+"/"):
             os.mkdir("/tmp/" + DIR_NAME + "/")
             os.mkdir("/tmp/"+DIR_NAME+"/test/")
+
+    def test_cog_function(self):
+        """Test the cog() function returns expected message."""
+        result = cog()
+        self.assertEqual(result, "Cog is alive.")
 
     def test_db(self):
         data = Record('testKey','testVal')
