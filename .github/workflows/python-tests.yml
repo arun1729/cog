@@ -26,11 +26,27 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest
+        pip install pytest pytest-cov
     
-    - name: Run tests
+    - name: Run tests with coverage
       run: |
-        python -m pytest test/ -v --ignore=test/bench.py --ignore=test/benchmark.py
+        python -m pytest test/ -v --ignore=test/bench.py --ignore=test/benchmark.py --cov=cog --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+    
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.12'
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage.xml
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() && matrix.python-version == '3.12' }}
+      uses: codecov/test-results-action@v1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
     
     - name: Run quick benchmark (optional)
       run: |
