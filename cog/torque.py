@@ -126,7 +126,7 @@ class Graph:
 
     # === Network Methods ===
     
-    def serve(self, port=8080, host="0.0.0.0", blocking=False, writable=False):
+    def serve(self, port=8080, host="0.0.0.0", blocking=False, writable=False, tunnel=False):
         """
         Start HTTP server for this graph instance.
         
@@ -138,6 +138,8 @@ class Graph:
             host: Bind address (default "0.0.0.0" for all interfaces)
             blocking: If True, blocks forever (for dedicated servers)
             writable: If True, allows write operations via API
+            tunnel: If True, connect to CogDB Studio via Axle relay
+                    (requires: pip install cogdb[tunnel])
         
         Returns:
             self for method chaining
@@ -152,6 +154,9 @@ class Graph:
             
             # Allow remote writes
             g.serve(port=8080, writable=True)
+            
+            # Connect to CogDB Studio (public access)
+            g.serve(port=8080, tunnel=True)
         """
         from cog.server import get_or_create_server
         
@@ -168,6 +173,11 @@ class Graph:
         # Register this graph
         server.register_graph(self, writable=writable)
         self._server_port = port
+        
+        # Start tunnel if requested
+        if tunnel:
+            from cog.tunnel import start_tunnel
+            start_tunnel(port)
         
         # Start server if it's new
         if is_new:
