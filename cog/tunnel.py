@@ -1,7 +1,6 @@
 # tunnel.py - WebSocket tunnel client for CogDB Studio
 """
 Tunnel client that connects a local g.serve() instance to the Axle relay,
-enabling access via the CogDB Studio playground at https://cogdb.io/playground.
 """
 import json
 import threading
