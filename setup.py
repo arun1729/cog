@@ -9,7 +9,7 @@ setup(
     author_email='arunm3.141@gmail.com',
     license='MIT',
     packages=['cog'],
-    install_requires=['xxhash>=3.2.0', 'simsimd>=5.0.0', 'websocket-client>=1.9.0']
+    install_requires=['xxhash>=3.2.0', 'simsimd>=5.0.0', 'websocket-client>=1.9.0'],
     extras_require={
         'dev': ['pytest', 'pytest-cov'],
     },
