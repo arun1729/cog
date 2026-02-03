@@ -102,6 +102,10 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
         
         return None, 'index'
     
+    def _get_share_url(self):
+        """Get the share URL from X-Share-Url header (set by relay for remote access)."""
+        return self.headers.get('X-Share-Url', '')
+    
     def _get_graph_state(self, graph_name):
         """Get the state for a specific graph."""
         graphs = self.server.cog_graphs
@@ -186,7 +190,8 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
             local_ip=self._get_local_ip(),
             port=self.server.server_address[1],
             graphs_html=graphs_html,
-            uptime_str=uptime_str
+            uptime_str=uptime_str,
+            share_url=self._get_share_url()
         )
         self._send_html(html)
     
@@ -238,7 +243,8 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
             uptime_str=uptime_str,
             queries_served=queries_served,
             last_query_str=last_query_str,
-            mode_str=mode_str
+            mode_str=mode_str,
+            share_url=self._get_share_url()
         )
         self._send_html(html)
     

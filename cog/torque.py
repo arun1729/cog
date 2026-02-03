@@ -126,7 +126,7 @@ class Graph:
 
     # === Network Methods ===
     
-    def serve(self, port=8080, host="0.0.0.0", blocking=False, writable=False):
+    def serve(self, port=8080, host="0.0.0.0", blocking=False, writable=False, share=False):
         """
         Start HTTP server for this graph instance.
         
@@ -138,6 +138,7 @@ class Graph:
             host: Bind address (default "0.0.0.0" for all interfaces)
             blocking: If True, blocks forever (for dedicated servers)
             writable: If True, allows write operations via API
+            share: If True, connect to CogDB relay
         
         Returns:
             self for method chaining
@@ -152,6 +153,9 @@ class Graph:
             
             # Allow remote writes
             g.serve(port=8080, writable=True)
+            
+            # Share graph publicly
+            g.serve(port=8080, share=True)
         """
         from cog.server import get_or_create_server
         
@@ -168,6 +172,14 @@ class Graph:
         # Register this graph
         server.register_graph(self, writable=writable)
         self._server_port = port
+        
+        # Start share if requested
+        if share:
+            from cog.share import start_share
+            share_info = start_share(port, local_host=host)
+            share_url = share_info.wait()
+            self._share_url = share_url
+            self.logger.info(f"Share connected: {share_url}")
         
         # Start server if it's new
         if is_new:
@@ -194,6 +206,21 @@ class Graph:
             unregister_from_server(self._server_port, self.graph_name)
             self._server_port = None
         return self
+    
+    def share_url(self):
+        """
+        Get the public share URL for this graph.
+        
+        Only available after calling serve(share=True).
+        
+        Returns:
+            str: The share URL (e.g., "https://abc123.s.cogdb.io/") or None if not sharing
+        
+        Example:
+            g.serve(port=8080, share=True)
+            print(g.share_url())  # https://abc123.s.cogdb.io/
+        """
+        return getattr(self, '_share_url', None)
     
     @classmethod
     def connect(cls, url, timeout=30):
