@@ -20,6 +20,11 @@ EMBEDDING_SET_TABLE_NAME = 'EMBEDDING_SET'
 ''' CUSTOM COG DB PATH '''
 CUSTOM_COG_DB_PATH = None
 
+''' SHARE/TUNNEL RELAY '''
+# Set to None to disable the share feature entirely
+# When None, calling serve(share=True) will raise an error
+RELAY_URL = "wss://s.cogdb.io/register"
+
 
 def cog_db_path():
     if CUSTOM_COG_DB_PATH:

@@ -9,7 +9,17 @@ Uses stdlib urllib.request for zero dependencies.
 import urllib.request
 import urllib.error
 import json
+import ssl
 from urllib.parse import urlparse
+
+# Create SSL context for HTTPS support
+# Use certifi if available (for proper HTTPS certificate verification)
+try:
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    # Fall back to system certificates
+    _SSL_CONTEXT = ssl.create_default_context()
 
 
 class RemoteGraph:
@@ -31,24 +41,30 @@ class RemoteGraph:
         Args:
             url: URL including graph name path 
                  (e.g., "http://localhost:8080/my_graph")
+                 or share URL (e.g., "https://abc123.s.cogdb.io/my_graph")
             timeout: Request timeout in seconds
         """
         parsed = urlparse(url)
         
-        # Extract graph name from path
-        path_parts = parsed.path.strip('/').split('/')
-        if not path_parts or not path_parts[0]:
+        # Preserve the path for graph name extraction
+        # e.g., /my_graph -> graph is my_graph
+        path = parsed.path.rstrip('/')
+        if not path:
             raise ValueError("URL must include graph name in path (e.g., http://localhost:8080/my_graph)")
         
-        self.graph_name = path_parts[0]
+        # Store the full path for building request URLs
+        self._base_path = path
         self.base_url = f"{parsed.scheme}://{parsed.netloc}"
         self.timeout = timeout
         self._query_parts = []
+        
+        # Extract graph name from the last path segment (for display/reference)
+        self.graph_name = path.split('/')[-1]
     
     def _request(self, endpoint, data=None, method='GET'):
         """Make an HTTP request to the server."""
-        # Prepend graph name to endpoint
-        url = f"{self.base_url}/{self.graph_name}{endpoint}"
+        # Use full base path + endpoint
+        url = f"{self.base_url}{self._base_path}{endpoint}"
         
         if data is not None:
             data = json.dumps(data).encode('utf-8')
@@ -58,7 +74,7 @@ class RemoteGraph:
             req = urllib.request.Request(url, method=method)
         
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+            with urllib.request.urlopen(req, timeout=self.timeout, context=_SSL_CONTEXT) as response:
                 return json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
