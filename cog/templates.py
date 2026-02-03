@@ -4,6 +4,15 @@ CogDB Server HTML Templates
 HTML templates for the CogDB HTTP server admin pages.
 """
 
+import html
+
+
+def _escape(s):
+    """Escape string for safe HTML output."""
+    if not s:
+        return s
+    return html.escape(str(s), quote=True)
+
 # ASCII logo used in both pages
 ASCII_LOGO = """ ██████╗ ██████╗  ██████╗ ██████╗ ██████╗ 
 ██╔════╝██╔═══██╗██╔════╝ ██╔══██╗██╔══██╗
@@ -86,7 +95,7 @@ html, body {
 """
 
 
-def render_index_page(version, local_ip, port, graphs_html, uptime_str):
+def render_index_page(version, local_ip, port, graphs_html, uptime_str, share_url=""):
     """
     Render the index page listing all available graphs.
     
@@ -96,10 +105,20 @@ def render_index_page(version, local_ip, port, graphs_html, uptime_str):
         port: Server port
         graphs_html: Pre-rendered HTML for graph rows
         uptime_str: Formatted uptime string
+        share_url: Optional share URL for remote access (e.g., 'https://abc123.s.cogdb.io/')
     
     Returns:
         Complete HTML string for the index page
     """
+    # Use share URL if available, otherwise local address
+    # Escape user-controlled values to prevent XSS
+    if share_url:
+        address_display = _escape(share_url.rstrip('/'))
+        connect_url = f"{_escape(share_url.rstrip('/'))}/&lt;graph&gt;"
+    else:
+        address_display = f"{_escape(local_ip)}:{port}"
+        connect_url = f"http://{_escape(local_ip)}:{port}/&lt;graph&gt;"
+    
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,8 +177,8 @@ def render_index_page(version, local_ip, port, graphs_html, uptime_str):
         
         <div class="info-block">
             <div class="section-title">Server</div>
-            <div class="info-row"><span class="info-label">Address:</span><span class="info-value">{local_ip}:{port}</span></div>
-            <div class="info-row"><span class="info-label">Connect URL:</span><span class="info-value">http://{local_ip}:{port}/&lt;graph&gt;</span></div>
+            <div class="info-row"><span class="info-label">Address:</span><span class="info-value">{address_display}</span></div>
+            <div class="info-row"><span class="info-label">Connect URL:</span><span class="info-value">{connect_url}</span></div>
         </div>
         
         <div class="info-block">
@@ -186,17 +205,18 @@ def render_graph_row(name, node_count, mode):
     Returns:
         HTML string for the graph row
     """
+    safe_name = _escape(name)
     return f'''
             <div class="graph-row">
-                <a href="/{name}/" class="graph-link">{name}</a>
+                <a href="/{safe_name}/" class="graph-link">{safe_name}</a>
                 <span class="graph-info">{node_count:,} nodes</span>
-                <span class="graph-mode">{mode}</span>
+                <span class="graph-mode">{_escape(mode)}</span>
             </div>'''
 
 
 def render_status_page(version, local_ip, port, graph_name, instance_id, 
                        node_count, edge_count, uptime_str, queries_served, 
-                       last_query_str, mode_str):
+                       last_query_str, mode_str, share_url=""):
     """
     Render the status page for a specific graph.
     
@@ -212,10 +232,18 @@ def render_status_page(version, local_ip, port, graph_name, instance_id,
         queries_served: Number of queries served
         last_query_str: Last query time string
         mode_str: "writable" or "read-only"
+        share_url: Optional share URL for remote access (e.g., 'https://abc123.s.cogdb.io/')
     
     Returns:
         Complete HTML string for the status page
     """
+    safe_graph_name = _escape(graph_name)
+    # Use share URL if available, otherwise local address
+    if share_url:
+        connect_url = f"{_escape(share_url.rstrip('/'))}/{safe_graph_name}"
+    else:
+        connect_url = f"http://{_escape(local_ip)}:{port}/{safe_graph_name}"
+    
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -251,7 +279,7 @@ def render_status_page(version, local_ip, port, graph_name, instance_id,
             <div class="section-title">Graph Status</div>
             <div class="info-row"><span class="info-label">Graph:</span><span class="info-value">{graph_name}</span></div>
             <div class="info-row"><span class="info-label">Instance ID:</span><span class="info-value">{instance_id}</span></div>
-            <div class="info-row"><span class="info-label">Connect URL:</span><span class="info-value">http://{local_ip}:{port}/{graph_name}</span></div>
+            <div class="info-row"><span class="info-label">Connect URL:</span><span class="info-value">{connect_url}</span></div>
             <div class="info-row"><span class="info-label">Nodes:</span><span class="info-value">{node_count:,}</span></div>
             <div class="info-row"><span class="info-label">Edges:</span><span class="info-value">{edge_count:,}</span></div>
             <div class="info-row"><span class="info-label">Uptime:</span><span class="info-value">{uptime_str}</span></div>
