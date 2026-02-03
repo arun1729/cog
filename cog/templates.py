@@ -277,8 +277,8 @@ def render_status_page(version, local_ip, port, graph_name, instance_id,
         
         <div class="info-block">
             <div class="section-title">Graph Status</div>
-            <div class="info-row"><span class="info-label">Graph:</span><span class="info-value">{graph_name}</span></div>
-            <div class="info-row"><span class="info-label">Instance ID:</span><span class="info-value">{instance_id}</span></div>
+            <div class="info-row"><span class="info-label">Graph:</span><span class="info-value">{safe_graph_name}</span></div>
+            <div class="info-row"><span class="info-label">Instance ID:</span><span class="info-value">{_escape(instance_id)}</span></div>
             <div class="info-row"><span class="info-label">Connect URL:</span><span class="info-value">{connect_url}</span></div>
             <div class="info-row"><span class="info-label">Nodes:</span><span class="info-value">{node_count:,}</span></div>
             <div class="info-row"><span class="info-label">Edges:</span><span class="info-value">{edge_count:,}</span></div>

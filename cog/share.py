@@ -25,7 +25,7 @@ def _validate_path(path):
     if '@' in path:
         return False
     # Path must be a valid URL path (alphanumeric, /, -, _, ., ?, &, =, etc.)
-    if not re.match(r'^[a-zA-Z0-9/_\-\.?&=%]+$', path):
+    if not re.match(r'^[a-zA-Z0-9/_\-\.\?&=%]+$', path):
         return False
     return True
 
@@ -127,6 +127,7 @@ def start_share(local_port, local_host="127.0.0.1", relay_url=None):
             
             # Forward requests from relay to local server
             while True:
+                msg = {}
                 try:
                     msg = json.loads(ws.recv())
                     msg_type = msg.get("type")
