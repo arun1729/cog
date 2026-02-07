@@ -26,19 +26,21 @@ class TorqueTest(unittest.TestCase):
         if not os.path.exists("/tmp/" + DIR_NAME):
             os.mkdir("/tmp/" + DIR_NAME)
 
-    def test_torque_drop_1(self):
-        g = Graph(graph_name="test_drop", cog_home=DIR_NAME)
+    def test_delete_edge_1(self):
+        """Test delete() removes a single edge."""
+        g = Graph(graph_name="test_delete", cog_home=DIR_NAME)
         expected = {'result': [{'id': 'greg'}]}
         g.put("bob", "friends", "greg")
         actual = g.v("bob").out("friends").all()
         self.assertTrue(expected == actual)
 
-        g.drop("bob", "friends", "greg")
+        g.delete("bob", "friends", "greg")
         actual = g.v("bob").out("friends").all()
         self.assertTrue({'result': []} == actual)
         g.close()
 
-    def test_torque_drop_2(self):
+    def test_delete_edge_2(self):
+        """Test delete() removes one edge while keeping others."""
         g = Graph(graph_name="test2", cog_home=DIR_NAME)
         g.put("bob", "friends", "greg")
         g.put("bob", "friends", "alice")
@@ -48,7 +50,7 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue(expected == actual)
 
         expected = {'result': [{'id': 'alice'}]}
-        g.drop("bob", "friends", "greg")
+        g.delete("bob", "friends", "greg")
         actual = g.v("bob").out("friends").all()
         self.assertTrue(expected == actual)
 
@@ -56,13 +58,14 @@ class TorqueTest(unittest.TestCase):
         self.assertTrue({'result': []} == actual)
         g.close()
 
-    def test_torque_drop_3(self):
+    def test_delete_edge_3(self):
+        """Test delete() only removes specified predicate edge."""
         g = Graph(graph_name="test3", cog_home=DIR_NAME)
         g.put("bob", "friends", "greg")
         g.put("bob", "friends", "alice")
         g.put("bob", "neighbour", "alice")
 
-        g.drop("bob", "friends", "alice")
+        g.delete("bob", "friends", "alice")
 
         expected = {'result': [{'id': 'alice'}]}
         actual = g.v("bob").out("neighbour").all()
@@ -71,6 +74,39 @@ class TorqueTest(unittest.TestCase):
         expected = {'result': [{'id': 'bob', 'edges': ['neighbour']}]}
         actual = g.v("alice").inc().all('e')
         self.assertTrue(ordered(expected) == ordered(actual))
+        g.close()
+
+    def test_drop_with_args_raises_deprecation(self):
+        """Test drop(s, p, o) raises DeprecationWarning."""
+        g = Graph(graph_name="test_deprecation", cog_home=DIR_NAME)
+        g.put("a", "b", "c")
+        
+        with self.assertRaises(DeprecationWarning) as context:
+            g.drop("a", "b", "c")
+        
+        self.assertIn("deprecated", str(context.exception).lower())
+        self.assertIn("delete", str(context.exception).lower())
+        g.close()
+
+    def test_truncate(self):
+        """Test truncate() clears all data but keeps graph usable."""
+        g = Graph(graph_name="test_truncate", cog_home=DIR_NAME)
+        g.put("alice", "knows", "bob")
+        g.put("bob", "knows", "charlie")
+        g.put("charlie", "knows", "alice")
+        
+        # Verify data exists
+        self.assertEqual(g.v("alice").out("knows").count(), 1)
+        
+        # Truncate
+        g.truncate()
+        
+        # Verify empty
+        self.assertEqual(g.v().count(), 0)
+        
+        # Verify still usable
+        g.put("new", "data", "here")
+        self.assertEqual(g.v("new").out("data").count(), 1)
         g.close()
 
     def test_filter_string(self):

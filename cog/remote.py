@@ -293,8 +293,8 @@ class RemoteGraph:
             raise RuntimeError(response.get('error', 'Write failed'))
         return self
     
-    def drop(self, subject, predicate, obj):
-        """Delete a triple (requires writable server)."""
+    def delete(self, subject, predicate, obj):
+        """Delete a specific triple/edge (requires writable server)."""
         response = self._request('/mutate', {
             'op': 'delete',
             'args': [subject, predicate, obj]
@@ -304,8 +304,37 @@ class RemoteGraph:
             raise RuntimeError(response.get('error', 'Delete failed'))
         return self
     
+    def drop(self, *args):
+        """
+        Deprecated: Use delete() for edges.
+        
+        drop() with no arguments would delete the entire graph,
+        but this is not supported for remote graphs.
+        """
+        if len(args) > 0:
+            raise DeprecationWarning(
+                "drop(s, p, o) is deprecated. Use delete(s, p, o) for edges. "
+                "Use drop() with no arguments to delete the entire graph."
+            )
+        raise NotImplementedError(
+            "drop() is not supported for remote graphs. "
+            "Use truncate() to clear data, or access the graph locally to delete it."
+        )
+    
+    def truncate(self):
+        """Wipe all triples but keep graph structure (requires writable server)."""
+        response = self._request('/mutate', {
+            'op': 'truncate',
+            'args': []
+        }, method='POST')
+        
+        if not response.get('ok'):
+            raise RuntimeError(response.get('error', 'Truncate failed'))
+        return self
+    
     # === Stats ===
     
     def stats(self):
         """Get server statistics."""
         return self._request('/stats')
+

@@ -383,8 +383,12 @@ class CogDBRequestHandler(BaseHTTPRequestHandler):
                 if len(args) != 3:
                     self._send_json({'ok': False, 'error': 'delete requires [subject, predicate, object]'}, 400)
                     return
-                graph.drop(args[0], args[1], args[2])
+                graph.delete(args[0], args[1], args[2])
                 self._send_json({'ok': True, 'affected': 1})
+            
+            elif op == 'truncate':
+                graph.truncate()
+                self._send_json({'ok': True, 'message': 'Graph truncated'})
                 
             else:
                 self._send_json({'ok': False, 'error': f'Unknown operation: {op}'}, 400)

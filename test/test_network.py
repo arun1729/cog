@@ -326,11 +326,11 @@ class TestRemoteGraph(unittest.TestCase):
         self.assertIn('result', result)
     
     def test_delete(self):
-        """RemoteGraph drop() works."""
+        """RemoteGraph delete() works."""
         # Add a node we can delete
         self.remote.put("del_test", "temp", "del_target")
-        # Delete it using drop()
-        self.remote.drop("del_test", "temp", "del_target")
+        # Delete it using delete()
+        self.remote.delete("del_test", "temp", "del_target")
         # Verify via local graph - should not find the edge
     
     def test_scan(self):
