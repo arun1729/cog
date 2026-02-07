@@ -373,7 +373,7 @@ class Graph:
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2, update=False, create_new_edge=False):
-        self.cog.use_namespace(self.graph_name).use_table(predicate)
+        self.cog.use_namespace(self.graph_name)
         if update:
             if create_new_edge:
                 self.cog.put_new_edge(vertex1, predicate, vertex2)
@@ -403,7 +403,6 @@ class Graph:
         self.cog.begin_batch()
         try:
             for v1, pred, v2 in triples:
-                self.cog.use_table(pred)
                 self.cog.put_node(v1, pred, v2)
         finally:
             self.cog.end_batch()
