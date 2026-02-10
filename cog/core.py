@@ -621,11 +621,6 @@ class Store:
             [serialized payload: exactly value_len bytes]
             [value_link digits: variable ASCII, only if value_type in ('l','u')]
             [RECORD_SEP: 1 byte]
-
-        By reading the header first to discover *value_len*, we can read
-        exactly the right number of payload bytes and never mistake a
-        RECORD_SEP (0xFD) that appears *inside* the marshalled payload
-        for the true record terminator.
         """
         # --- fixed-size header: key_link(16) + tombstone(1) + value_type(1) = 18 bytes
         header = self.__read_exactly(18)
