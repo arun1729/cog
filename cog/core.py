@@ -629,7 +629,7 @@ class Store:
         """
         # --- fixed-size header: key_link(16) + tombstone(1) + value_type(1) = 18 bytes
         header = self.__read_exactly(18)
-        if header is None:
+        if header is None or len(header) < 18:
             return None
 
         value_type = chr(header[17])       # 's', 'l', or 'u'
@@ -647,7 +647,7 @@ class Store:
 
         # --- serialized payload: exactly value_len bytes
         payload = self.__read_exactly(value_len)
-        if payload is None:
+        if payload is None or len(payload) < value_len:
             return None
 
         # --- optional value_link + RECORD_SEP terminator

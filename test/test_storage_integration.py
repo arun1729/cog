@@ -13,6 +13,8 @@ Exercises the full read/write/reopen lifecycle across every data path:
   - Mixed workloads combining all of the above
 """
 
+import logging
+from logging.config import dictConfig
 import marshal
 import math
 import os
@@ -52,6 +54,7 @@ class TestStoreLayer(unittest.TestCase):
             shutil.rmtree(cls.DB_DIR)
         os.makedirs(cls.DB_DIR + "/test_table/", exist_ok=True)
         config.CUSTOM_COG_DB_PATH = cls.DB_DIR
+        dictConfig(config.logging_config)
 
     @classmethod
     def tearDownClass(cls):
@@ -59,9 +62,6 @@ class TestStoreLayer(unittest.TestCase):
             shutil.rmtree(cls.DB_DIR)
 
     def _make_table(self, name):
-        import logging
-        from logging.config import dictConfig
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
         return Table(name, "test_table", "integ_store", config, logger)
 

@@ -8,6 +8,8 @@ the reader to truncate records mid-payload, corrupting them on reload.
 
 """
 
+import logging
+from logging.config import dictConfig
 import marshal
 import os
 import random
@@ -15,7 +17,7 @@ import shutil
 import unittest
 
 from cog.torque import Graph
-from cog.core import Table, Record, RECORD_SEP, UNIT_SEP
+from cog.core import Table, Record, Store, RECORD_SEP, UNIT_SEP
 from cog import config
 
 DIR_NAME = "TestEOFError"
@@ -82,8 +84,6 @@ class TestStoreReadWithRecordSep(unittest.TestCase):
     def test_store_roundtrip_with_fd_in_payload(self):
         """Write records containing 0xFD in their serialized payload,
         then read them back via Store.read() and verify correctness."""
-        import logging
-        from logging.config import dictConfig
         dictConfig(config.logging_config)
         logger = logging.getLogger()
 
@@ -180,6 +180,78 @@ class TestGraphReopenWithEmbeddings(unittest.TestCase):
         self.assertGreater(len(nearest["result"]), 0)
 
         g2.close()
+
+
+class TestTruncatedStore(unittest.TestCase):
+    """Verify that __read_record handles truncated store files gracefully
+    (returns None instead of raising IndexError or corrupt marshal)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = "/tmp/TestTruncatedStore"
+        if os.path.exists(cls.dir):
+            shutil.rmtree(cls.dir)
+        os.makedirs(cls.dir + "/test_table/", exist_ok=True)
+        config.CUSTOM_COG_DB_PATH = cls.dir
+        dictConfig(config.logging_config)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.dir):
+            shutil.rmtree(cls.dir)
+
+    def test_truncated_header_returns_none(self):
+        """If the store file is truncated mid-header (<18 bytes),
+        Store.read() should return None — not raise IndexError."""
+        logger = logging.getLogger()
+        table = Table("trunc_hdr", "test_table", "trunc_inst", config, logger)
+        store = table.store
+
+        # Write a valid record
+        rec = Record("key_trunc", "value_trunc")
+        pos = store.save(rec)
+
+        # Truncate the file to only 10 bytes (inside the 18-byte header)
+        store.store_file.flush()
+        store_path = store.store
+        table.close()
+
+        with open(store_path, 'r+b') as f:
+            f.truncate(10)
+
+        # Reopen and try to read from position 0
+        table2 = Table("trunc_hdr", "test_table", "trunc_inst", config, logger)
+        result = table2.store.read(0)
+        self.assertIsNone(result)
+        table2.close()
+
+    def test_truncated_payload_returns_none(self):
+        """If the store file is truncated mid-payload,
+        Store.read() should return None — not corrupt marshal."""
+        logger = logging.getLogger()
+        table = Table("trunc_pay", "test_table", "trunc_inst2", config, logger)
+        store = table.store
+
+        # Write a valid record
+        rec = Record("key_payload", "a_longer_value_for_testing")
+        pos = store.save(rec)
+
+        store.store_file.flush()
+        store_path = store.store
+
+        # Find out how big the header+length field is, then truncate inside payload
+        # Header = 16 (key_link) + 1 (tombstone) + 1 (value_type) = 18
+        # Then variable-len digits + UNIT_SEP. We'll truncate at header + 5 bytes
+        # (enough for len digits + UNIT_SEP + a few payload bytes, but not all).
+        table.close()
+
+        with open(store_path, 'r+b') as f:
+            f.truncate(25)  # well past header, but before full payload
+
+        table2 = Table("trunc_pay", "test_table", "trunc_inst2", config, logger)
+        result = table2.store.read(0)
+        self.assertIsNone(result)
+        table2.close()
 
 
 if __name__ == "__main__":
