@@ -201,11 +201,14 @@ class Index:
 
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
-
-        self.db_mem.seek(0)
-        current_block = self.db_mem.read(self.config.INDEX_BLOCK_LEN)
+        self._closed = False
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        self.db_mem.flush()
+        self.db_mem.close()
         self.db.close()
 
     def get_index_key(self, int_store_position):
@@ -599,37 +602,80 @@ class Store:
                 return cached_record
 
         self.store_file.seek(position)
-        record = self.__read_until()
+        record = self.__read_record()
 
         if self.caching_enabled:
             self.store_cache.put(position, record)
 
         return record
 
-    # @profile
-    def __read_until(self):
-        data = None
+    def __read_record(self):
+        """Read a single record using structured/length-aware parsing.
+
+        Record layout (written by Record.marshal):
+            [key_link: 16 bytes]
+            [tombstone: 1 byte]
+            [value_type: 1 byte]
+            [value_len digits: variable ASCII]
+            [UNIT_SEP: 1 byte]
+            [serialized payload: exactly value_len bytes]
+            [value_link digits: variable ASCII, only if value_type in ('l','u')]
+            [RECORD_SEP: 1 byte]
+        """
+        # --- fixed-size header: key_link(16) + tombstone(1) + value_type(1) = 18 bytes
+        header = self.__read_exactly(18)
+        if header is None or len(header) < 18:
+            return None
+
+        value_type = chr(header[17])       # 's', 'l', or 'u'
+
+        # --- variable-length value_len digits terminated by UNIT_SEP
+        len_buf = b''
         while True:
-            chunk = self.store_file.read(self.config.STORE_READ_BUFFER_SIZE)
-
-            if len(chunk) == 0:
-                return data
-                # raise Exception("EOF store file! Data read error.")
-            i = chunk.find(RECORD_SEP)
-
-            if i > 0:
-                chunk = chunk[:i + 1]
-                if data is None:
-                    data = chunk
-                else:
-                    data += chunk
+            b = self.__read_exactly(1)
+            if b is None:
+                return None
+            if b == UNIT_SEP:
                 break
+            len_buf += b
+        value_len = int(len_buf.decode())
 
-            if data is None:
-                data = chunk
-            else:
-                data += chunk
-        self.logger.debug("store __read_until: " + str(data))
+        # --- serialized payload: exactly value_len bytes
+        payload = self.__read_exactly(value_len)
+        if payload is None or len(payload) < value_len:
+            return None
+
+        # --- optional value_link + RECORD_SEP terminator
+        tail = b''
+        if value_type in ('l', 'u'):
+            # value_link digits (ASCII) terminated by RECORD_SEP
+            while True:
+                b = self.__read_exactly(1)
+                if b is None:
+                    break
+                tail += b
+                if b == RECORD_SEP:
+                    break
+        else:
+            # just the RECORD_SEP terminator
+            sep = self.__read_exactly(1)
+            if sep is not None:
+                tail = sep
+
+        record = header + len_buf + UNIT_SEP + payload + tail
+        self.logger.debug("store __read_record: " + str(record))
+        return record
+
+    def __read_exactly(self, n):
+        """Read exactly *n* bytes from the store file, or return None on EOF."""
+        data = self.store_file.read(n)
+        if len(data) == 0:
+            return None
+        while len(data) < n:
+            chunk = self.store_file.read(n - len(data))
+            if len(chunk) == 0:
+                return data          # partial read (EOF mid-record)
+            data += chunk
         return data
 
 
