@@ -464,7 +464,7 @@ class TestGraphLayer(unittest.TestCase):
         g.put("x", "rel", "a")
         g.put("x", "rel", "b")
         g.put("x", "rel", "c")
-        g.drop("x", "rel", "b")
+        g.delete("x", "rel", "b")
         g.close()
 
         g2 = Graph("drop_rw", cog_home=self.GRAPH_HOME)
@@ -574,7 +574,7 @@ class TestMixedWorkload(unittest.TestCase):
             embeddings_p2[entity] = vec
 
         # Drop an edge
-        g.drop("einstein", "born_in", "germany")
+        g.delete("einstein", "born_in", "germany")
 
         # Delete an embedding
         g.delete_embedding("germany")
