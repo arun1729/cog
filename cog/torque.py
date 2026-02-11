@@ -7,6 +7,7 @@ from logging.config import dictConfig
 from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 import os
+import shutil
 from os import listdir
 import time
 import random
@@ -409,15 +410,101 @@ class Graph:
         self.all_predicates = self.cog.list_tables()
         return self
 
-    def drop(self, vertex1, predicate, vertex2):
+    def delete(self, vertex1, predicate, vertex2):
         """
-        Drops edge between vertex1 and vertex2 for the given predicate.
-        :param vertex1:
-        :param predicate:
-        :param vertex2:
-        :return: None
+        Removes a specific triple/edge from the graph.
+        
+        :param vertex1: Source vertex
+        :param predicate: Edge predicate/relationship
+        :param vertex2: Target vertex
+        :return: self for method chaining
+        
+        Example:
+            g.put("alice", "knows", "bob")
+            g.delete("alice", "knows", "bob")
         """
         self.cog.delete_edge(vertex1, predicate, vertex2)
+        return self
+
+    def drop(self, *args):
+        """
+        Deletes the entire graph and its persistent storage from disk.
+        
+        WARNING: This is a destructive operation that cannot be undone.
+        The graph object becomes unusable after this call.
+        
+        :return: None
+        
+        Example:
+            g.drop()  # Deletes entire graph from disk
+        """
+        if len(args) > 0:
+            raise DeprecationWarning(
+                "drop(s, p, o) is deprecated. Use delete(s, p, o) for edges. "
+                "Use drop() with no arguments to delete the entire graph."
+            )
+        
+        # Clear the cache
+        if self.cache is not None:
+            self.cache.clear()
+        
+        # Unregister from server if currently served
+        self.stop()
+        
+        # Close the graph
+        self.close()
+        
+        # Delete the entire graph directory using the same method Cog uses
+        graph_path = self.config.cog_data_dir(self.graph_name)
+        if os.path.exists(graph_path):
+            shutil.rmtree(graph_path)
+
+    def truncate(self):
+        """
+        Wipes all triples but keeps the graph structure/directory intact.
+        
+        Useful for resetting state without needing to re-initialize.
+        The graph remains usable after this call.
+        
+        :return: self for method chaining
+        
+        Example:
+            g.put("alice", "knows", "bob")
+            g.truncate()  # Graph is now empty but still usable
+            g.put("new", "data", "here")  # Works fine
+        """
+        # Get the graph directory path using the same method Cog uses
+        # This correctly handles CUSTOM_COG_DB_PATH if set
+        graph_path = self.config.cog_data_dir(self.graph_name)
+        
+        # Save flush_interval before closing (access while cog is still open)
+        flush_interval = self.cog.flush_interval
+        
+        # Close current connections
+        self.cog.close()
+        
+        try:
+            # Delete all contents but keep the directory
+            if os.path.exists(graph_path):
+                for item in os.listdir(graph_path):
+                    item_path = os.path.join(graph_path, item)
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                    else:
+                        os.remove(item_path)
+            
+            # Clear the cache to prevent stale data
+            if self.cache is not None:
+                self.cache.clear()
+        finally:
+            # Re-initialize the graph to ensure the object remains usable,
+            # even if some files could not be deleted.
+            self.cog = Cog(self.cache, flush_interval=flush_interval)
+            self.cog.create_or_load_namespace(self.graph_name)
+            self.all_predicates = self.cog.list_tables()
+        
+        return self
+
 
     def update(self, vertex1, predicate, vertex2):
         self.updatej(vertex1, predicate, vertex2)

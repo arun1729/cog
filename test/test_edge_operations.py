@@ -322,16 +322,16 @@ class TestGraphIntegration:
         assert len(alice_follows["result"]) == 1
         assert alice_follows["result"][0]["id"] == "dave"
 
-    def test_drop_and_update_combination(self, clean_graph):
-        """Test combining drop (delete_edge) and update operations."""
+    def test_delete_and_update_combination(self, clean_graph):
+        """Test combining delete (edge deletion) and update operations."""
         g = clean_graph
         
         g.put("A", "rel", "B")
         g.put("A", "rel", "C")
         g.put("X", "rel", "B")
         
-        # Drop specific edge A -> B
-        g.drop("A", "rel", "B")
+        # Delete specific edge A -> B
+        g.delete("A", "rel", "B")
         
         # A should still have edge to C
         a_rels = g.v("A").out("rel").all()

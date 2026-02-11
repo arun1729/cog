@@ -326,17 +326,123 @@ class TestRemoteGraph(unittest.TestCase):
         self.assertIn('result', result)
     
     def test_delete(self):
-        """RemoteGraph drop() works."""
+        """RemoteGraph delete() works."""
         # Add a node we can delete
         self.remote.put("del_test", "temp", "del_target")
-        # Delete it using drop()
-        self.remote.drop("del_test", "temp", "del_target")
+        # Delete it using delete()
+        self.remote.delete("del_test", "temp", "del_target")
         # Verify via local graph - should not find the edge
     
     def test_scan(self):
         """RemoteGraph scan() works."""
         result = self.remote.scan()
         self.assertIn('result', result)
+    
+    def test_remote_drop_raises_not_implemented(self):
+        """RemoteGraph drop() with no args raises NotImplementedError."""
+        with self.assertRaises(NotImplementedError) as ctx:
+            self.remote.drop()
+        self.assertIn("not supported", str(ctx.exception).lower())
+    
+    def test_remote_drop_with_args_raises_deprecation(self):
+        """RemoteGraph drop(s, p, o) raises DeprecationWarning."""
+        with self.assertRaises(DeprecationWarning) as ctx:
+            self.remote.drop("a", "b", "c")
+        self.assertIn("deprecated", str(ctx.exception).lower())
+    
+    def test_remote_truncate(self):
+        """RemoteGraph truncate() clears all data."""
+        # Insert some data first
+        self.remote.put("trunc_a", "rel", "trunc_b")
+        
+        # Verify it exists via local graph
+        result = self.g.v("trunc_a").out("rel").all()
+        self.assertEqual(len(result['result']), 1)
+        
+        # Truncate via remote
+        ret = self.remote.truncate()
+        self.assertIs(ret, self.remote)  # Returns self for chaining
+        
+        # Verify data is gone via local graph (re-check)
+        result = self.g.v("trunc_a").out("rel").all()
+        self.assertEqual(len(result['result']), 0)
+    
+    def test_remote_put_batch(self):
+        """RemoteGraph put_batch() inserts multiple triples."""
+        triples = [
+            ["batch_a", "rel", "batch_b"],
+            ["batch_c", "rel", "batch_d"],
+        ]
+        ret = self.remote.put_batch(triples)
+        self.assertIs(ret, self.remote)
+        
+        # Verify via local graph
+        result = self.g.v("batch_a").out("rel").all()
+        self.assertEqual(result['result'][0]['id'], 'batch_b')
+        result = self.g.v("batch_c").out("rel").all()
+        self.assertEqual(result['result'][0]['id'], 'batch_d')
+
+
+class TestServerMutationEdgeCases(unittest.TestCase):
+    """Test server mutation handler edge cases."""
+    
+    @classmethod
+    def setUpClass(cls):
+        if os.path.exists("/tmp/" + DIR_NAME + "5"):
+            shutil.rmtree("/tmp/" + DIR_NAME + "5")
+        os.makedirs("/tmp/" + DIR_NAME + "5", exist_ok=True)
+        
+        cls.g = Graph(graph_name="mutate_test", cog_home=DIR_NAME + "5")
+        cls.g.put("x", "y", "z")
+        
+        cls.port = 18084
+        cls.g.serve(port=cls.port, writable=True)
+        time.sleep(0.2)
+    
+    @classmethod
+    def tearDownClass(cls):
+        cls.g.stop()
+        cls.g.close()
+        shutil.rmtree("/tmp/" + DIR_NAME + "5")
+    
+    def _request(self, path, data=None, method='GET'):
+        url = f"http://localhost:{self.port}{path}"
+        if data:
+            data = json.dumps(data).encode('utf-8')
+            req = urllib.request.Request(url, data=data, method=method)
+            req.add_header('Content-Type', 'application/json')
+        else:
+            req = urllib.request.Request(url, method=method)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.read().decode('utf-8')
+    
+    def test_mutate_truncate_via_http(self):
+        """POST mutate with op=truncate clears the graph."""
+        # Insert data
+        self._request('/mutate_test/mutate', {'op': 'put', 'args': ['t1', 'r', 't2']}, 'POST')
+        
+        # Truncate
+        response = json.loads(self._request('/mutate_test/mutate', {'op': 'truncate', 'args': []}, 'POST'))
+        self.assertTrue(response['ok'])
+        self.assertIn('truncated', response.get('message', '').lower())
+    
+    def test_mutate_unknown_op_returns_400(self):
+        """POST mutate with unknown op returns error."""
+        try:
+            self._request('/mutate_test/mutate', {'op': 'explode', 'args': []}, 'POST')
+            self.fail("Should have raised 400")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
+            body = json.loads(e.read().decode('utf-8'))
+            self.assertIn('Unknown operation', body.get('error', ''))
+    
+    def test_mutate_delete_validation(self):
+        """POST mutate delete with wrong number of args returns error."""
+        try:
+            self._request('/mutate_test/mutate', {'op': 'delete', 'args': ['only_one']}, 'POST')
+            self.fail("Should have raised 400")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
 
 
 class TestReadOnlyServer(unittest.TestCase):
