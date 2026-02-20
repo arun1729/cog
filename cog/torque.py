@@ -124,6 +124,15 @@ class Graph:
 
         self.last_visited_vertices = None
         self._predicate_names = {}  # hash -> human-readable predicate name
+        # Hydrate predicate names from persisted edge set for reopened graphs
+        try:
+            self.cog.use_namespace(self.graph_name)
+            for pred_hash in self.all_predicates:
+                edge_record = self.cog.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(pred_hash)
+                if edge_record is not None:
+                    self._predicate_names[pred_hash] = edge_record.value
+        except Exception:
+            pass  # Edge set table may not exist yet for new graphs
         self._server_port = None  # Port this graph is being served on
 
     # === Network Methods ===
@@ -950,6 +959,11 @@ class Graph:
                         continue
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
+                # Build path for neighbor from parent's path
+                parent_path = getattr(current, '_path', None) or [{'vertex': current.id}]
+                edge_hash = next(iter(adj.edges)) if adj.edges else None
+                edge_name = self._predicate_names.get(edge_hash, edge_hash) if edge_hash else None
+                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 queue.append((adj, depth + 1))
 
         self.last_visited_vertices = result_vertices
@@ -1024,6 +1038,11 @@ class Graph:
                         continue
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
+                # Build path for neighbor from parent's path
+                parent_path = getattr(current, '_path', None) or [{'vertex': current.id}]
+                edge_hash = next(iter(adj.edges)) if adj.edges else None
+                edge_name = self._predicate_names.get(edge_hash, edge_hash) if edge_hash else None
+                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 stack.append((adj, depth + 1))
 
         self.last_visited_vertices = result_vertices
@@ -1193,7 +1212,7 @@ class Graph:
                 if 'edge' in step and i > 0 and i < len(path) - 1:
                     src = path[i - 1]['vertex']
                     tgt = path[i + 1]['vertex']
-                    key = f"{src}-{step['edge']}-{tgt}"
+                    key = (src, step['edge'], tgt)
                     links[key] = {
                         'source': src,
                         'target': tgt,
