@@ -37,16 +37,17 @@ class Vertex(object):
         self.id = _id
         self.tags = {}
         self.edges = set()
+        self._path = None
 
     def set_edge(self, edge):
         self.edges.add(edge)
         return self
 
     def get_dict(self):
-        return self.__dict__
+        return {k: v for k, v in self.__dict__.items() if k != '_path'}
 
     def __str__(self):
-        return json.dumps(self.__dict__)
+        return json.dumps(self.get_dict())
 
 
 CHARS = u'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -123,14 +124,14 @@ class Graph:
         self.logger.debug("predicates: " + str(self.all_predicates))
 
         self.last_visited_vertices = None
-        self._predicate_names = {}  # hash -> human-readable predicate name
+        self._predicate_reverse_lookup_cache = {}  # hash -> human-readable predicate name
         # Hydrate predicate names from persisted edge set for reopened graphs
         try:
             self.cog.use_namespace(self.graph_name)
             for pred_hash in self.all_predicates:
                 edge_record = self.cog.use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME).get(pred_hash)
                 if edge_record is not None:
-                    self._predicate_names[pred_hash] = edge_record.value
+                    self._predicate_reverse_lookup_cache[pred_hash] = edge_record.value
         except Exception:
             pass  # Edge set table may not exist yet for new graphs
         self._server_port = None  # Port this graph is being served on
@@ -359,11 +360,11 @@ class Graph:
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_triples(graph_data_path, graph_name)
         self.all_predicates = self.cog.list_tables()
-        # Rebuild _predicate_names by parsing the triples file
+        # Rebuild _predicate_reverse_lookup_cache by parsing the triples file
         with open(graph_data_path) as f:
             for line in f:
                 _, predicate, _, _ = parse_tripple(line)
-                self._predicate_names[hash_predicate(predicate)] = predicate
+                self._predicate_reverse_lookup_cache[hash_predicate(predicate)] = predicate
         return None
 
     def load_csv(self, csv_path, id_column_name, graph_name=None):
@@ -383,20 +384,20 @@ class Graph:
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_csv(csv_path, id_column_name, graph_name)
         self.all_predicates = self.cog.list_tables()
-        # Rebuild _predicate_names from CSV column headers
+        # Rebuild _predicate_reverse_lookup_cache from CSV column headers
         import csv
         with open(csv_path) as csv_file:
             reader = csv.DictReader(csv_file)
             if reader.fieldnames:
                 for col in reader.fieldnames:
-                    self._predicate_names[hash_predicate(col)] = col
+                    self._predicate_reverse_lookup_cache[hash_predicate(col)] = col
 
     def close(self):
         self.logger.info("closing graph: " + self.graph_name)
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2, update=False, create_new_edge=False):
-        self._predicate_names[hash_predicate(predicate)] = predicate
+        self._predicate_reverse_lookup_cache[hash_predicate(predicate)] = predicate
         self.cog.use_namespace(self.graph_name)
         if update:
             if create_new_edge:
@@ -427,7 +428,7 @@ class Graph:
         self.cog.begin_batch()
         try:
             for v1, pred, v2 in triples:
-                self._predicate_names[hash_predicate(pred)] = pred
+                self._predicate_reverse_lookup_cache[hash_predicate(pred)] = pred
                 self.cog.put_node(v1, pred, v2)
         finally:
             self.cog.end_batch()
@@ -705,9 +706,9 @@ class Graph:
                             continue
                         v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                         v_adjacent_obj.tags.update(v.tags)
-                        parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                        parent_path = v._path or [{'vertex': v.id}]
                         v_adjacent_obj._path = parent_path + [
-                            {'edge': self._predicate_names.get(predicate, predicate)},
+                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adjacent_obj)
@@ -718,9 +719,9 @@ class Graph:
                                 continue
                             v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                             v_adjacent_obj.tags.update(v.tags)
-                            parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                            parent_path = v._path or [{'vertex': v.id}]
                             v_adjacent_obj._path = parent_path + [
-                                {'edge': self._predicate_names.get(predicate, predicate)},
+                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adjacent_obj)
@@ -758,9 +759,9 @@ class Graph:
                         v_adjacent = str(out_record.value)
                         v_adj = Vertex(v_adjacent).set_edge(predicate)
                         v_adj.tags.update(v.tags)
-                        parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                        parent_path = v._path or [{'vertex': v.id}]
                         v_adj._path = parent_path + [
-                            {'edge': self._predicate_names.get(predicate, predicate)},
+                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
@@ -768,9 +769,9 @@ class Graph:
                         for v_adjacent in out_record.value:
                             v_adj = Vertex(v_adjacent).set_edge(predicate)
                             v_adj.tags.update(v.tags)
-                            parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                            parent_path = v._path or [{'vertex': v.id}]
                             v_adj._path = parent_path + [
-                                {'edge': self._predicate_names.get(predicate, predicate)},
+                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adj)
@@ -782,9 +783,9 @@ class Graph:
                         v_adjacent = str(in_record.value)
                         v_adj = Vertex(v_adjacent).set_edge(predicate)
                         v_adj.tags.update(v.tags)
-                        parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                        parent_path = v._path or [{'vertex': v.id}]
                         v_adj._path = parent_path + [
-                            {'edge': self._predicate_names.get(predicate, predicate)},
+                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
@@ -792,9 +793,9 @@ class Graph:
                         for v_adjacent in in_record.value:
                             v_adj = Vertex(v_adjacent).set_edge(predicate)
                             v_adj.tags.update(v.tags)
-                            parent_path = getattr(v, '_path', [{'vertex': v.id}])
+                            parent_path = v._path or [{'vertex': v.id}]
                             v_adj._path = parent_path + [
-                                {'edge': self._predicate_names.get(predicate, predicate)},
+                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adj)
@@ -873,7 +874,7 @@ class Graph:
                 tagged_vertex = Vertex(v.tags[tag])
                 tagged_vertex.tags = v.tags.copy()
                 tagged_vertex.edges = v.edges.copy()
-                tagged_vertex._path = getattr(v, '_path', None)
+                tagged_vertex._path = v._path
                 vertices.append(tagged_vertex)
         self.last_visited_vertices = vertices
         return self
@@ -936,7 +937,7 @@ class Graph:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
                     result_vertex.edges = current.edges.copy()
-                    result_vertex._path = getattr(current, '_path', None)
+                    result_vertex._path = current._path
                     result_vertices.append(result_vertex)
                 continue
 
@@ -945,7 +946,7 @@ class Graph:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
                     result_vertex.edges = current.edges.copy()
-                    result_vertex._path = getattr(current, '_path', None)
+                    result_vertex._path = current._path
                     result_vertices.append(result_vertex)
 
             # Stop exploring if at max depth
@@ -960,9 +961,9 @@ class Graph:
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
                 # Build path for neighbor from parent's path
-                parent_path = getattr(current, '_path', None) or [{'vertex': current.id}]
+                parent_path = current._path or [{'vertex': current.id}]
                 edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_names.get(edge_hash, edge_hash) if edge_hash else None
+                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
                 adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 queue.append((adj, depth + 1))
 
@@ -1015,7 +1016,7 @@ class Graph:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
                     result_vertex.edges = current.edges.copy()
-                    result_vertex._path = getattr(current, '_path', None)
+                    result_vertex._path = current._path
                     result_vertices.append(result_vertex)
                 continue
 
@@ -1024,7 +1025,7 @@ class Graph:
                     result_vertex = Vertex(current.id)
                     result_vertex.tags = current.tags.copy()
                     result_vertex.edges = current.edges.copy()
-                    result_vertex._path = getattr(current, '_path', None)
+                    result_vertex._path = current._path
                     result_vertices.append(result_vertex)
 
             # Stop exploring if at max depth
@@ -1039,9 +1040,9 @@ class Graph:
                     visited.add(adj.id)
                 adj.tags = current.tags.copy()
                 # Build path for neighbor from parent's path
-                parent_path = getattr(current, '_path', None) or [{'vertex': current.id}]
+                parent_path = current._path or [{'vertex': current.id}]
                 edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_names.get(edge_hash, edge_hash) if edge_hash else None
+                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
                 adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 stack.append((adj, depth + 1))
 
@@ -1205,7 +1206,7 @@ class Graph:
         links = {}
 
         for v in self.last_visited_vertices:
-            path = getattr(v, '_path', [])
+            path = v._path or []
             for i, step in enumerate(path):
                 if 'vertex' in step:
                     nodes[step['vertex']] = {'id': step['vertex']}
