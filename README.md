@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/arun1729/cog/actions/workflows/python-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/arun1729/cog/python-tests.yml?branch=master&label=build" alt="Build Status"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://codecov.io/gh/arun1729/cog"><img src="https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg" alt="codecov"></a>
+  <a href="https://codecov.io/gh/arun1729/cog"><img src="https://codecov.io/gh/arun1729/cog/branch/master/graph/badge.svg?token=cgAwcYNUCF" alt="codecov"></a>
   <a href="https://discord.gg/nqNpNGfjts"><img src="https://img.shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 

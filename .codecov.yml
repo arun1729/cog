@@ -1,0 +1,10 @@
+codecov:
+  branch: master
+  require_ci_to_pass: yes
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
