@@ -33,27 +33,26 @@ graph_template = r"""
 
     <script type="text/javascript">
 
-    results ={plot_data_insert} """
+    var graphData ={plot_data_insert} """
 
 script_part2 = r"""
 
     var nodes = new vis.DataSet();
     var edges = new vis.DataSet();
-    for (let i = 0; i < results.length; i++) {
-        res = results[i];
-        nodes.update({
-            id: res.from,
-            label: res.from
-        });
-        nodes.update({
-            id: res.to,
-            label: res.to
-        });
-        edges.update({
-            from: res.from,
-            to: res.to
-        });
 
+    for (var i = 0; i < graphData.nodes.length; i++) {
+        var n = graphData.nodes[i];
+        nodes.update({ id: n.id, label: n.id });
+    }
+
+    for (var i = 0; i < graphData.links.length; i++) {
+        var link = graphData.links[i];
+        edges.update({
+            id: link.source + "-" + link.label + "-" + link.target,
+            from: link.source,
+            to: link.target,
+            label: link.label || ""
+        });
     }
 
     var container = document.getElementById("cog-graph-view");
@@ -73,7 +72,7 @@ script_part2 = r"""
 
         },
         edges: {
-            font: "12px arial #ff0000",
+            font: { size: 12, color: "#555555", strokeWidth: 0, align: "middle" },
             scaling: {
                 label: true,
             },
