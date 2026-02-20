@@ -93,6 +93,66 @@ class GraphPathTest(unittest.TestCase):
         view = self.g.v("bob").out("follows").view("test_path_view")
         self.assertTrue(view.url.endswith("test_path_view.html"))
 
+    def test_graph_single_value_out(self):
+        """Cover __hop 's' branch (out direction) by storing a single-value record."""
+        g = Graph(graph_name="sval_out_test", cog_home=DIR_NAME)
+        from cog.database import hash_predicate, out_nodes, in_nodes
+        from cog.core import Record
+        # Store a single-value 's' type record directly (bypassing put_set)
+        predicate = "knows"
+        pred_hash = hash_predicate(predicate)
+        g.cog.use_namespace("sval_out_test")
+        g.cog.use_table(g.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(pred_hash, predicate))
+        g.cog.use_table(g.config.GRAPH_NODE_SET_TABLE_NAME).put(Record("x", ""))
+        g.cog.use_table(g.config.GRAPH_NODE_SET_TABLE_NAME).put(Record("y", ""))
+        g.cog.use_table(pred_hash).put(Record(out_nodes("x"), "y"))
+        g.cog.use_table(pred_hash).put(Record(in_nodes("y"), "x"))
+        g.all_predicates = g.cog.list_tables()
+        g._predicate_reverse_lookup_cache[pred_hash] = predicate
+
+        result = g.v("x").out("knows").graph()
+        node_ids = {n['id'] for n in result['nodes']}
+        self.assertEqual(node_ids, {'x', 'y'})
+        self.assertEqual(len(result['links']), 1)
+        self.assertEqual(result['links'][0]['label'], 'knows')
+        g.close()
+
+    def test_graph_single_value_inc(self):
+        """Cover __hop 's' branch (in direction) by storing a single-value record."""
+        g = Graph(graph_name="sval_inc_test", cog_home=DIR_NAME)
+        from cog.database import hash_predicate, out_nodes, in_nodes
+        from cog.core import Record
+        predicate = "knows"
+        pred_hash = hash_predicate(predicate)
+        g.cog.use_namespace("sval_inc_test")
+        g.cog.use_table(g.config.GRAPH_EDGE_SET_TABLE_NAME).put(Record(pred_hash, predicate))
+        g.cog.use_table(g.config.GRAPH_NODE_SET_TABLE_NAME).put(Record("x", ""))
+        g.cog.use_table(g.config.GRAPH_NODE_SET_TABLE_NAME).put(Record("y", ""))
+        g.cog.use_table(pred_hash).put(Record(out_nodes("x"), "y"))
+        g.cog.use_table(pred_hash).put(Record(in_nodes("y"), "x"))
+        g.all_predicates = g.cog.list_tables()
+        g._predicate_reverse_lookup_cache[pred_hash] = predicate
+
+        result = g.v("y").inc("knows").graph()
+        node_ids = {n['id'] for n in result['nodes']}
+        self.assertEqual(node_ids, {'x', 'y'})
+        self.assertEqual(len(result['links']), 1)
+        self.assertEqual(result['links'][0]['label'], 'knows')
+        g.close()
+
+    def test_graph_bfs_until_path(self):
+        """Cover BFS until branch with path propagation."""
+        # alice -> bob -> fred -> greg; stop when hitting fred
+        result = self.g.v("alice").bfs("follows", until=lambda vid: vid == "fred").graph()
+        node_ids = {n['id'] for n in result['nodes']}
+        self.assertIn('fred', node_ids)
+        self.assertIn('alice', node_ids)
+        # fred should be the terminal vertex
+        links = result['links']
+        self.assertTrue(len(links) > 0)
+        link_labels = {l['label'] for l in links}
+        self.assertIn('follows', link_labels)
+
     @classmethod
     def tearDownClass(cls):
         cls.g.close()
