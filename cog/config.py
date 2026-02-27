@@ -25,6 +25,9 @@ CUSTOM_COG_DB_PATH = None
 # When None, calling serve(share=True) will raise an error
 RELAY_URL = "wss://s.cogdb.io/register"
 
+''' VECTORIZE '''
+COGDB_EMBED_URL = "https://vectors.cogdb.io/embed"
+
 
 def cog_db_path():
     if CUSTOM_COG_DB_PATH:

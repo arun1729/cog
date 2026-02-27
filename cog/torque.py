@@ -6,6 +6,7 @@ import logging
 from logging.config import dictConfig
 from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
+from cog.embedding_providers import EMBEDDING_PROVIDERS, _chunked
 import os
 import shutil
 from os import listdir
@@ -135,6 +136,9 @@ class Graph:
         except Exception:
             pass  # Edge set table may not exist yet for new graphs
         self._server_port = None  # Port this graph is being served on
+        self._default_provider = "cogdb"  # Provider for auto-embed in queries
+        self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
+        self._vectorize_configured = False  # True after explicit vectorize() call
 
     # === Network Methods ===
     
@@ -1084,6 +1088,9 @@ class Graph:
             if not all(isinstance(t, (float, int)) for t in threshold):
                 raise ValueError("Invalid threshold value: {}".format(threshold))
 
+        # Auto-embed query word if missing
+        self._auto_embed(word)
+
         filtered_vertices = []
         for v in self.last_visited_vertices:
             similarity = self.__cosine_similarity(word, v.id)
@@ -1358,6 +1365,9 @@ class Graph:
         Example:
             g.v().k_nearest("machine_learning", k=5).all()
         """
+        # Auto-embed query word if missing
+        self._auto_embed(word)
+
         target_embedding = self.get_embedding(word)
         if target_embedding is None:
             self.last_visited_vertices = []
@@ -1470,6 +1480,94 @@ class Graph:
             self.put_embeddings_batch(batch)
         
         return count
+
+    def _auto_embed(self, word):
+        """Auto-fetch and store embedding for a word if missing.
+        Only active after vectorize() has been explicitly called."""
+        if not self._vectorize_configured:
+            return
+        if self.get_embedding(word) is not None:
+            return
+        try:
+            provider_fn = EMBEDDING_PROVIDERS[self._default_provider]
+            pairs = provider_fn([word], **self._default_provider_kwargs)
+            if pairs:
+                self.put_embeddings_batch(pairs)
+        except Exception as e:
+            self.logger.debug("auto-embed for '{}' failed: {}".format(word, e))
+
+    def vectorize(self, words=None, provider="cogdb", batch_size=100, **kwargs):
+        """
+        Auto-generate vector embeddings using a provider.
+
+        Can embed all graph nodes, a single word, or a list of words.
+        Skips words that already have embeddings.
+
+        :param words: Optional — a string or list of strings to embed.
+                      If None, embeds all nodes in the graph.
+        :param provider: Provider name — "cogdb" (default), "openai", or "custom".
+        :param batch_size: Number of words per provider request (default 100).
+        :param kwargs: Passed to the provider (e.g. url=, api_key=, model=).
+        :return: Summary dict {"vectorized": N, "skipped": M, "total": T}
+
+        Example:
+            g.vectorize()                          # all nodes
+            g.vectorize("europa")                   # single word
+            g.vectorize(["europa", "ocean"])         # specific words
+            g.vectorize(provider="openai", api_key="sk-...")
+        """
+        if not isinstance(batch_size, int) or batch_size < 1:
+            raise ValueError("batch_size must be a positive integer, got: {}".format(batch_size))
+
+        if provider not in EMBEDDING_PROVIDERS:
+            raise ValueError("Unknown provider '{}'. Choose from: {}".format(
+                provider, ", ".join(EMBEDDING_PROVIDERS.keys())))
+
+        # Store provider config for auto-embed in queries
+        self._default_provider = provider
+        self._default_provider_kwargs = kwargs
+        self._vectorize_configured = True
+
+        provider_fn = EMBEDDING_PROVIDERS[provider]
+
+        # Determine which words to embed
+        if words is not None:
+            # Explicit word(s)
+            if isinstance(words, str):
+                words = [words]
+            all_words = words
+        else:
+            # All graph nodes
+            all_words = []
+            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
+            for r in self.cog.scanner():
+                all_words.append(r.key)
+
+        total = len(all_words)
+
+        # Skip words that already have embeddings
+        to_embed = [w for w in all_words if self.get_embedding(w) is None]
+        skipped = total - len(to_embed)
+
+        if not to_embed:
+            return {"vectorized": 0, "skipped": skipped, "total": total}
+
+        # Send to provider in batches and store results
+        vectorized = 0
+        errors = []
+        for chunk in _chunked(to_embed, batch_size):
+            try:
+                pairs = provider_fn(chunk, **kwargs)
+                self.put_embeddings_batch(pairs)
+                vectorized += len(pairs)
+            except Exception as e:
+                self.logger.error("vectorize batch failed: {}".format(e))
+                errors.append(str(e))
+
+        result = {"vectorized": vectorized, "skipped": skipped, "total": total}
+        if errors:
+            result["errors"] = errors
+        return result
 
 
 class View(object):
