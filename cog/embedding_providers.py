@@ -4,7 +4,6 @@ import ssl
 import urllib.request
 import urllib.error
 import logging
-import certifi
 from . import config as cfg
 
 logger = logging.getLogger(__name__)
@@ -12,8 +11,20 @@ logger = logging.getLogger(__name__)
 # Default timeout for HTTP requests (seconds)
 _REQUEST_TIMEOUT = 30
 
-# SSL context using certifi's CA bundle
-_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+# Lazy-loaded SSL context (certifi may not be installed in all environments)
+_SSL_CONTEXT = None
+
+
+def _get_ssl_context():
+    """Get or create SSL context, using certifi if available."""
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        try:
+            import certifi
+            _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            _SSL_CONTEXT = ssl.create_default_context()
+    return _SSL_CONTEXT
 
 
 def _chunked(lst, size):
@@ -38,7 +49,7 @@ def _provider_cogdb(texts, url=None, **kwargs):
             headers={"Content-Type": "application/json", "User-Agent": "CogDB"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT, context=_SSL_CONTEXT) as resp:
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT, context=_get_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         for item in data["embeddings"]:
             results.append((item["text"], item["vector"]))
@@ -66,7 +77,7 @@ def _provider_openai(texts, api_key=None, model="text-embedding-3-small", **kwar
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT, context=_SSL_CONTEXT) as resp:
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT, context=_get_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         for item in data["data"]:
             results.append((chunk[item["index"]], item["embedding"]))
