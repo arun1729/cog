@@ -6,7 +6,6 @@ from cog import config
 import logging
 import os
 import shutil
-from logging.config import dictConfig
 import random
 import string
 
@@ -28,7 +27,6 @@ class TestIndex2(unittest.TestCase):
 
     def test_put_get(self):
 
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
         tablemeta = TableMeta("testdb", "test_table", "test_xcvzdfsadx", None)
         store = Store(tablemeta, config, logger)

@@ -2,7 +2,6 @@ from cog.core import Table, Record
 from cog import config
 import logging
 import os
-from logging.config import dictConfig
 import shutil
 
 import unittest
@@ -58,7 +57,6 @@ class TestCore(unittest.TestCase):
         self.assertEqual(record.value_link, unmarshalled_record.value_link)
 
     def test_put_get_string(self):
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data = Record("rocket", "gemini-titan")
@@ -82,7 +80,6 @@ class TestCore(unittest.TestCase):
         store.close()
 
     def test_put_get_multiple_string(self):
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data_list= [Record("rocket", "gemini-titan"), Record("rocket2", "saturn V"), Record("rocket0", "V2")]
@@ -102,7 +99,6 @@ class TestCore(unittest.TestCase):
         store.close()
 
     def test_put_get_record_update(self):
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data_list= [Record("rocket", "gemini-titan"), Record("rocket", "saturn V"), Record("rocket", "V2")]
@@ -126,7 +122,6 @@ class TestCore(unittest.TestCase):
 
     def test_collision(self):
         orig_conf = config.INDEX_CAPACITY
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data_list= [Record("rocket", "gemini-titan"), Record("rocket2", "saturn V"), Record("rocket0", "V2")]
@@ -151,7 +146,6 @@ class TestCore(unittest.TestCase):
 
     def test_collision_large(self):
         orig_conf = config.INDEX_CAPACITY
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         table = Table("testdb", "test_table", "test_xcvzdfsadx", config, logger)
@@ -179,7 +173,6 @@ class TestCore(unittest.TestCase):
         config.INDEX_CAPACITY = orig_conf
 
     def test_put_get_list(self):
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         fruits = (["apple", "orange", "banana", "pears", "cherry", "mango"])
@@ -211,7 +204,6 @@ class TestCore(unittest.TestCase):
         store.close()
 
     def test_delete_list(self):
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         fruits = (["apple", "orange", "banana", "pears", "cherry", "mango"])
@@ -246,7 +238,6 @@ class TestCore(unittest.TestCase):
 
     def test_delete(self):
 
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data = Record("new super data","super new old stuff")
@@ -280,7 +271,6 @@ class TestCore(unittest.TestCase):
 
     def test_indexer(self):
 
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         expected_data = Record("new super data","super new old stuff")

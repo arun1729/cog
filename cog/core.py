@@ -28,7 +28,7 @@ class Table:
 
     def __init__(self, name, namespace, db_instance_id, config, column_mode=False, shared_cache=None,
                  flush_interval=1):
-        self.logger = logging.getLogger('table')
+        self.logger = logging.getLogger('cog.table')
         self.config = config
         self.shared_cache = shared_cache
         self.flush_interval = flush_interval
@@ -179,7 +179,7 @@ class Record:
 class Index:
 
     def __init__(self, table_meta, config, logger, index_id=0):
-        self.logger = logging.getLogger('index')
+        self.logger = logging.getLogger('cog.index')
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
@@ -436,7 +436,7 @@ class Store:
                  flush_interval=1):
         self.caching_enabled = caching_enabled
         self.batch_mode = False  # When True, defers flush() until end_batch()
-        self.logger = logging.getLogger('store')
+        self.logger = logging.getLogger('cog.store')
         self.tablemeta = tablemeta
         self.config = config
         self.flush_interval = flush_interval
@@ -689,7 +689,7 @@ class Indexer:
     def __init__(self, tablemeta, config, logger):
         self.tablemeta = tablemeta
         self.config = config
-        self.logger = logging.getLogger('indexer')
+        self.logger = logging.getLogger('cog.indexer')
         self.index_list = []  # future range index.
         self.index_id = 0
         self.load_indexes()
