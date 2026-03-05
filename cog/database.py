@@ -75,7 +75,7 @@ class Cog:
     """
 
     def __init__(self, shared_cache=None, flush_interval=1):
-        self.logger = logging.getLogger('cog.database')
+        self.logger = logging.getLogger(__name__)
         self.config = config
         self.flush_interval = flush_interval
         self.logger.info(f"Cog init (flush_interval={flush_interval})")

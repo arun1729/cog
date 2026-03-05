@@ -108,7 +108,7 @@ class Graph:
         else:
             self.cache = None
 
-        self.logger = logging.getLogger("cog.torque")
+        self.logger = logging.getLogger(__name__)
 
         self.logger.debug(f"Torque init on graph: {graph_name} (flush_interval={flush_interval})")
 

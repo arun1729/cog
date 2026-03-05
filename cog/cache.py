@@ -4,7 +4,7 @@ import logging
 class Cache:
 
     def __init__(self, cache_id, shared_cache=None):
-        self.logger = logging.getLogger('cog.cache')
+        self.logger = logging.getLogger(__name__)
         self.cache_id = cache_id
         if shared_cache is not None:
             if cache_id not in shared_cache:
