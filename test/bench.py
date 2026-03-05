@@ -4,7 +4,6 @@ from cog import config
 import logging
 import os
 import shutil
-from logging.config import dictConfig
 import string
 import random
 import timeit
@@ -38,7 +37,6 @@ class TestIndexerPerf(unittest.TestCase):
 
     def test_indexer(self):
 
-        dictConfig(config.logging_config)
 
         logger = logging.getLogger()
         config.INDEX_CAPACITY = 10003

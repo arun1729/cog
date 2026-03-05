@@ -15,7 +15,6 @@ from cog.core import Table, Record, Index, Store, Indexer, TableMeta, cog_hash
 from cog import config
 import logging
 import os
-from logging.config import dictConfig
 import shutil
 import unittest
 
@@ -31,7 +30,6 @@ class TestCoreCoverage(unittest.TestCase):
         cls._cleanup_path(cls.db_path)
         os.makedirs(cls.db_path + "/test_table/")
         config.CUSTOM_COG_DB_PATH = cls.db_path
-        dictConfig(config.logging_config)
 
     @classmethod
     def tearDownClass(cls):

@@ -4,7 +4,6 @@ from cog import config
 import logging
 import os
 import shutil
-from logging.config import dictConfig
 import string
 import random
 import unittest
@@ -29,7 +28,6 @@ class TestIndexer(unittest.TestCase):
         config.COG_HOME = DIR_NAME
         print("*** " + config.COG_HOME + "\n")
 
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         table = Table("testdb","test_table","test_xcvzdfsadx", config, logger)

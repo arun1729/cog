@@ -14,7 +14,6 @@ Exercises the full read/write/reopen lifecycle across every data path:
 """
 
 import logging
-from logging.config import dictConfig
 import marshal
 import math
 import os
@@ -54,7 +53,6 @@ class TestStoreLayer(unittest.TestCase):
             shutil.rmtree(cls.DB_DIR)
         os.makedirs(cls.DB_DIR + "/test_table/", exist_ok=True)
         config.CUSTOM_COG_DB_PATH = cls.DB_DIR
-        dictConfig(config.logging_config)
 
     @classmethod
     def tearDownClass(cls):

@@ -9,7 +9,6 @@ the reader to truncate records mid-payload, corrupting them on reload.
 """
 
 import logging
-from logging.config import dictConfig
 import marshal
 import os
 import random
@@ -84,7 +83,6 @@ class TestStoreReadWithRecordSep(unittest.TestCase):
     def test_store_roundtrip_with_fd_in_payload(self):
         """Write records containing 0xFD in their serialized payload,
         then read them back via Store.read() and verify correctness."""
-        dictConfig(config.logging_config)
         logger = logging.getLogger()
 
         table = Table("testdb_eof", "test_table", "test_eof_instance", config, logger)
@@ -193,7 +191,6 @@ class TestTruncatedStore(unittest.TestCase):
             shutil.rmtree(cls.dir)
         os.makedirs(cls.dir + "/test_table/", exist_ok=True)
         config.CUSTOM_COG_DB_PATH = cls.dir
-        dictConfig(config.logging_config)
 
     @classmethod
     def tearDownClass(cls):

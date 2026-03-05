@@ -3,7 +3,6 @@ from cog.database import in_nodes, out_nodes, hash_predicate, parse_tripple
 from cog.core import cog_hash, Record
 import json
 import logging
-from logging.config import dictConfig
 from . import config as cfg
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 from cog.embedding_providers import EMBEDDING_PROVIDERS, _chunked
@@ -109,8 +108,7 @@ class Graph:
         else:
             self.cache = None
 
-        dictConfig(self.config.logging_config)
-        self.logger = logging.getLogger("torque")
+        self.logger = logging.getLogger(__name__)
 
         self.logger.debug(f"Torque init on graph: {graph_name} (flush_interval={flush_interval})")
 

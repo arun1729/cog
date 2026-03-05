@@ -71,22 +71,3 @@ def index_id(index_name):
 def cog_store(db_name, table_name, instance_id):
     return "/".join(cog_context()[0:-2]+[db_name, table_name+STORE+instance_id])
 
-
-import logging
-
-logging_config = dict(
-    version = 1,
-    formatters = {
-        'f': {'format':
-              '%(asctime)s %(name)-12s %(levelname)-8s [%(filename)s:%(lineno)s - %(funcName)10s()] %(message)s'}
-        },
-    handlers = {
-        'h': {'class': 'logging.StreamHandler',
-              'formatter': 'f'
-              }
-        },
-    root = {
-        'handlers': ['h'],
-        'level': logging.WARN,
-        }
-)

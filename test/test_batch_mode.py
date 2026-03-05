@@ -7,7 +7,6 @@ import shutil
 import timeit
 import unittest
 import logging
-from logging.config import dictConfig
 
 from cog import config
 from cog.core import Table, Record
@@ -35,7 +34,6 @@ class TestStoreBatchMode(unittest.TestCase):
             shutil.rmtree(base_path)
         os.makedirs(base_path)
         config.CUSTOM_COG_DB_PATH = "/tmp/" + DIR_NAME
-        dictConfig(config.logging_config)
 
     def test_batch_mode_saves_correctly(self):
         """Test that batch mode saves records correctly"""
@@ -156,7 +154,6 @@ class TestCogBatchMode(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config.CUSTOM_COG_DB_PATH = "/tmp/" + DIR_NAME
-        dictConfig(config.logging_config)
 
     def test_cog_batch_mode(self):
         """Test batch mode at Cog level"""
@@ -186,7 +183,6 @@ class TestGraphPutBatch(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config.CUSTOM_COG_DB_PATH = "/tmp/" + DIR_NAME
-        dictConfig(config.logging_config)
 
     def test_put_batch_correctness(self):
         """Test that put_batch inserts all triples correctly"""
@@ -302,7 +298,6 @@ class TestBatchModeIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config.CUSTOM_COG_DB_PATH = "/tmp/" + DIR_NAME
-        dictConfig(config.logging_config)
 
     def test_large_graph_insertion(self):
         """Test inserting a large graph using batch mode"""
