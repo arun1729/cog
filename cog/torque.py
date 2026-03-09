@@ -1230,6 +1230,47 @@ class Graph:
             'links': list(links.values())
         }
 
+    def triples(self):
+        """
+        Returns all triples in the graph as a list of (subject, predicate, object) tuples.
+
+        Iterates over every vertex and every predicate to reconstruct
+        the complete set of triples stored in the graph.
+
+        :return: List of (subject, predicate, object) tuples.
+
+        Example:
+            g.put("alice", "follows", "bob")
+            g.put("bob", "follows", "charlie")
+            g.triples()
+            # [("alice", "follows", "bob"), ("bob", "follows", "charlie")]
+        """
+        from cog.export import get_triples
+        return list(get_triples(self))
+
+    def export(self, filepath, fmt="nt", strict=False):
+        """
+        Export all triples in the graph to a file.
+
+        Writes one triple per line in the specified format.
+
+        :param filepath: Path to the output file.
+        :param fmt: Format string — "nt" (N-Triples, default), "csv", or "tsv".
+        :param strict: If True and fmt is "nt", output W3C-compliant N-Triples.
+                       IRIs are wrapped in <>, blank nodes use _: prefix,
+                       and plain literals are quoted with "".
+                       See https://www.w3.org/TR/n-triples/
+        :return: Number of triples written.
+
+        Example:
+            g.export("graph.nt")                        # N-Triples (default)
+            g.export("graph.nt", strict=True)            # W3C strict N-Triples
+            g.export("graph.csv", fmt="csv")             # CSV with header
+            g.export("graph.tsv", fmt="tsv")             # TSV with header
+        """
+        from cog.export import export_triples
+        return export_triples(self, filepath, fmt=fmt, strict=strict)
+
     def view(self, view_name,
              js_src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"):
         """
