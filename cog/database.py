@@ -16,6 +16,7 @@ import socket
 import uuid
 from .core import Table
 from . import config
+from .config import CogConfig
 import xxhash
 import csv
 import shlex
@@ -74,9 +75,9 @@ class Cog:
                        N>1 = flush every N writes with async background threads
     """
 
-    def __init__(self, shared_cache=None, flush_interval=1):
+    def __init__(self, shared_cache=None, flush_interval=1, config=None):
         self.logger = logging.getLogger(__name__)
-        self.config = config
+        self.config = config if config is not None else CogConfig()
         self.flush_interval = flush_interval
         self.logger.info(f"Cog init (flush_interval={flush_interval})")
         self.namespaces = {}
@@ -90,7 +91,7 @@ class Cog:
             self.instance_id = self.m_info["m_instance_id"]
             f.close()
         else:
-            self.instance_id = self.init_instance(config.COG_DEFAULT_NAMESPACE)
+            self.instance_id = self.init_instance(self.config.COG_DEFAULT_NAMESPACE)
 
         '''Create default namespace and table.'''
         self.create_or_load_namespace(self.config.COG_DEFAULT_NAMESPACE)
@@ -153,7 +154,7 @@ class Cog:
                 table_names = set()
                 if self.config.INDEX in index_file_name:
                     id = self.config.index_id(index_file_name)
-                    table_name = config.get_table_name(index_file_name)
+                    table_name = self.config.get_table_name(index_file_name)
                     if table_name not in table_names:
                         table_names.add(table_name)
                         self.logger.info("loading index: id: {}, table name: {}".format(id, table_name))
