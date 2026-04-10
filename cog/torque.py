@@ -4,6 +4,7 @@ from cog.core import cog_hash, Record
 import json
 import logging
 from . import config as cfg
+from .config import CogConfig
 from cog.view import graph_template, script_part1, script_part2, graph_lib_src
 from cog.embedding_providers import EMBEDDING_PROVIDERS, _chunked
 import os
@@ -84,22 +85,27 @@ class Graph:
                        1 = flush every write (safest, default)
                        0 = manual flush only (fastest, use sync())
                        N>1 = flush every N writes with async background threads
+        config: Optional CogConfig instance. When provided, overrides all other
+                config options (cog_home, cog_path_prefix) and prevents mutation
+                of global config state. Each Graph gets its own isolated copy.
     """
 
     def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
-                 flush_interval=1):
+                 flush_interval=1, config=None):
         """
         :param graph_name:
         :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         :param flush_interval: Number of writes before auto-flush. 1 = every write (safest).
+        :param config: Optional CogConfig instance. Overrides cog_home and cog_path_prefix when provided.
         """
 
-        self.config = cfg
-        self.config.COG_HOME = cog_home
-
-        if cog_path_prefix:
-            self.config.COG_PATH_PREFIX = cog_path_prefix
+        if config is not None:
+            self.config = config
+        else:
+            self.config = CogConfig(COG_HOME=cog_home)
+            if cog_path_prefix:
+                self.config.COG_PATH_PREFIX = cog_path_prefix
 
         self.graph_name = graph_name
 
@@ -112,7 +118,7 @@ class Graph:
 
         self.logger.debug(f"Torque init on graph: {graph_name} (flush_interval={flush_interval})")
 
-        self.cog = Cog(self.cache, flush_interval=flush_interval)
+        self.cog = Cog(self.cache, flush_interval=flush_interval, config=self.config)
         self.cog.create_or_load_namespace(self.graph_name)
 
         self.all_predicates = self.cog.list_tables()
@@ -526,7 +532,7 @@ class Graph:
         finally:
             # Re-initialize the graph to ensure the object remains usable,
             # even if some files could not be deleted.
-            self.cog = Cog(self.cache, flush_interval=flush_interval)
+            self.cog = Cog(self.cache, flush_interval=flush_interval, config=self.config)
             self.cog.create_or_load_namespace(self.graph_name)
             self.all_predicates = self.cog.list_tables()
         
@@ -1300,8 +1306,6 @@ class Graph:
     def lsv(self):
         return [f.split(".")[0] for f in listdir(self.views_dir)]
 
-    def get_new_graph_instance(self):
-        return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)
 
     def put_embedding(self, word, embedding):
         """
