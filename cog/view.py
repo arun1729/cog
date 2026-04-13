@@ -96,3 +96,30 @@ script_part2 = r"""
 </html>
 
 """
+
+
+class View(object):
+
+    def __init__(self, url, html):
+        self.url = url
+        self.html = html
+
+    def render(self, height=700, width=700):
+        """
+        :param self:
+        :param height:
+        :param width:
+        :return:
+        """
+        iframe_html = r"""  <iframe srcdoc='{0}' width="{1}" height="{2}"> </iframe> """.format(self.html, width,
+                                                                                                height)
+        from IPython.core.display import display, HTML
+        display(HTML(iframe_html))
+
+    def persist(self):
+        f = open(self.url, "w")
+        f.write(self.html)
+        f.close()
+
+    def __str__(self):
+        return self.url

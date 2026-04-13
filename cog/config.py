@@ -104,6 +104,10 @@ RELAY_URL = "wss://s.cogdb.io/register"
 ''' VECTORIZE '''
 COGDB_EMBED_URL = "https://vectors.cogdb.io/embed"
 
+''' CLOUD '''
+CLOUD_URL = "https://api.cogdb.io"
+CLOUD_API_PREFIX = "/api/v1"
+
 
 def cog_db_path():
     if CUSTOM_COG_DB_PATH:

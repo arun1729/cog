@@ -1,29 +1,19 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate, parse_tripple
-from cog.core import cog_hash, Record
 import json
 import logging
 from . import config as cfg
 from .config import CogConfig
-from cog.view import graph_template, script_part1, script_part2, graph_lib_src
-from cog.embedding_providers import EMBEDDING_PROVIDERS, _chunked
+from cog.view import graph_template, script_part1, script_part2, graph_lib_src, View
+from cog.embeddings import EmbeddingMixin
+from cog.search import TraversalMixin
 import os
 import shutil
 from os import listdir
+from cog.cloud_client import CloudClient
 import time
 import random
-from math import isclose
 import warnings
-import heapq
-import array
-import math
-
-# Optional simsimd for SIMD-optimized similarity
-try:
-    import simsimd
-    _HAS_SIMSIMD = True
-except ImportError:
-    _HAS_SIMSIMD = False
 
 NOTAG = "NOTAG"
 
@@ -72,33 +62,68 @@ class BlankNode(object):
         return label.startswith("_:" + BlankNode.ID_PREFIX)
 
 
-class Graph:
+class Graph(EmbeddingMixin, TraversalMixin):
     """
     Creates a graph object.
     
     Args:
-        graph_name: Name of the graph
+        graph_name: Name of the graph (default: "default")
         cog_home: Home directory name for the database
         cog_path_prefix: Root directory location for Cog db
         enable_caching: Enable in-memory caching for faster reads
-        flush_interval: Number of writes before auto-flush per store.
+        flush_interval: Number of writes before auto-flush (local and cloud).
                        1 = flush every write (safest, default)
                        0 = manual flush only (fastest, use sync())
                        N>1 = flush every N writes with async background threads
         config: Optional CogConfig instance. When provided, overrides all other
                 config options (cog_home, cog_path_prefix) and prevents mutation
                 of global config state. Each Graph gets its own isolated copy.
+        api_key: API key for CogDB Cloud. When provided (or set via
+                 COGDB_API_KEY env var), the graph operates in cloud mode —
+                 all operations go over HTTP and no local files are created.
     """
 
-    def __init__(self, graph_name, cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
-                 flush_interval=1, config=None):
+    def __init__(self, graph_name="default", cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
+                 flush_interval=1, config=None, api_key=None):
         """
-        :param graph_name:
+        :param graph_name: Name of the graph (default: "default")
         :param cog_home: Home directory name, for most use cases use default.
         :param cog_path_prefix: sets the root directory location for Cog db. Default: '/tmp' set in cog.Config. Change this to current directory when running in an IPython environment.
         :param flush_interval: Number of writes before auto-flush. 1 = every write (safest).
         :param config: Optional CogConfig instance. Overrides cog_home and cog_path_prefix when provided.
+        :param api_key: API key for CogDB Cloud mode.
         """
+
+
+        self.graph_name = graph_name
+        self.logger = logging.getLogger(__name__)
+
+        # Resolve API key: explicit param > env var > None
+        resolved_key = api_key or os.environ.get("COGDB_API_KEY")
+
+        if resolved_key:
+            # Cloud mode — all operations go over HTTP
+            self._cloud = True
+            self._api_key = resolved_key
+            self._flush_interval = flush_interval
+            self._cloud_client = CloudClient(graph_name, resolved_key, flush_interval=flush_interval)
+            self._cloud_chain = []  # accumulates traversal steps
+            self.config = cfg
+            self.last_visited_vertices = None
+            self._server_port = None
+            self.views_dir = None
+            self._predicate_reverse_lookup_cache = {}
+            self._default_provider = "cogdb"
+            self._default_provider_kwargs = {}
+            self._vectorize_configured = False
+            self.logger.debug(f"Torque cloud mode on graph: {graph_name}")
+            # No local storage initialized
+            return
+
+        # Local mode (existing behavior, unchanged)
+        self._cloud = False
+        self._api_key = None
+        self._cloud_client = None
 
         if config is not None:
             self.config = config
@@ -107,14 +132,16 @@ class Graph:
             if cog_path_prefix:
                 self.config.COG_PATH_PREFIX = cog_path_prefix
 
-        self.graph_name = graph_name
+        if config is None:
+            # Keep module-level globals in sync for backward compat (single-graph usage)
+            cfg.COG_HOME = cog_home
+            if cog_path_prefix:
+                cfg.COG_PATH_PREFIX = cog_path_prefix
 
         if enable_caching:
             self.cache = {}
         else:
             self.cache = None
-
-        self.logger = logging.getLogger(__name__)
 
         self.logger.debug(f"Torque init on graph: {graph_name} (flush_interval={flush_interval})")
 
@@ -143,6 +170,33 @@ class Graph:
         self._default_provider = "cogdb"  # Provider for auto-embed in queries
         self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
         self._vectorize_configured = False  # True after explicit vectorize() call
+
+    # === Cloud Traversal Helpers ===
+
+    def _cloud_reset_chain(self):
+        """Reset the cloud traversal chain for a new query."""
+        self._cloud_chain = []
+
+    def _cloud_append(self, method, **kwargs):
+        """Append a traversal step to the cloud chain."""
+        step = {"method": method}
+        if kwargs:
+            step["args"] = {k: v for k, v in kwargs.items() if v is not None}
+        self._cloud_chain.append(step)
+        return self
+
+    def _cloud_execute_chain(self, terminal_method, **kwargs):
+        """Send accumulated chain + terminal method to cloud and return results."""
+        chain = list(self._cloud_chain)
+        step = {"method": terminal_method}
+        if kwargs:
+            step["args"] = {k: v for k, v in kwargs.items() if v is not None}
+        chain.append(step)
+        result = self._cloud_client.query_chain(chain)
+        self._cloud_reset_chain()
+        # Strip cloud envelope to match local response format
+        result.pop("ok", None)
+        return result
 
     # === Network Methods ===
     
@@ -177,6 +231,11 @@ class Graph:
             # Share graph publicly
             g.serve(port=8080, share=True)
         """
+        if self._cloud:
+            raise RuntimeError(
+                "g.serve() is not available in cloud mode. "
+                "The graph is already hosted on CogDB Cloud."
+            )
         from cog.server import get_or_create_server
         
         if self._server_port is not None:
@@ -267,16 +326,96 @@ class Graph:
 
     def sync(self):
         """
-        Force flush all pending writes to disk.
+        Force flush all pending writes to disk (local) or cloud.
         Blocks until all flushes are complete.
         
         Use this when flush_interval > 1 or when you need to ensure 
         data durability at a specific point.
         """
+        if self._cloud:
+            self._cloud_client.sync()
+            return
         self.cog.sync()
 
     def refresh(self):
+        if self._cloud:
+            return  # No-op in cloud mode
         self.cog.refresh_all()
+
+    def ls(self):
+        """
+        List all graph names accessible from this connection.
+
+        In cloud mode, queries the server for all graphs under this API key.
+        In local mode, scans the cog_home directory for graph subdirectories.
+
+        Returns:
+            list[str]: Sorted list of graph names.
+
+        Example:
+            g = Graph(api_key="sk-...")
+            print(g.ls())  # ['default', 'products', 'social']
+
+            g = Graph()
+            print(g.ls())  # ['default', 'my_graph']
+        """
+        if self._cloud:
+            return self._cloud_client.list_graphs()
+
+        # Local mode: each graph is a subdirectory under cog_db_path
+        db_path = self.config.cog_db_path()
+        if not os.path.exists(db_path):
+            return []
+        skip = {self.config.COG_SYS_DIR, self.config.VIEWS}
+        return sorted([
+            d for d in os.listdir(db_path)
+            if os.path.isdir(os.path.join(db_path, d)) and d not in skip
+        ])
+
+    def use(self, graph_name):
+        """
+        Switch this instance to a different graph.
+
+        Flushes any pending writes before switching. The graph is created
+        if it does not already exist (same behavior as the constructor).
+
+        Args:
+            graph_name: Name of the graph to switch to.
+
+        Returns:
+            self for method chaining.
+
+        Example:
+            g = Graph(api_key="sk-...")
+            g.ls()                           # ['default', 'social']
+            g.use("social").v("alice").out("knows").all()
+        """
+        if self._cloud:
+            self._cloud_client.sync()  # flush pending mutations
+            self.graph_name = graph_name
+            self._cloud_client = CloudClient(
+                graph_name, self._api_key, flush_interval=self._flush_interval
+            )
+            self._cloud_reset_chain()
+            return self
+
+        # Local mode: switch namespace
+        self.graph_name = graph_name
+        self.cog.create_or_load_namespace(graph_name)
+        self.cog.use_namespace(graph_name)
+        self.all_predicates = self.cog.list_tables()
+        # Rebuild predicate reverse lookup cache for the new graph
+        self._predicate_reverse_lookup_cache = {}
+        try:
+            for pred_hash in self.all_predicates:
+                edge_record = self.cog.use_table(
+                    self.config.GRAPH_EDGE_SET_TABLE_NAME
+                ).get(pred_hash)
+                if edge_record is not None:
+                    self._predicate_reverse_lookup_cache[pred_hash] = edge_record.value
+        except Exception:
+            pass  # Edge set table may not exist yet for new graphs
+        return self
 
     def updatej(self, json_object):
         self.put_json(json_object, True)
@@ -364,6 +503,20 @@ class Graph:
         :param graph_name:
         :return: None
         """
+        if self._cloud:
+            # Read triples from file and send to cloud in batches
+            batch = []
+            batch_size = 1000
+            with open(graph_data_path) as f:
+                for line in f:
+                    subject, predicate, obj, _ = parse_tripple(line)
+                    batch.append({"s": subject, "p": predicate, "o": obj})
+                    if len(batch) >= batch_size:
+                        self._cloud_client.mutate_put_batch(batch)
+                        batch = []
+            if batch:
+                self._cloud_client.mutate_put_batch(batch)
+            return None
 
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_triples(graph_data_path, graph_name)
@@ -389,6 +542,23 @@ class Graph:
 
         if id_column_name is None:
             raise Exception("id_column_name must not be None")
+        if self._cloud:
+            # Read CSV locally and send triples to cloud in batches
+            batch = []
+            batch_size = 1000
+            with open(csv_path) as csv_file:
+                reader = csv.DictReader(csv_file)
+                for row in reader:
+                    subject = row[id_column_name]
+                    for col, val in row.items():
+                        if col != id_column_name:
+                            batch.append({"s": subject, "p": col, "o": val})
+                            if len(batch) >= batch_size:
+                                self._cloud_client.mutate_put_batch(batch)
+                                batch = []
+            if batch:
+                self._cloud_client.mutate_put_batch(batch)
+            return None
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_csv(csv_path, id_column_name, graph_name)
         self.all_predicates = self.cog.list_tables()
@@ -401,10 +571,17 @@ class Graph:
                     self._predicate_reverse_lookup_cache[hash_predicate(col)] = col
 
     def close(self):
+        if self._cloud:
+            self._cloud_client.sync()  # flush any pending mutations
+            return
         self.logger.info("closing graph: " + self.graph_name)
         self.cog.close()
 
     def put(self, vertex1, predicate, vertex2, update=False, create_new_edge=False):
+        if self._cloud:
+            self._cloud_client.mutate_put(vertex1, predicate, vertex2,
+                                          update=update, create_new_edge=create_new_edge)
+            return self
         self._predicate_reverse_lookup_cache[hash_predicate(predicate)] = predicate
         self.cog.use_namespace(self.graph_name)
         if update:
@@ -432,6 +609,16 @@ class Graph:
                 ("charlie", "follows", "alice")
             ])
         """
+        if self._cloud:
+            batch = []
+            for v1, pred, v2 in triples:
+                batch.append({"s": str(v1), "p": str(pred), "o": str(v2)})
+                if len(batch) >= 1000:
+                    self._cloud_client.mutate_put_batch(batch)
+                    batch = []
+            if batch:
+                self._cloud_client.mutate_put_batch(batch)
+            return self
         self.cog.use_namespace(self.graph_name)
         self.cog.begin_batch()
         try:
@@ -456,6 +643,9 @@ class Graph:
             g.put("alice", "knows", "bob")
             g.delete("alice", "knows", "bob")
         """
+        if self._cloud:
+            self._cloud_client.mutate_delete(vertex1, predicate, vertex2)
+            return self
         self.cog.delete_edge(vertex1, predicate, vertex2)
         return self
 
@@ -476,6 +666,9 @@ class Graph:
                 "drop(s, p, o) is deprecated. Use delete(s, p, o) for edges. "
                 "Use drop() with no arguments to delete the entire graph."
             )
+        if self._cloud:
+            self._cloud_client.mutate_drop()
+            return
         
         # Clear the cache
         if self.cache is not None:
@@ -506,6 +699,9 @@ class Graph:
             g.truncate()  # Graph is now empty but still usable
             g.put("new", "data", "here")  # Works fine
         """
+        if self._cloud:
+            self._cloud_client.mutate_truncate()
+            return self
         # Get the graph directory path using the same method Cog uses
         # This correctly handles CUSTOM_COG_DB_PATH if set
         graph_path = self.config.cog_data_dir(self.graph_name)
@@ -544,6 +740,11 @@ class Graph:
         return self
 
     def v(self, vertex=None, func=None):
+        if self._cloud:
+            self._cloud_reset_chain()
+            if isinstance(vertex, list):
+                return self._cloud_append("v", vertex=vertex)
+            return self._cloud_append("v", vertex=vertex)
         if func:
             warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
         if vertex is not None:
@@ -567,6 +768,9 @@ class Graph:
         :param predicates: A string or a List of strings.
         :return: self for method chaining.
         """
+        if self._cloud:
+            p = predicates if isinstance(predicates, list) else ([predicates] if predicates else None)
+            return self._cloud_append("out", predicates=p)
 
         if func:
             warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
@@ -590,6 +794,9 @@ class Graph:
         :param predicates: List of predicates
         :return: self for method chaining.
         """
+        if self._cloud:
+            p = predicates if isinstance(predicates, list) else ([predicates] if predicates else None)
+            return self._cloud_append("inc", predicates=p)
 
         if func:
             warnings.warn("The use of func is deprecated, please use filter instead.", DeprecationWarning)
@@ -630,6 +837,9 @@ class Graph:
         :param vertex: Vertex ID
         :return: self for method chaining.
         """
+        if self._cloud:
+            p = predicates if isinstance(predicates, list) else ([predicates] if predicates else None)
+            return self._cloud_append("has", predicates=p, vertex=vertex)
 
         if predicates is not None:
             if not isinstance(predicates, list):
@@ -653,6 +863,9 @@ class Graph:
         :param vertex: Vertex ID
         :return: self for method chaining.
         """
+        if self._cloud:
+            p = predicates if isinstance(predicates, list) else ([predicates] if predicates else None)
+            return self._cloud_append("hasr", predicates=p, vertex=vertex)
 
         if predicates is not None:
             if not isinstance(predicates, list):
@@ -676,6 +889,10 @@ class Graph:
         :param scan_type: use 'v' to scan the vertex set or 'e' to scan the edge set
         :return: A dictionary containing a list of scanned item(vertex) IDs, e.g., `{'result': [{'id': '...'}]}`.
         """
+        if self._cloud:
+            result = self._cloud_client.query_scan(limit, scan_type)
+            result.pop("ok", None)
+            return result
         assert type(scan_type) is str, "Scan type must be either 'v' for vertices or 'e' for edges."
         if scan_type == 'e':
             self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_EDGE_SET_TABLE_NAME)
@@ -739,6 +956,11 @@ class Graph:
         """
             Applies a filter function to the vertices and removes any vertices that do not pass the filter.
         """
+        if self._cloud:
+            raise RuntimeError(
+                "filter() with a Python lambda is not supported in cloud mode. "
+                "Use has()/hasr()/is_() for server-side filtering."
+            )
         self.last_visited_vertices = [v for v in self.last_visited_vertices if func(v.id)]
         return self
 
@@ -748,6 +970,10 @@ class Graph:
         :param predicates: A string or list of predicate strings to follow.
         :return: self for method chaining.
         """
+        if self._cloud:
+            p = predicates if isinstance(predicates, list) else ([predicates] if predicates else None)
+            return self._cloud_append("both", predicates=p)
+
         if predicates is not None:
             if not isinstance(predicates, list):
                 predicates = [predicates]
@@ -817,6 +1043,9 @@ class Graph:
         :param nodes: One or more node IDs to filter to.
         :return: self for method chaining.
         """
+        if self._cloud:
+            node_list = list(nodes[0]) if (len(nodes) == 1 and isinstance(nodes[0], list)) else list(nodes)
+            return self._cloud_append("is_", nodes=node_list)
         if len(nodes) == 1 and isinstance(nodes[0], list):
             node_set = set(nodes[0])
         else:
@@ -829,6 +1058,8 @@ class Graph:
         Remove duplicate vertices from the result set.
         :return: self for method chaining.
         """
+        if self._cloud:
+            return self._cloud_append("unique")
         seen = set()
         unique_vertices = []
         for v in self.last_visited_vertices:
@@ -844,6 +1075,8 @@ class Graph:
         :param n: Maximum number of vertices to return.
         :return: self for method chaining.
         """
+        if self._cloud:
+            return self._cloud_append("limit", n=n)
         self.last_visited_vertices = self.last_visited_vertices[:n]
         return self
 
@@ -853,6 +1086,8 @@ class Graph:
         :param n: Number of vertices to skip.
         :return: self for method chaining.
         """
+        if self._cloud:
+            return self._cloud_append("skip", n=n)
         self.last_visited_vertices = self.last_visited_vertices[n:]
         return self
 
@@ -866,6 +1101,8 @@ class Graph:
             g.v("Person").out("created_at").order().all()        # ascending (default)
             g.v("Person").out("created_at").order(desc).all()    # descending
         '''
+        if self._cloud:
+            return self._cloud_append("order", direction=direction)
         reverse = (direction == "desc")
         self.last_visited_vertices = sorted(self.last_visited_vertices, key=lambda v: v.id, reverse=reverse)
         return self
@@ -876,6 +1113,8 @@ class Graph:
         :param tag: A previous tag in the query to jump back to.
         :return: self for method chaining.
         """
+        if self._cloud:
+            return self._cloud_append("back", tag=tag)
         vertices = []
         for v in self.last_visited_vertices:
             if tag in v.tags:
@@ -887,277 +1126,6 @@ class Graph:
         self.last_visited_vertices = vertices
         return self
 
-    def __get_adjacent(self, vertex, predicates, direction):
-        """Get adjacent vertices based on direction: 'out', 'inc', or 'both'."""
-        adjacent = []
-        if direction in ("out", "both"):
-            adjacent.extend(self.__adjacent_vertices(vertex, predicates, 'out'))
-        if direction in ("inc", "both"):
-            adjacent.extend(self.__adjacent_vertices(vertex, predicates, 'in'))
-        return adjacent
-
-    def bfs(self, predicates=None, max_depth=None, min_depth=0,
-            direction="out", until=None, unique=True):
-        """
-        Traverse the graph breadth-first from current vertices.
-
-        BFS explores level-by-level, visiting all neighbors at the current depth
-        before moving deeper. Guarantees shortest path in unweighted graphs.
-
-        :param predicates: Edge type(s) to follow: str, list, or None (all edges)
-        :param max_depth: Maximum traversal depth (None = unlimited)
-        :param min_depth: Minimum depth to include in results (default 0)
-        :param direction: Traversal direction: "out", "inc", or "both"
-        :param until: Stop condition lambda: func(vertex_id) -> bool
-        :param unique: If True, visit each vertex only once (prevents cycles)
-        :return: self for method chaining
-
-        Example:
-            g.v("alice").bfs(predicates="follows", max_depth=2).all()
-            g.v("alice").bfs(max_depth=3, min_depth=2).all()  # depths 2-3 only
-            g.v("alice").bfs(until=lambda v: v == "target").all()
-        """
-        from collections import deque
-
-        # Normalize predicates
-        if predicates is not None:
-            if not isinstance(predicates, list):
-                predicates = [predicates]
-            predicates = list(map(hash_predicate, predicates))
-        else:
-            predicates = self.all_predicates
-
-        result_vertices = []
-        visited = set()
-        queue = deque()  # (vertex, depth)
-
-        # Initialize with current vertices at depth 0
-        for v in self.last_visited_vertices:
-            queue.append((v, 0))
-            if unique:
-                visited.add(v.id)
-
-        while queue:
-            current, depth = queue.popleft()
-
-            if until and until(current.id):
-                if depth >= min_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
-                continue
-
-            if depth > 0 and depth >= min_depth:
-                if max_depth is None or depth <= max_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
-
-            # Stop exploring if at max depth
-            if max_depth is not None and depth >= max_depth:
-                continue
-
-            adjacent = self.__get_adjacent(current, predicates, direction)
-            for adj in adjacent:
-                if unique:
-                    if adj.id in visited:
-                        continue
-                    visited.add(adj.id)
-                adj.tags = current.tags.copy()
-                # Build path for neighbor from parent's path
-                parent_path = current._path or [{'vertex': current.id}]
-                edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
-                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
-                queue.append((adj, depth + 1))
-
-        self.last_visited_vertices = result_vertices
-        return self
-
-    def dfs(self, predicates=None, max_depth=None, min_depth=0,
-            direction="out", until=None, unique=True):
-        """
-        Traverse the graph depth-first from current vertices.
-
-        DFS explores as deep as possible along each branch before backtracking.
-        More memory-efficient than BFS for deep graphs.
-
-        :param predicates: Edge type(s) to follow: str, list, or None (all edges)
-        :param max_depth: Maximum traversal depth (None = unlimited)
-        :param min_depth: Minimum depth to include in results (default 0)
-        :param direction: Traversal direction: "out", "inc", or "both"
-        :param until: Stop condition lambda: func(vertex_id) -> bool
-        :param unique: If True, visit each vertex only once (prevents cycles)
-        :return: self for method chaining
-
-        Example:
-            g.v("alice").dfs(predicates="follows", max_depth=3).all()
-            g.v("alice").dfs(direction="both", max_depth=2).all()
-        """
-        # Normalize predicates
-        if predicates is not None:
-            if not isinstance(predicates, list):
-                predicates = [predicates]
-            predicates = list(map(hash_predicate, predicates))
-        else:
-            predicates = self.all_predicates
-
-        result_vertices = []
-        visited = set()
-        stack = []  # (vertex, depth)
-
-        # Initialize with current vertices at depth 0
-        for v in self.last_visited_vertices:
-            stack.append((v, 0))
-            if unique:
-                visited.add(v.id)
-
-        while stack:
-            current, depth = stack.pop()  # LIFO for DFS
-
-            if until and until(current.id):
-                if depth >= min_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
-                continue
-
-            if depth > 0 and depth >= min_depth:
-                if max_depth is None or depth <= max_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
-
-            # Stop exploring if at max depth
-            if max_depth is not None and depth >= max_depth:
-                continue
-
-            adjacent = self.__get_adjacent(current, predicates, direction)
-            for adj in adjacent:
-                if unique:
-                    if adj.id in visited:
-                        continue
-                    visited.add(adj.id)
-                adj.tags = current.tags.copy()
-                # Build path for neighbor from parent's path
-                parent_path = current._path or [{'vertex': current.id}]
-                edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
-                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
-                stack.append((adj, depth + 1))
-
-        self.last_visited_vertices = result_vertices
-        return self
-
-    def sim(self, word, operator, threshold, strict=False):
-        """
-            Applies cosine similarity filter to the vertices and removes any vertices that do not pass the filter.
-
-            Parameters:
-            -----------
-            word: str
-                The word to compare to the other vertices.
-            operator: str
-                The comparison operator to use. One of "==", ">", "<", ">=", "<=", or "in".
-            threshold: float or list of 2 floats
-                The threshold value(s) to use for the comparison. If operator is "==", ">", "<", ">=", or "<=", threshold should be a float. If operator is "in", threshold should be a list of 2 floats.
-            strict: bool, optional
-                If True, raises an exception if a word embedding is not found for either word. If False, assigns a similarity of 0.0 to any word embedding that is not found.
-
-            Returns:
-            --------
-            self: GraphTraversal
-                Returns self to allow for method chaining.
-
-            Raises:
-            -------
-            ValueError:
-                If operator is not a valid comparison operator or if threshold is not a valid threshold value for the given operator.
-                If strict is True and a word embedding is not found for either word.
-    """
-        if not isinstance(threshold, (float, int, list)):
-            raise ValueError("Invalid threshold value: {}".format(threshold))
-
-        if operator == 'in':
-            if not isinstance(threshold, list) or len(threshold) != 2:
-                raise ValueError("Invalid threshold value: {}".format(threshold))
-            if not all(isinstance(t, (float, int)) for t in threshold):
-                raise ValueError("Invalid threshold value: {}".format(threshold))
-
-        # Auto-embed query word if missing
-        self._auto_embed(word)
-
-        filtered_vertices = []
-        for v in self.last_visited_vertices:
-            similarity = self.__cosine_similarity(word, v.id)
-            if not similarity:
-                # similarity is None if a word embedding is not found for either word.
-                if strict:
-                    raise ValueError("Missing word embedding for either '{}' or '{}'".format(word, v.id))
-                else:
-                    # Treat vertices without word embeddings as if they have no similarity to any other vertex.
-                    similarity = 0.0
-            if operator == '=':
-                if isclose(similarity, threshold):
-                    filtered_vertices.append(v)
-            elif operator == '>':
-                if similarity > threshold:
-                    filtered_vertices.append(v)
-            elif operator == '<':
-                if similarity < threshold:
-                    filtered_vertices.append(v)
-            elif operator == '>=':
-                if similarity >= threshold:
-                    filtered_vertices.append(v)
-            elif operator == '<=':
-                if similarity <= threshold:
-                    filtered_vertices.append(v)
-            elif operator == 'in':
-                if not threshold[0] <= similarity <= threshold[1]:
-                    continue
-                filtered_vertices.append(v)
-            else:
-                raise ValueError("Invalid operator: {}".format(operator))
-        self.last_visited_vertices = filtered_vertices
-        return self
-
-    def __cosine_distance(self, x, y):
-        """Compute cosine distance (1 - similarity) with simsimd or pure Python fallback."""
-        if _HAS_SIMSIMD:
-            return simsimd.cosine(x, y)
-        else:
-            # Pure Python fallback for Pyodide/environments without simsimd
-            dot = sum(a * b for a, b in zip(x, y))
-            norm_x = math.sqrt(sum(a * a for a in x))
-            norm_y = math.sqrt(sum(b * b for b in y))
-            if norm_x == 0 or norm_y == 0:
-                return 1.0  # Max distance if either vector is zero
-            return 1.0 - (dot / (norm_x * norm_y))
-
-    def __cosine_similarity(self, word1, word2):
-        """Compute cosine similarity using SIMD-optimized simsimd library or pure Python fallback."""
-        x_list = self.get_embedding(word1)
-        y_list = self.get_embedding(word2)
-
-        if x_list is None or y_list is None:
-            return None
-        
-        # Use python array for buffer protocol (compatible with simsimd)
-        x = array.array('f', x_list)
-        y = array.array('f', y_list)
-
-        # cosine distance = 1 - similarity, so we convert
-        distance = self.__cosine_distance(x, y)
-        return 1.0 - float(distance)
-
     def tag(self, tag_names):
         """
         Saves vertices with tag name(s). Used to capture vertices while traversing a graph.
@@ -1167,6 +1135,9 @@ class Graph:
         :param tag_names: A string or list of strings.
         :return: self for method chaining.
         """
+        if self._cloud:
+            names = tag_names if isinstance(tag_names, list) else [tag_names]
+            return self._cloud_append("tag", tag_names=names)
         if not isinstance(tag_names, list):
             tag_names = [tag_names]
         for v in self.last_visited_vertices:
@@ -1178,6 +1149,9 @@ class Graph:
         return self
 
     def count(self):
+        if self._cloud:
+            result = self._cloud_execute_chain("count")
+            return result.get("result", result.get("count", 0))
         return len(self.last_visited_vertices)
 
     def all(self, options=None):
@@ -1186,6 +1160,8 @@ class Graph:
         https://github.com/cayleygraph/cayley/blob/master/docs/GizmoAPI.md
         :return:
         """
+        if self._cloud:
+            return self._cloud_execute_chain("all", options=options)
         result = []
         show_edge = True if options is not None and 'e' in options else False
         for v in self.last_visited_vertices:
@@ -1213,6 +1189,8 @@ class Graph:
             g.v("bob").out("follows").tag("from").out("works_at").tag("to").graph()
             # {'nodes': [{'id': 'bob'}, ...], 'links': [{'source': 'bob', 'target': 'fred', 'label': 'follows'}, ...]}
         """
+        if self._cloud:
+            return self._cloud_execute_chain("graph")
         nodes = {}
         links = {}
 
@@ -1251,6 +1229,18 @@ class Graph:
             g.triples()
             # [("alice", "follows", "bob"), ("bob", "follows", "charlie")]
         """
+        if self._cloud:
+            result = self._cloud_client.query_triples()
+            result.pop("ok", None)
+            # Support both {"triples": [...]} and standard {"result": [...]} envelopes
+            raw = result.get("triples", result.get("result", []))
+            triples_list = []
+            for item in raw:
+                if isinstance(item, (list, tuple)) and len(item) >= 3:
+                    triples_list.append(tuple(item[:3]))
+                elif isinstance(item, dict) and "s" in item:
+                    triples_list.append((item["s"], item["p"], item["o"]))
+            return triples_list
         from cog.export import get_triples
         return list(get_triples(self))
 
@@ -1274,6 +1264,10 @@ class Graph:
             g.export("graph.csv", fmt="csv")             # CSV with header
             g.export("graph.tsv", fmt="tsv")             # TSV with header
         """
+        if self._cloud:
+            cloud_triples = self.triples()
+            from cog.export import export_triples
+            return export_triples(self, filepath, fmt=fmt, strict=strict, triples_iter=cloud_triples)
         from cog.export import export_triples
         return export_triples(self, filepath, fmt=fmt, strict=strict)
 
@@ -1283,6 +1277,8 @@ class Graph:
             Returns html view of the resulting graph from a query.
             :return:
         """
+        if self._cloud:
+            raise RuntimeError("view() is not supported in cloud mode")
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.graph()
         # Escape HTML special characters to prevent XSS when embedding in script tag
@@ -1296,6 +1292,8 @@ class Graph:
         return view
 
     def getv(self, view_name):
+        if self._cloud:
+            raise RuntimeError("getv() is not supported in cloud mode")
         view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
         assert os.path.isfile(view), "view not found, create a view by calling .view()"
         with open(view, 'r') as f:
@@ -1304,337 +1302,10 @@ class Graph:
         return view
 
     def lsv(self):
+        if self._cloud:
+            raise RuntimeError("lsv() is not supported in cloud mode")
         return [f.split(".")[0] for f in listdir(self.views_dir)]
 
 
-    def put_embedding(self, word, embedding):
-        """
-        Saves a word embedding.
-        """
-
-        assert isinstance(word, str), "word must be a string"
-        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
-            word, embedding))
-
-    def get_embedding(self, word):
-        """
-        Returns a word embedding.
-        """
-        assert isinstance(word, str), "word must be a string"
-        record = self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).get(
-            word)
-        if record is None:
-            return None
-        return record.value
-
-    def delete_embedding(self, word):
-        """
-        Deletes a word embedding.
-        """
-        assert isinstance(word, str), "word must be a string"
-        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME).delete(
-            word)
-
-    def put_embeddings_batch(self, word_embedding_pairs):
-        """
-        Bulk insert multiple embeddings efficiently.
-        
-        :param word_embedding_pairs: List of (word, embedding) tuples
-        :return: self for method chaining
-        
-        Example:
-            g.put_embeddings_batch([
-                ("apple", [0.1, 0.2, ...]),
-                ("orange", [0.3, 0.4, ...]),
-            ])
-        """
-        self.cog.use_namespace(self.graph_name)
-        self.cog.begin_batch()
-        try:
-            for word, embedding in word_embedding_pairs:
-                if not isinstance(word, str):
-                    raise TypeError("word must be a string")
-                self.cog.use_table(self.config.EMBEDDING_SET_TABLE_NAME).put(Record(
-                    word, embedding))
-        finally:
-            self.cog.end_batch()
-        return self
-
-    def scan_embeddings(self, limit=100):
-        """
-        Scan and return a list of words that have embeddings stored.
-        
-        :param limit: Maximum number of embeddings to return
-        :return: Dictionary with 'result' containing list of words with embeddings
-        
-        Note: This scans the graph vertices and checks which have embeddings.
-        """
-        result = []
-        self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
-        count = 0
-        for r in self.cog.scanner():
-            if count >= limit:
-                break
-            word = r.key
-            if self.get_embedding(word) is not None:
-                result.append({"id": word})
-                count += 1
-        return {"result": result}
-
-    def embedding_stats(self):
-        """
-        Return statistics about stored embeddings.
-        
-        :return: Dictionary with count and dimensions (if available)
-        """
-        count = 0
-        dimensions = None
-        # Scan the embedding table directly
-        self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME)
-        for r in self.cog.scanner():
-            count += 1
-            if dimensions is None and r.value is not None:
-                dimensions = len(r.value)
-        return {"count": count, "dimensions": dimensions}
-
-    def k_nearest(self, word, k=10):
-        """
-        Find the k vertices most similar to the given word based on embeddings.
-        
-        :param word: The word to find similar vertices for
-        :param k: Number of nearest neighbors to return (default 10)
-        :return: self for method chaining
-        
-        Example:
-            g.v().k_nearest("machine_learning", k=5).all()
-        """
-        # Auto-embed query word if missing
-        self._auto_embed(word)
-
-        target_embedding = self.get_embedding(word)
-        if target_embedding is None:
-            self.last_visited_vertices = []
-            return self
-        
-        # simsimd/fallback requires buffer protocol (e.g. numpy array or python array)
-        target_vec = array.array('f', target_embedding)
-        similarities = []
-        
-        # None = no prior traversal, scan entire embedding table
-        # [] = prior traversal returned empty, preserve empty semantics
-        # [...] = search within visited vertices
-        if self.last_visited_vertices is None:
-            # Scan embedding table directly for all embeddings
-            self.cog.use_namespace(self.graph_name).use_table(self.config.EMBEDDING_SET_TABLE_NAME)
-            for r in self.cog.scanner():
-                if r.value is not None:
-                    v_vec = array.array('f', r.value)
-                    distance = self.__cosine_distance(target_vec, v_vec)
-                    similarity = 1.0 - float(distance)
-                    similarities.append((similarity, Vertex(r.key)))
-        elif self.last_visited_vertices:
-            # Search within visited vertices
-            for v in self.last_visited_vertices:
-                v_embedding = self.get_embedding(v.id)
-                if v_embedding is not None:
-                    v_vec = array.array('f', v_embedding)
-                    distance = self.__cosine_distance(target_vec, v_vec)
-                    similarity = 1.0 - float(distance)
-                    similarities.append((similarity, v))
-        # else: empty list, similarities stays empty
-        
-        # Get top k using heap for efficiency
-        top_k = heapq.nlargest(k, similarities, key=lambda x: x[0])
-        self.last_visited_vertices = [v for _, v in top_k]
-        return self
-
-    def load_glove(self, filepath, limit=None, batch_size=1000):
-        """
-        Load GloVe embeddings from a text file.
-        
-        :param filepath: Path to GloVe file (e.g., 'glove.6B.100d.txt')
-        :param limit: Maximum number of embeddings to load (None for all)
-        :param batch_size: Number of embeddings to batch before writing (default 1000)
-        :return: Number of embeddings loaded
-        
-        Example:
-            count = g.load_glove("glove.6B.100d.txt", limit=50000)
-        """
-        count = 0
-        batch = []
-        
-        with open(filepath, 'r', encoding='utf-8') as f:
-            for line in f:
-                if limit is not None and count >= limit:
-                    break
-                parts = line.strip().split()
-                if len(parts) < 2:
-                    continue
-                word = parts[0]
-                embedding = [float(x) for x in parts[1:]]
-                batch.append((word, embedding))
-                count += 1
-                
-                if len(batch) >= batch_size:
-                    self.put_embeddings_batch(batch)
-                    batch = []
-        
-        # Load remaining batch
-        if batch:
-            self.put_embeddings_batch(batch)
-        
-        return count
-
-    def load_gensim(self, model, limit=None, batch_size=1000):
-        """
-        Load embeddings from a Gensim Word2Vec or FastText model.
-        
-        :param model: A Gensim model with a 'wv' attribute (Word2Vec, FastText)
-        :param limit: Maximum number of embeddings to load (None for all)
-        :param batch_size: Number of embeddings to batch before writing (default 1000)
-        :return: Number of embeddings loaded
-        
-        Example:
-            from gensim.models import Word2Vec
-            model = Word2Vec(sentences)
-            count = g.load_gensim(model)
-        """
-        count = 0
-        batch = []
-        
-        # Get word vectors from model
-        if hasattr(model, 'wv'):
-            wv = model.wv
-        else:
-            wv = model  # Already a KeyedVectors object
-        
-        for word in wv.index_to_key:
-            if limit is not None and count >= limit:
-                break
-            embedding = wv[word].tolist()
-            batch.append((word, embedding))
-            count += 1
-            
-            if len(batch) >= batch_size:
-                self.put_embeddings_batch(batch)
-                batch = []
-        
-        if batch:
-            self.put_embeddings_batch(batch)
-        
-        return count
-
-    def _auto_embed(self, word):
-        """Auto-fetch and store embedding for a word if missing.
-        Only active after vectorize() has been explicitly called."""
-        if not self._vectorize_configured:
-            return
-        if self.get_embedding(word) is not None:
-            return
-        try:
-            provider_fn = EMBEDDING_PROVIDERS[self._default_provider]
-            pairs = provider_fn([word], **self._default_provider_kwargs)
-            if pairs:
-                self.put_embeddings_batch(pairs)
-        except Exception as e:
-            self.logger.debug("auto-embed for '{}' failed: {}".format(word, e))
-
-    def vectorize(self, words=None, provider="cogdb", batch_size=100, **kwargs):
-        """
-        Auto-generate vector embeddings using a provider.
-
-        Can embed all graph nodes, a single word, or a list of words.
-        Skips words that already have embeddings.
-
-        :param words: Optional — a string or list of strings to embed.
-                      If None, embeds all nodes in the graph.
-        :param provider: Provider name — "cogdb" (default), "openai", or "custom".
-        :param batch_size: Number of words per provider request (default 100).
-        :param kwargs: Passed to the provider (e.g. url=, api_key=, model=).
-        :return: Summary dict {"vectorized": N, "skipped": M, "total": T}
-
-        Example:
-            g.vectorize()                          # all nodes
-            g.vectorize("europa")                   # single word
-            g.vectorize(["europa", "ocean"])         # specific words
-            g.vectorize(provider="openai", api_key="sk-...")
-        """
-        if not isinstance(batch_size, int) or batch_size < 1:
-            raise ValueError("batch_size must be a positive integer, got: {}".format(batch_size))
-
-        if provider not in EMBEDDING_PROVIDERS:
-            raise ValueError("Unknown provider '{}'. Choose from: {}".format(
-                provider, ", ".join(EMBEDDING_PROVIDERS.keys())))
-
-        # Store provider config for auto-embed in queries
-        self._default_provider = provider
-        self._default_provider_kwargs = kwargs
-        self._vectorize_configured = True
-
-        provider_fn = EMBEDDING_PROVIDERS[provider]
-
-        # Determine which words to embed
-        if words is not None:
-            # Explicit word(s)
-            if isinstance(words, str):
-                words = [words]
-            all_words = words
-        else:
-            # All graph nodes
-            all_words = []
-            self.cog.use_namespace(self.graph_name).use_table(self.config.GRAPH_NODE_SET_TABLE_NAME)
-            for r in self.cog.scanner():
-                all_words.append(r.key)
-
-        total = len(all_words)
-
-        # Skip words that already have embeddings
-        to_embed = [w for w in all_words if self.get_embedding(w) is None]
-        skipped = total - len(to_embed)
-
-        if not to_embed:
-            return {"vectorized": 0, "skipped": skipped, "total": total}
-
-        # Send to provider in batches and store results
-        vectorized = 0
-        errors = []
-        for chunk in _chunked(to_embed, batch_size):
-            try:
-                pairs = provider_fn(chunk, **kwargs)
-                self.put_embeddings_batch(pairs)
-                vectorized += len(pairs)
-            except Exception as e:
-                self.logger.error("vectorize batch failed: {}".format(e))
-                errors.append(str(e))
-
-        result = {"vectorized": vectorized, "skipped": skipped, "total": total}
-        if errors:
-            result["errors"] = errors
-        return result
-
-
-class View(object):
-
-    def __init__(self, url, html):
-        self.url = url
-        self.html = html
-
-    def render(self, height=700, width=700):
-        """
-        :param self:
-        :param height:
-        :param width:
-        :return:
-        """
-        iframe_html = r"""  <iframe srcdoc='{0}' width="{1}" height="{2}"> </iframe> """.format(self.html, width,
-                                                                                                height)
-        from IPython.core.display import display, HTML
-        display(HTML(iframe_html))
-
-    def persist(self):
-        f = open(self.url, "w")
-        f.write(self.html)
-        f.close()
-
-    def __str__(self):
-        return self.url
+    def get_new_graph_instance(self):
+        return Graph(self.graph_name, self.config.COG_HOME, self.config.COG_PATH_PREFIX)

@@ -82,8 +82,9 @@ class TestDB2(unittest.TestCase):
 
         cogdb.close()
 
-    def test_zzz_after_all_tests(self):
-        shutil.rmtree('/tmp/cogtestdb2')
-        shutil.rmtree('/tmp/cogtestdb3')
-        shutil.rmtree('/tmp/cogtestdb4')
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree('/tmp/cogtestdb2', ignore_errors=True)
+        shutil.rmtree('/tmp/cogtestdb3', ignore_errors=True)
+        shutil.rmtree('/tmp/cogtestdb4', ignore_errors=True)
         print("*** deleted test data.")

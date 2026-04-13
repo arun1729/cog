@@ -82,19 +82,21 @@ def get_triples(graph):
                         yield (vertex, predicate_name, obj)
 
 
-def export_triples(graph, filepath, fmt="nt", strict=False):
+def export_triples(graph, filepath, fmt="nt", strict=False, triples_iter=None):
     """
     Export all triples in the graph to a file.
 
     Writes one triple per line in the specified format.
 
-    :param graph: A Graph instance.
+    :param graph: A Graph instance (unused if triples_iter is provided).
     :param filepath: Path to the output file.
     :param fmt: Format string — "nt" (N-Triples, default), "csv", or "tsv".
     :param strict: If True and fmt is "nt", output W3C-compliant N-Triples
                    where IRIs are wrapped in <>, blank nodes use _: prefix,
                    and plain literals are quoted with "".
                    See https://www.w3.org/TR/n-triples/
+    :param triples_iter: Optional iterable of (s, p, o) tuples. If provided,
+                         used instead of scanning the graph.
     :return: Number of triples written.
 
     Example:
@@ -105,18 +107,19 @@ def export_triples(graph, filepath, fmt="nt", strict=False):
     """
     fmt = fmt.lower()
     count = 0
+    triples = triples_iter if triples_iter is not None else get_triples(graph)
 
     with open(filepath, 'w', newline='') as f:
         if fmt in ("csv", "tsv"):
             delimiter = '\t' if fmt == "tsv" else ','
             writer = csv_module.writer(f, delimiter=delimiter)
             writer.writerow(["subject", "predicate", "object"])
-            for s, p, o in get_triples(graph):
+            for s, p, o in triples:
                 writer.writerow([s, p, o])
                 count += 1
         elif fmt == "nt":
             if strict:
-                for s, p, o in get_triples(graph):
+                for s, p, o in triples:
                     f.write('{} {} {} .\n'.format(
                         _to_nt_term(s, "subject"),
                         _to_nt_term(p, "predicate"),
@@ -124,7 +127,7 @@ def export_triples(graph, filepath, fmt="nt", strict=False):
                     ))
                     count += 1
             else:
-                for s, p, o in get_triples(graph):
+                for s, p, o in triples:
                     f.write('{} {} {} .\n'.format(s, p, o))
                     count += 1
         else:
