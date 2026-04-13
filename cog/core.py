@@ -189,13 +189,13 @@ class Index:
             f = open(self.name, 'wb+')
             i = 0
             e_blocks = []
-            while i < config.INDEX_CAPACITY:
+            while i < self.config.INDEX_CAPACITY:
                 e_blocks.append(self.empty_block)
                 i += 1
             f.write(b''.join(e_blocks))
             self.file_limit = f.tell()
             f.close()
-            self.logger.info("new index with capacity" + str(config.INDEX_CAPACITY) + "created: " + self.name)
+            self.logger.info("new index with capacity" + str(self.config.INDEX_CAPACITY) + "created: " + self.name)
         else:
             self.logger.info("Index: "+self.name+" already exists.")
 
@@ -695,7 +695,7 @@ class Indexer:
         self.load_indexes()
         # if no index currenlty exist, create new live index.
         if len(self.index_list) == 0:
-            self.index_list.append(Index(tablemeta, config, logger, self.index_id))
+            self.index_list.append(Index(tablemeta, self.config, logger, self.index_id))
             self.live_index = self.index_list[self.index_id]
 
     def close(self):

@@ -26,6 +26,20 @@ class CORSHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
 
+def clean_build_artifacts(project_root, dist_dir):
+    """Remove old build artifacts to ensure a fresh build."""
+    import shutil
+    
+    for d in [dist_dir, project_root / "build"]:
+        if d.exists():
+            print(f"Cleaning {d.relative_to(project_root)}/...")
+            shutil.rmtree(d)
+    
+    for egg_info in project_root.glob("*.egg-info"):
+        print(f"Cleaning {egg_info.name}/...")
+        shutil.rmtree(egg_info)
+
+
 def main():
     # Find project root (where setup.py is)
     script_dir = Path(__file__).parent
@@ -34,11 +48,14 @@ def main():
     
     os.chdir(project_root)
     
+    # Clean old artifacts first
+    clean_build_artifacts(project_root, dist_dir)
+    
     # Build the wheel using pip wheel
     print("Building wheel...")
     dist_dir.mkdir(exist_ok=True)
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", "dist", "."],
+        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-cache-dir", "-w", "dist", "."],
         capture_output=True,
         text=True
     )

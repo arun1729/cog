@@ -30,7 +30,7 @@ jobs:
     
     - name: Run tests with coverage
       run: |
-        python -m pytest test/ -v --ignore=test/bench.py --ignore=test/benchmark.py --cov=cog --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+        python -m pytest test/ -v --ignore=test/bench.py --ignore=test/benchmark.py -m "not cloud" --cov=cog --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
     
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.12'
@@ -54,3 +54,29 @@ jobs:
       run: |
         python test/benchmark.py --quick --skip-individual
       continue-on-error: true
+
+  cloud-parity:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'  # only on merge, not on every PR
+    needs: test                       # run after unit tests pass
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: Run cloud parity tests
+      if: env.COGDB_API_KEY != ''
+      env:
+        COGDB_API_KEY: ${{ secrets.COGDB_API_KEY }}
+      run: |
+        python -m pytest test/test_cloud_parity.py -v

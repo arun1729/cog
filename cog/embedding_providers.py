@@ -2,7 +2,6 @@
 import json
 import ssl
 import urllib.request
-import urllib.error
 import logging
 from . import config as cfg
 

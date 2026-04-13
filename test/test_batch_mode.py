@@ -144,8 +144,9 @@ class TestStoreBatchMode(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # Clean up after this test class
-        pass
+        if os.path.exists("/tmp/" + DIR_NAME):
+            shutil.rmtree("/tmp/" + DIR_NAME)
+        os.makedirs("/tmp/" + DIR_NAME)
 
 
 class TestCogBatchMode(unittest.TestCase):
