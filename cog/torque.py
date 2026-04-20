@@ -4,7 +4,7 @@ import json
 import logging
 from . import config as cfg
 from .config import CogConfig
-from cog.view import graph_template, script_part1, script_part2, graph_lib_src, View
+from cog.view import build_graph_html, View
 from cog.embeddings import EmbeddingMixin
 from cog.search import TraversalMixin
 import os
@@ -1271,24 +1271,25 @@ class Graph(EmbeddingMixin, TraversalMixin):
         from cog.export import export_triples
         return export_triples(self, filepath, fmt=fmt, strict=strict)
 
-    def view(self, view_name,
-             js_src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"):
+    def view(self, view_name, persist=True):
         """
-            Returns html view of the resulting graph from a query.
-            :return:
+        Returns an interactive D3.js graph view of the query result.
+
+        :param view_name: Name for the view (used as the filename when persisted).
+        :param persist: If True (default), save the view as an HTML file.
+            Set to False to skip file I/O and only return the View object.
+        :return: A :class:`~cog.view.View` object. Call ``.render()`` to
+            display in a Jupyter/Colab notebook.
         """
         if self._cloud:
             raise RuntimeError("view() is not supported in cloud mode")
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.graph()
-        # Escape HTML special characters to prevent XSS when embedding in script tag
-        # Replace < with \u003c to prevent </script> injection
-        safe_json = json.dumps(result).replace('<', '\\u003c').replace('>', '\\u003e')
-        view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(
-            plot_data_insert=safe_json) + script_part2
-        view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
-        view = View(view, view_html)
-        view.persist()
+        view_html = build_graph_html(result)
+        view_path = self.views_dir + "/{view_name}.html".format(view_name=view_name)
+        view = View(view_path, view_html, graph_data=result)
+        if persist:
+            view.persist()
         return view
 
     def getv(self, view_name):

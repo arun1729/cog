@@ -231,7 +231,7 @@ class TestTorqueCoverage(unittest.TestCase):
         with open(view.url, 'r') as f:
             content = f.read()
         
-        self.assertIn("vis.DataSet", content)  # vis.js library usage
+        self.assertIn("d3.forceSimulation", content)
         
         g.close()
 
