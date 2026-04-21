@@ -150,19 +150,26 @@ g.v("bob").out().count()
 ```
 > '3'
 
-#### See who is following who and create a view of that network
-#### Note: `render()` is supported only in IPython environment like Jupyter notebook otherwise use view(..).url.
-By tagging the vertices 'from' and 'to', the resulting graph can be visualized.
-```python
-g.v().tag("from").out("follows").tag("to").view("follows").render()
+#### See who is following who and visualize the network
+The resulting graph can be visualized interactively in environments like Jupyter notebooks and Google Colab using `show()`. If you run it from command line, it will open a browser window to display the graph.
 
+```python
+g.v().out("follows").show()
+```
+
+You can customize the visualization using the `height`, `width`, and `dark` parameters:
+
+```python
+g.v().out("follows").show(height=600, width=800, dark=True)
 ```
 
 # ![ScreenShot](notes/ex1.png)
 
+#### Persist visualization as HTML
+If you want to save the visualization to an HTML file to view or share later, use the view() method.
+
 ```python
 g.v().tag("from").out("follows").tag("to").view("follows").url
-
 ```
 > file:///Path/to/your/cog_home/views/follows.html
 
@@ -174,7 +181,7 @@ g.lsv()
 
 #### Load existing visualization
 ```
-g.getv('follows').render()
+g.getv('follows').show()
 ```
 
 #### starting from a vertex, follow all out going edges and tag them

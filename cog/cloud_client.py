@@ -7,11 +7,20 @@ import ssl
 import urllib.request
 import urllib.error
 
-import certifi
-
 from . import config as cfg
 
-_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+_SSL_CONTEXT = None
+
+
+def _get_ssl_context():
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        try:
+            import certifi
+            _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+        except (ImportError, OSError):
+            _SSL_CONTEXT = ssl.create_default_context()
+    return _SSL_CONTEXT
 
 
 class CloudClient:
@@ -44,7 +53,7 @@ class CloudClient:
         req.add_header("User-Agent", "cogdb-python")
 
         try:
-            with urllib.request.urlopen(req, context=_SSL_CONTEXT) as resp:
+            with urllib.request.urlopen(req, context=_get_ssl_context()) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
