@@ -21,7 +21,8 @@ import random
 import shutil
 import unittest
 
-from cog.core import Table, Record, Store, RECORD_SEP, UNIT_SEP
+from cog.core import Table, Record, Store
+from cog.codec import RECORD_SEP, UNIT_SEP
 from cog.database import Cog
 from cog.torque import Graph
 from cog import config

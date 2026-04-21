@@ -16,7 +16,8 @@ import shutil
 import unittest
 
 from cog.torque import Graph
-from cog.core import Table, Record, Store, RECORD_SEP, UNIT_SEP
+from cog.core import Table, Record, Store
+from cog.codec import RECORD_SEP, UNIT_SEP
 from cog import config
 
 DIR_NAME = "TestEOFError"
@@ -116,7 +117,7 @@ class TestStoreReadWithRecordSep(unittest.TestCase):
         for (key, value), pos in zip(problematic_records, positions):
             raw = store.read(pos)
             self.assertIsNotNone(raw, f"Store.read returned None for key={key}")
-            recovered = Record.unmarshal(raw)
+            recovered = Record.unmarshal(raw, store.codec)
             self.assertEqual(recovered.key, key)
             self.assertAlmostEqual(recovered.value, value)
 
@@ -198,36 +199,39 @@ class TestTruncatedStore(unittest.TestCase):
             shutil.rmtree(cls.dir)
 
     def test_truncated_header_returns_none(self):
-        """If the store file is truncated mid-header (<18 bytes),
+        """If the store file is truncated mid record-header,
         Store.read() should return None — not raise IndexError."""
         logger = logging.getLogger()
         table = Table("trunc_hdr", "test_table", "trunc_inst", config, logger)
         store = table.store
+        data_start = store.data_start
+        first_record_pos = store.store_file.seek(0, 2)
 
         # Write a valid record
         rec = Record("key_trunc", "value_trunc")
         pos = store.save(rec)
 
-        # Truncate the file to only 10 bytes (inside the 18-byte header)
+        # Truncate the file to data_start + 10 (inside the record header)
         store.store_file.flush()
         store_path = store.store
         table.close()
 
         with open(store_path, 'r+b') as f:
-            f.truncate(10)
+            f.truncate(data_start + 10)
 
-        # Reopen and try to read from position 0
+        # Reopen and try to read from the first-record position
         table2 = Table("trunc_hdr", "test_table", "trunc_inst", config, logger)
-        result = table2.store.read(0)
+        result = table2.store.read(first_record_pos)
         self.assertIsNone(result)
         table2.close()
 
     def test_truncated_payload_returns_none(self):
         """If the store file is truncated mid-payload,
-        Store.read() should return None — not corrupt marshal."""
+        Store.read() should return None — not corrupt the decoder."""
         logger = logging.getLogger()
         table = Table("trunc_pay", "test_table", "trunc_inst2", config, logger)
         store = table.store
+        data_start = store.data_start
 
         # Write a valid record
         rec = Record("key_payload", "a_longer_value_for_testing")
@@ -235,18 +239,15 @@ class TestTruncatedStore(unittest.TestCase):
 
         store.store_file.flush()
         store_path = store.store
-
-        # Find out how big the header+length field is, then truncate inside payload
-        # Header = 16 (key_link) + 1 (format_version) + 1 (value_type) = 18
-        # Then variable-len digits + UNIT_SEP. We'll truncate at header + 5 bytes
-        # (enough for len digits + UNIT_SEP + a few payload bytes, but not all).
         table.close()
 
+        # Truncate well past the record header but inside the payload.
+        # Legacy: record header is 18 bytes; Spindle: 17 bytes + varint — +25 lands mid-payload in both.
         with open(store_path, 'r+b') as f:
-            f.truncate(25)  # well past header, but before full payload
+            f.truncate(data_start + 25)
 
         table2 = Table("trunc_pay", "test_table", "trunc_inst2", config, logger)
-        result = table2.store.read(0)
+        result = table2.store.read(data_start)
         self.assertIsNone(result)
         table2.close()
 
