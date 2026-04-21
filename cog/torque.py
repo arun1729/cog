@@ -4,7 +4,7 @@ import json
 import logging
 from . import config as cfg
 from .config import CogConfig
-from cog.view import graph_template, script_part1, script_part2, graph_lib_src, View
+from cog.view import build_graph_html, View
 from cog.embeddings import EmbeddingMixin
 from cog.search import TraversalMixin
 import os
@@ -1271,34 +1271,59 @@ class Graph(EmbeddingMixin, TraversalMixin):
         from cog.export import export_triples
         return export_triples(self, filepath, fmt=fmt, strict=strict)
 
-    def view(self, view_name,
-             js_src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"):
+    def view(self, view_name, persist=True):
         """
-            Returns html view of the resulting graph from a query.
-            :return:
+        Returns an interactive D3.js graph view of the query result.
+
+        :param view_name: Name for the view (used as the filename when persisted).
+        :param persist: If True (default), save the view as an HTML file.
+        :return: A :class:`~cog.view.View` object. Call ``.render()`` to
+            display in a Jupyter/Colab notebook.
         """
-        if self._cloud:
-            raise RuntimeError("view() is not supported in cloud mode")
         assert view_name is not None, "a view name is required to create a view, it can be any string."
         result = self.graph()
-        # Escape HTML special characters to prevent XSS when embedding in script tag
-        # Replace < with \u003c to prevent </script> injection
-        safe_json = json.dumps(result).replace('<', '\\u003c').replace('>', '\\u003e')
-        view_html = script_part1 + graph_lib_src.format(js_src=js_src) + graph_template.format(
-            plot_data_insert=safe_json) + script_part2
-        view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
-        view = View(view, view_html)
-        view.persist()
+        view_html = build_graph_html(result)
+        safe_name = os.path.basename(view_name)
+        if self.views_dir:
+            view_path = os.path.join(self.views_dir, safe_name + ".html")
+        else:
+            view_path = None
+        view = View(view_path, view_html, graph_data=result)
+        if persist and view_path:
+            view.persist()
+        return view
+
+    def show(self, height=500, width=700, dark=False):
+        """
+        Render the current traversal result as an interactive graph
+        directly inside a Jupyter or Google Colab notebook.
+
+        This is a convenience method equivalent to::
+
+            g.v().out().view("tmp", persist=False).render()
+
+        It does not persist an HTML file to disk.
+
+        :param height: Height of the rendered view in pixels.
+        :param width: Width of the rendered view in pixels.
+        :param dark: If True, use dark background theme.
+        :return: A :class:`~cog.view.View` object (after rendering).
+        """
+
+        view = self.view("_show_tmp", persist=False)
+        view.render(height=height, width=width, dark=dark)
         return view
 
     def getv(self, view_name):
         if self._cloud:
             raise RuntimeError("getv() is not supported in cloud mode")
-        view = self.views_dir + "/{view_name}.html".format(view_name=view_name)
-        assert os.path.isfile(view), "view not found, create a view by calling .view()"
-        with open(view, 'r') as f:
+        safe_name = os.path.basename(view_name)
+        view_path = os.path.join(self.views_dir, safe_name + ".html")
+        assert os.path.isfile(view_path), "view not found, create a view by calling .view()"
+        with open(view_path, 'r') as f:
             view_html = f.read()
-        view = View(view, view_html)
+        graph_data = View.extract_graph_data(view_html)
+        view = View(view_path, view_html, graph_data=graph_data)
         return view
 
     def lsv(self):

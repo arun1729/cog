@@ -25,8 +25,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
+        pip install -e ".[dev]"
     
     - name: Run tests with coverage
       run: |
@@ -71,8 +70,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest
+        pip install -e ".[dev]"
 
     - name: Run cloud parity tests
       if: env.COGDB_API_KEY != ''

@@ -30,6 +30,7 @@ class CogConfig:
         self.CUSTOM_COG_DB_PATH = CUSTOM_COG_DB_PATH
         self.RELAY_URL = RELAY_URL
         self.COGDB_EMBED_URL = COGDB_EMBED_URL
+        self.D3_CDN = D3_CDN
 
         # Apply any overrides
         for key, value in overrides.items():
@@ -103,6 +104,9 @@ RELAY_URL = "wss://s.cogdb.io/register"
 
 ''' VECTORIZE '''
 COGDB_EMBED_URL = "https://vectors.cogdb.io/embed"
+
+''' GRAPH VISUALIZATION '''
+D3_CDN = "https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"
 
 ''' CLOUD '''
 CLOUD_URL = "https://api.cogdb.io"
