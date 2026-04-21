@@ -285,7 +285,7 @@ class TestCoreCoverage(unittest.TestCase):
 
     def test_record_str_representation(self):
         """Test Record __str__ method"""
-        record = Record("str_key", "str_value", tombstone='0', store_position=100, 
+        record = Record("str_key", "str_value", format_version='1', store_position=100, 
                        value_type='s', key_link=50, value_link=-1)
         str_repr = str(record)
         

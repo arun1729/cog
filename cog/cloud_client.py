@@ -3,9 +3,15 @@ HTTP transport for CogDB Cloud.
 """
 
 import json
+import ssl
 import urllib.request
 import urllib.error
+
+import certifi
+
 from . import config as cfg
+
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 class CloudClient:
@@ -38,7 +44,7 @@ class CloudClient:
         req.add_header("User-Agent", "cogdb-python")
 
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, context=_SSL_CONTEXT) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
@@ -254,7 +260,7 @@ class CloudClient:
             return ", ".join(parts)
 
         if method == "sim":
-            parts = [cls._quote(args.get("word", ""))]
+            parts = [cls._quote(args.get("text", ""))]
             if args.get("operator"):
                 parts.append(cls._quote(args["operator"]))
             if args.get("threshold") is not None:
@@ -264,7 +270,7 @@ class CloudClient:
             return ", ".join(parts)
 
         if method == "k_nearest":
-            parts = [cls._quote(args.get("word", ""))]
+            parts = [cls._quote(args.get("text", ""))]
             if args.get("k") is not None:
                 parts.append(str(args["k"]))
             return ", ".join(parts)

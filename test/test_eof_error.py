@@ -237,7 +237,7 @@ class TestTruncatedStore(unittest.TestCase):
         store_path = store.store
 
         # Find out how big the header+length field is, then truncate inside payload
-        # Header = 16 (key_link) + 1 (tombstone) + 1 (value_type) = 18
+        # Header = 16 (key_link) + 1 (format_version) + 1 (value_type) = 18
         # Then variable-len digits + UNIT_SEP. We'll truncate at header + 5 bytes
         # (enough for len digits + UNIT_SEP + a few payload bytes, but not all).
         table.close()

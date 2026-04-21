@@ -57,17 +57,19 @@ class Record:
     '''
     Record is the basic unit of storage in cog.
     value_type: s - string, l - list, u - set
+    format_version: file format version byte (current: '1')
     '''
-    __slots__ = ('key', 'value', 'tombstone', 'store_position', 'key_link', 'value_link', 'value_type')
+    __slots__ = ('key', 'value', 'format_version', 'store_position', 'key_link', 'value_link', 'value_type')
     
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
+    CURRENT_FORMAT_VERSION = '1'
 
-    def __init__(self, key, value, tombstone='0', store_position=None, value_type="s", key_link=-1, value_link=-1):
+    def __init__(self, key, value, format_version=None, store_position=None, value_type="s", key_link=-1, value_link=-1):
         self.key = key
         self.value = value
-        self.tombstone = tombstone
+        self.format_version = format_version if format_version is not None else Record.CURRENT_FORMAT_VERSION
         self.store_position = store_position
         self.key_link = key_link
         self.value_link = value_link
@@ -100,7 +102,7 @@ class Record:
         key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
         serialized = self.serialize()
         m_record = key_link_bytes \
-                   + self.tombstone.encode() \
+                   + self.format_version.encode() \
                    + self.value_type.encode() \
                    + str(len(serialized)).encode() \
                    + UNIT_SEP \
@@ -115,8 +117,8 @@ class Record:
         return self.key is None and self.value is None
 
     def __str__(self):
-        return "key: {}, value: {}, tombstone: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(
-            self.key, self.value, self.tombstone, self.store_position, self.key_link, self.value_link, self.value_type)
+        return "key: {}, value: {}, format_version: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(
+            self.key, self.value, self.format_version, self.store_position, self.key_link, self.value_link, self.value_type)
 
     @classmethod
     def __read_until(cls, start, sbytes, separtor=UNIT_SEP):
@@ -136,7 +138,7 @@ class Record:
         base_pos = 0
         key_link = int(store_bytes[base_pos: base_pos + Record.RECORD_LINK_LEN])
         next_base_pos = Record.RECORD_LINK_LEN
-        tombstone = store_bytes[next_base_pos:next_base_pos + 1].decode()
+        format_version = store_bytes[next_base_pos:next_base_pos + 1].decode()
         value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].decode()
         value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
         value_len = int(value_len.decode())
@@ -147,7 +149,7 @@ class Record:
         if value_type == 'l' or value_type == 'u':
             value_link, end_pos = cls.__read_until(end_pos + value_len + 1, store_bytes, RECORD_SEP)
             value_link = int(value_link.decode())
-        return cls(record[0], record[1], tombstone, store_position=None, value_type=value_type, key_link=key_link,
+        return cls(record[0], record[1], format_version, store_position=None, value_type=value_type, key_link=key_link,
                    value_link=value_link)
 
     @classmethod
@@ -366,7 +368,7 @@ class Index:
                 if record is None:  # EOF store
                     self.logger.error("Store EOF reached! Iteration terminated.")
                     return
-                yield Record(record.key, record.value, record.tombstone)
+                yield Record(record.key, record.value, record.format_version)
                 store_position = record.key_link
             
             scan_cursor += self.config.INDEX_BLOCK_LEN
@@ -614,7 +616,7 @@ class Store:
 
         Record layout (written by Record.marshal):
             [key_link: 16 bytes]
-            [tombstone: 1 byte]
+            [format_version: 1 byte]
             [value_type: 1 byte]
             [value_len digits: variable ASCII]
             [UNIT_SEP: 1 byte]
@@ -622,7 +624,7 @@ class Store:
             [value_link digits: variable ASCII, only if value_type in ('l','u')]
             [RECORD_SEP: 1 byte]
         """
-        # --- fixed-size header: key_link(16) + tombstone(1) + value_type(1) = 18 bytes
+        # --- fixed-size header: key_link(16) + format_version(1) + value_type(1) = 18 bytes
         header = self.__read_exactly(18)
         if header is None or len(header) < 18:
             return None
