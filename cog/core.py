@@ -1,17 +1,20 @@
-import marshal
 import mmap
 import os
 import os.path
 import sys
+import time
 import logging
 import threading
 import queue
 # from profilehooks import profile
 from cog.cache import Cache
+from cog.codec import (
+    LegacyCodec,
+    SpindleCodec,
+    detect_codec,
+    LEGACY_V1_FLAG,
+)
 import xxhash
-
-RECORD_SEP = b'\xFD'
-UNIT_SEP = b'\xAC'
 
 
 class TableMeta:
@@ -57,16 +60,22 @@ class Record:
     '''
     Record is the basic unit of storage in cog.
     value_type: s - string, l - list, u - set
-    format_version: file format version byte (current: '1')
+    format_version: in-memory tag of which on-disk codec produced or will produce
+        this record. '0'/'1' = legacy marshal, '2' = Spindle binary+msgpack. Not
+        serialized for Spindle records (format is inferred from the file header).
+    timestamp: int64 nanoseconds since epoch. Stamped in Store.save at write
+        time for Spindle records; None for legacy records.
     '''
-    __slots__ = ('key', 'value', 'format_version', 'store_position', 'key_link', 'value_link', 'value_type')
-    
+    __slots__ = ('key', 'value', 'format_version', 'timestamp',
+                 'store_position', 'key_link', 'value_link', 'value_type')
+
     RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
     CURRENT_FORMAT_VERSION = '1'
 
-    def __init__(self, key, value, format_version=None, store_position=None, value_type="s", key_link=-1, value_link=-1):
+    def __init__(self, key, value, format_version=None, store_position=None,
+                 value_type="s", key_link=-1, value_link=-1, timestamp=None):
         self.key = key
         self.value = value
         self.format_version = format_version if format_version is not None else Record.CURRENT_FORMAT_VERSION
@@ -74,6 +83,7 @@ class Record:
         self.key_link = key_link
         self.value_link = value_link
         self.value_type = value_type
+        self.timestamp = timestamp
 
     def set_store_position(self, pos):
         if type(pos) is not int:
@@ -95,68 +105,37 @@ class Record:
     def get_kv_tuple(self):
         return self.key, self.value
 
-    def serialize(self):
-        return marshal.dumps((self.key, self.value))
-
-    def marshal(self):
-        key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
-        serialized = self.serialize()
-        m_record = key_link_bytes \
-                   + self.format_version.encode() \
-                   + self.value_type.encode() \
-                   + str(len(serialized)).encode() \
-                   + UNIT_SEP \
-                   + serialized
-        if self.value_type == "l" or self.value_type == "u":
-            if self.value_link is not None:
-                m_record += str(self.value_link).encode()
-        m_record += RECORD_SEP
-        return m_record
+    def marshal(self, codec=None):
+        """Serialize to on-disk bytes. Defaults to LegacyCodec v1 for
+        backward-compatible in-memory round-trips (tests); Store.save passes
+        the owning store's codec."""
+        if codec is None:
+            codec = LegacyCodec(version_flag=LEGACY_V1_FLAG)
+        return codec.encode_record(self)
 
     def is_empty(self):
         return self.key is None and self.value is None
 
     def __str__(self):
-        return "key: {}, value: {}, format_version: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(
-            self.key, self.value, self.format_version, self.store_position, self.key_link, self.value_link, self.value_type)
+        return ("key: {}, value: {}, format_version: {}, timestamp: {}, "
+                "store_position: {}, key_link: {}, value_link: {}, value_type: {}").format(
+            self.key, self.value, self.format_version, self.timestamp,
+            self.store_position, self.key_link, self.value_link, self.value_type)
 
     @classmethod
-    def __read_until(cls, start, sbytes, separtor=UNIT_SEP):
-        buff = b''
-        i = 0  # default
-        for i in range(start, len(sbytes)):
-            s_byte = sbytes[i: i + 1]
-            if s_byte == separtor:
-                break
-            buff += s_byte
-        return buff, i
-
-    @classmethod
-    def unmarshal(cls, store_bytes):
-        """reads from bytes and creates object
-        """
-        base_pos = 0
-        key_link = int(store_bytes[base_pos: base_pos + Record.RECORD_LINK_LEN])
-        next_base_pos = Record.RECORD_LINK_LEN
-        format_version = store_bytes[next_base_pos:next_base_pos + 1].decode()
-        value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].decode()
-        value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
-        value_len = int(value_len.decode())
-        value = store_bytes[end_pos + 1: end_pos + 1 + value_len]
-        record = marshal.loads(value)
-
-        value_link = Record.VALUE_LINK_NULL
-        if value_type == 'l' or value_type == 'u':
-            value_link, end_pos = cls.__read_until(end_pos + value_len + 1, store_bytes, RECORD_SEP)
-            value_link = int(value_link.decode())
-        return cls(record[0], record[1], format_version, store_position=None, value_type=value_type, key_link=key_link,
-                   value_link=value_link)
+    def unmarshal(cls, store_bytes, codec=None):
+        """Deserialize from on-disk bytes. Defaults to LegacyCodec for
+        backward-compatible in-memory round-trips; Store.read paths pass the
+        owning store's codec."""
+        if codec is None:
+            codec = LegacyCodec(version_flag=LEGACY_V1_FLAG)
+        return codec.decode_record(store_bytes)
 
     @classmethod
     def __load_value(cls, store_pointer, val_list, store):
         """loads value from the store"""
         while store_pointer != Record.VALUE_LINK_NULL:
-            rec = Record.unmarshal(store.read(store_pointer))
+            rec = store.codec.decode_record(store.read(store_pointer))
             if rec.value_type == 'l':
                 val_list.append(rec.value)
             else:
@@ -167,7 +146,10 @@ class Record:
     @classmethod
     # @profile
     def load_from_store(cls, position: int, store):
-        record = cls.unmarshal(store.read(position))
+        raw = store.read(position)
+        if raw is None:
+            return None
+        record = store.codec.decode_record(raw)
         values = None
         if record.value_type == 'l':
             values = cls.__load_value(record.value_link, [record.value], store)
@@ -247,7 +229,7 @@ class Index:
         else:
             # there are records in the bucket
             # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
-            existing_record = Record.unmarshal(store.read(int(index_value)))
+            existing_record = store.codec.decode_record(store.read(int(index_value)))
             existing_record.set_store_position(int(index_value))
 
             if existing_record.key == key:
@@ -266,7 +248,7 @@ class Index:
                 prev_record = None
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
                     # Use unmarshal (O(1)) instead of load_from_store (O(n))
-                    existing_record = Record.unmarshal(store.read(existing_record.key_link))
+                    existing_record = store.codec.decode_record(store.read(existing_record.key_link))
                     existing_record.set_store_position(existing_record.key_link)
                     if existing_record.key == key and prev_record is not None:
                         """
@@ -330,16 +312,16 @@ class Index:
             return None, None
         store_position = int(data_at_index_position)
         # Only unmarshal, don't load value chain
-        record = Record.unmarshal(store.read(store_position))
+        record = store.codec.decode_record(store.read(store_position))
         record.set_store_position(store_position)
-        
+
         if record.key == key:
             return record, store_position
         else:
             # Hash collision - follow key_link chain
             while record.key_link != Record.RECORD_LINK_NULL:
                 store_position = record.key_link
-                record = Record.unmarshal(store.read(store_position))
+                record = store.codec.decode_record(store.read(store_position))
                 record.set_store_position(store_position)
                 if record.key == key:
                     return record, store_position
@@ -434,7 +416,7 @@ class Store:
                        N>1 = flush every N writes with async background thread
     """
 
-    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None, 
+    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None,
                  flush_interval=1):
         self.caching_enabled = caching_enabled
         self.batch_mode = False  # When True, defers flush() until end_batch()
@@ -451,10 +433,20 @@ class Store:
         temp = open(self.store, 'a')  # create if not exist
         temp.close()
         self.store_file = open(self.store, 'rb+')
-        
+
+        # Format detection: pick codec based on file contents. Brand-new files
+        # get Spindle; existing files keep their original format indefinitely.
+        file_size = os.fstat(self.store_file.fileno()).st_size
+        self.codec = detect_codec(self.store_file, file_size)
+        if file_size == 0 and isinstance(self.codec, SpindleCodec):
+            self.codec.write_header(self.store_file)
+            self.store_file.flush()
+        self.created_at = getattr(self.codec, 'created_at', None)
+        self.data_start = self.codec.HEADER_SIZE
+
         # Thread safety
         self._lock = threading.Lock()
-        
+
         # Auto-enable async flush when interval > 1
         self._use_async = flush_interval > 1
         if self._use_async:
@@ -462,8 +454,8 @@ class Store:
             self._flush_thread = threading.Thread(target=self._flush_worker, daemon=True)
             self._flush_thread.start()
             self._shutdown = False
-        
-        logger.info(f"Store init: {self.store} (flush_interval={flush_interval})")
+
+        logger.info(f"Store init: {self.store} (flush_interval={flush_interval}, codec=v{self.codec.VERSION})")
 
     def _flush_worker(self):
         """Background thread that processes flush requests."""
@@ -563,19 +555,24 @@ class Store:
         """
         Store data with configurable flush behavior.
         """
+        # Spindle stamps a fresh write timestamp inside the lock so positions and
+        # timestamps are consistent under concurrent writers.
         with self._lock:
+            if isinstance(self.codec, SpindleCodec):
+                record.timestamp = time.time_ns()
+                record.format_version = '2'
             self.store_file.seek(0, 2)
             store_position = self.store_file.tell()
             record.set_store_position(store_position)
-            marshalled_record = record.marshal()
+            marshalled_record = self.codec.encode_record(record)
             self.store_file.write(marshalled_record)
-            
+
             if self.caching_enabled:
                 self.store_cache.put(store_position, marshalled_record)
-            
+
             # Handle flush based on interval
             self._handle_write_flush()
-        
+
         return store_position
 
     def update_record_link_inplace(self, start_pos, int_value):
@@ -583,16 +580,16 @@ class Store:
         if type(int_value) is not int:
             raise ValueError("store position must be int but provided : " + str(start_pos))
 
-        byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
+        byte_value = self.codec.key_link_bytes(int_value)
         self.logger.debug('update_record_link_inplace: ' + str(byte_value))
-        
+
         with self._lock:
             self.store_file.seek(start_pos)
             self.store_file.write(byte_value)
 
             if self.caching_enabled:
                 self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
-            
+
             self._handle_write_flush()
 
     # @profile
@@ -604,81 +601,12 @@ class Store:
                 return cached_record
 
         self.store_file.seek(position)
-        record = self.__read_record()
+        record = self.codec.read_record(self.store_file)
 
         if self.caching_enabled:
             self.store_cache.put(position, record)
 
         return record
-
-    def __read_record(self):
-        """Read a single record using structured/length-aware parsing.
-
-        Record layout (written by Record.marshal):
-            [key_link: 16 bytes]
-            [format_version: 1 byte]
-            [value_type: 1 byte]
-            [value_len digits: variable ASCII]
-            [UNIT_SEP: 1 byte]
-            [serialized payload: exactly value_len bytes]
-            [value_link digits: variable ASCII, only if value_type in ('l','u')]
-            [RECORD_SEP: 1 byte]
-        """
-        # --- fixed-size header: key_link(16) + format_version(1) + value_type(1) = 18 bytes
-        header = self.__read_exactly(18)
-        if header is None or len(header) < 18:
-            return None
-
-        value_type = chr(header[17])       # 's', 'l', or 'u'
-
-        # --- variable-length value_len digits terminated by UNIT_SEP
-        len_buf = b''
-        while True:
-            b = self.__read_exactly(1)
-            if b is None:
-                return None
-            if b == UNIT_SEP:
-                break
-            len_buf += b
-        value_len = int(len_buf.decode())
-
-        # --- serialized payload: exactly value_len bytes
-        payload = self.__read_exactly(value_len)
-        if payload is None or len(payload) < value_len:
-            return None
-
-        # --- optional value_link + RECORD_SEP terminator
-        tail = b''
-        if value_type in ('l', 'u'):
-            # value_link digits (ASCII) terminated by RECORD_SEP
-            while True:
-                b = self.__read_exactly(1)
-                if b is None:
-                    break
-                tail += b
-                if b == RECORD_SEP:
-                    break
-        else:
-            # just the RECORD_SEP terminator
-            sep = self.__read_exactly(1)
-            if sep is not None:
-                tail = sep
-
-        record = header + len_buf + UNIT_SEP + payload + tail
-        self.logger.debug("store __read_record: " + str(record))
-        return record
-
-    def __read_exactly(self, n):
-        """Read exactly *n* bytes from the store file, or return None on EOF."""
-        data = self.store_file.read(n)
-        if len(data) == 0:
-            return None
-        while len(data) < n:
-            chunk = self.store_file.read(n - len(data))
-            if len(chunk) == 0:
-                return data          # partial read (EOF mid-record)
-            data += chunk
-        return data
 
 
 class Indexer:
