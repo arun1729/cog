@@ -24,11 +24,11 @@ The payload uses cog.spindle_pack (see that module for wire format). Payloads
 are length-addressable via the outer value_len varint; spindle_pack does not
 carry its own length field for the fast-path value.
 
-Varint scheme (a minimal subset of msgpack positive-uint framing):
-    tag <= 0x7f              -> value = tag                     (1 byte)
-    tag == 0xcc              -> value = next uint8              (2 bytes)
-    tag == 0xcd              -> value = next uint16 big-endian  (3 bytes)
-    tag == 0xce              -> value = next uint32 big-endian  (5 bytes)
+Varint scheme (little-endian):
+    tag <= 0x7f              -> value = tag                        (1 byte)
+    tag == 0xcc              -> value = next uint8                 (2 bytes)
+    tag == 0xcd              -> value = next uint16 little-endian  (3 bytes)
+    tag == 0xce              -> value = next uint32 little-endian  (5 bytes)
 """
 import marshal
 import struct
@@ -73,19 +73,15 @@ def _read_exactly(fh, n):
 
 
 def _encode_varint(length):
-    """Encode a non-negative integer as a 1-5 byte varint.
-
-    Uses big-endian multi-byte encoding to match the msgpack positive-uint
-    framing this scheme is modeled after.  This is intentionally different
-    from the little-endian struct fields used elsewhere in SpindleCodec."""
+    """Encode a non-negative integer as a 1-5 byte varint (little-endian)."""
     if length <= 0x7f:
         return bytes([length])
     if length <= 0xff:
         return b'\xcc' + bytes([length])
     if length <= 0xffff:
-        return b'\xcd' + struct.pack('>H', length)
+        return b'\xcd' + struct.pack('<H', length)
     if length <= 0xffffffff:
-        return b'\xce' + struct.pack('>I', length)
+        return b'\xce' + struct.pack('<I', length)
     raise ValueError("value_len exceeds 2^32-1: " + str(length))
 
 
@@ -94,18 +90,16 @@ _VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
 
 
 def _decode_varint(buf, offset):
-    """Return (value, size_in_bytes).
-
-    Big-endian multi-byte encoding (msgpack convention); see _encode_varint."""
+    """Return (value, size_in_bytes). Little-endian multi-byte encoding."""
     tag = buf[offset]
     if tag <= 0x7f:
         return tag, 1
     if tag == 0xcc:
         return buf[offset + 1], 2
     if tag == 0xcd:
-        return struct.unpack_from('>H', buf, offset + 1)[0], 3
+        return struct.unpack_from('<H', buf, offset + 1)[0], 3
     if tag == 0xce:
-        return struct.unpack_from('>I', buf, offset + 1)[0], 5
+        return struct.unpack_from('<I', buf, offset + 1)[0], 5
     raise ValueError("unknown varint tag: " + hex(tag))
 
 

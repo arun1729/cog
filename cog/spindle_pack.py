@@ -9,18 +9,13 @@ Wire format per field:
     type 'b' (0x62): [varint length] [raw bytes]
     type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
 
-Varint scheme (msgpack-compatible positive-uint subset, big-endian by convention):
-    tag <= 0x7f         -> value = tag                    (1 byte total)
-    tag == 0xcc         -> value = next uint8             (2 bytes total)
-    tag == 0xcd         -> value = next uint16 big-endian (3 bytes total)
-    tag == 0xce         -> value = next uint32 big-endian (5 bytes total)
+Varint scheme (little-endian, used for string/bytes length prefixes):
+    tag <= 0x7f         -> value = tag                       (1 byte total)
+    tag == 0xcc         -> value = next uint8                (2 bytes total)
+    tag == 0xcd         -> value = next uint16 little-endian (3 bytes total)
+    tag == 0xce         -> value = next uint32 little-endian (5 bytes total)
 
-Endianness note: varints use big-endian to match the msgpack convention they
-are modeled after.  Fixed-width numeric fields (int64, float64) use little-
-endian to match the SpindleCodec record layout in codec.py.
-
-Bool is intentionally unsupported — Python's bool is an int subclass, but
-CogDB's domain is strings and numbers only.
+All multi-byte fields use little-endian throughout.
 """
 import struct
 
@@ -31,22 +26,22 @@ _pack_f64 = struct.Struct('<d').pack
 _unpack_f64 = struct.Struct('<d').unpack_from
 
 # Varint helpers (same scheme as codec.py, duplicated to avoid import coupling).
-_pack_u16be = struct.Struct('>H').pack
-_pack_u32be = struct.Struct('>I').pack
-_unpack_u16be = struct.Struct('>H').unpack_from
-_unpack_u32be = struct.Struct('>I').unpack_from
+_pack_u16le = struct.Struct('<H').pack
+_pack_u32le = struct.Struct('<I').pack
+_unpack_u16le = struct.Struct('<H').unpack_from
+_unpack_u32le = struct.Struct('<I').unpack_from
 
 
 def _encode_varint(length):
-    """Encode a non-negative integer as a 1–5 byte varint."""
+    """Encode a non-negative integer as a 1-5 byte varint (little-endian)."""
     if length <= 0x7f:
         return bytes([length])
     if length <= 0xff:
         return b'\xcc' + bytes([length])
     if length <= 0xffff:
-        return b'\xcd' + _pack_u16be(length)
+        return b'\xcd' + _pack_u16le(length)
     if length <= 0xffffffff:
-        return b'\xce' + _pack_u32be(length)
+        return b'\xce' + _pack_u32le(length)
     raise ValueError("field length exceeds 2^32-1: " + str(length))
 
 
@@ -64,11 +59,11 @@ def _decode_varint(buf, offset):
     if tag == 0xcd:
         if offset + 3 > len(buf):
             raise ValueError("truncated buffer: varint 0xcd at offset " + str(offset))
-        return _unpack_u16be(buf, offset + 1)[0], 3
+        return _unpack_u16le(buf, offset + 1)[0], 3
     if tag == 0xce:
         if offset + 5 > len(buf):
             raise ValueError("truncated buffer: varint 0xce at offset " + str(offset))
-        return _unpack_u32be(buf, offset + 1)[0], 5
+        return _unpack_u32le(buf, offset + 1)[0], 5
     raise ValueError("unknown varint tag: " + hex(tag))
 
 
