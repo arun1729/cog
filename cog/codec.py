@@ -4,7 +4,7 @@ CogDB supports three on-disk formats:
 
 - v0: legacy marshal-based, byte-16 flag = 0x30 (ASCII '0', pre-commit e847922).
 - v1: legacy marshal-based, byte-16 flag = 0x31 (ASCII '1', post-commit e847922).
-- Spindle (on-disk version 2): binary header + msgpack payload + per-record int64 ns timestamp.
+- Spindle (on-disk version 2): binary header + spindle_pack payload + per-record int64 ns timestamp.
 
 v0 and v1 share LegacyCodec and differ only in the flag byte written into each
 record's format-version slot. A file's format is decided once, on Store open,
@@ -17,8 +17,12 @@ Spindle layout:
 
     Record (little-endian, no separators):
         [key_link 8 int64]  [value_type 1]  [timestamp 8 int64]
-        [value_len varint 1..5]  [payload N bytes msgpack (key,value)]
+        [value_len varint 1..5]  [payload N bytes spindle_pack (key,value)]
         [value_link 8 int64]   -- only if value_type is list (0x01) or set (0x02)
+
+The payload uses cog.spindle_pack (see that module for wire format). Payloads
+are length-addressable via the outer value_len varint; spindle_pack does not
+carry its own length field for the fast-path value.
 
 Varint scheme (a minimal subset of msgpack positive-uint framing):
     tag <= 0x7f              -> value = tag                     (1 byte)
@@ -30,7 +34,7 @@ import marshal
 import struct
 import time
 
-import msgpack
+from cog import spindle_pack
 
 
 V2_MAGIC = b'COGDB\x00'
@@ -237,7 +241,7 @@ class SpindleCodec:
         key_link = record.key_link if record.key_link is not None else -1
         ts = record.timestamp if record.timestamp is not None else 0
         vtype = _V2_CHAR_TO_BYTE[record.value_type]
-        payload = msgpack.packb((record.key, record.value), use_bin_type=True)
+        payload = spindle_pack.packb(record.key, record.value)
         out = (
             struct.pack('<q', key_link)
             + bytes([vtype])
@@ -259,7 +263,7 @@ class SpindleCodec:
         value_len, varint_size = _decode_varint(raw_bytes, 17)
         payload_start = 17 + varint_size
         payload = raw_bytes[payload_start: payload_start + value_len]
-        key, value = msgpack.unpackb(payload, raw=False)
+        key, value = spindle_pack.unpackb(payload)
 
         value_link = Record.VALUE_LINK_NULL
         if value_type == 'l' or value_type == 'u':
