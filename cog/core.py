@@ -152,19 +152,24 @@ class Record:
         return val_list
 
     @classmethod
+    def materialize_values(cls, record, store):
+        """Populate record.value with the full value chain in place for
+        list/set records. No-op for scalars. Call this when you already
+        decoded the head and need to pay the value-chain cost."""
+        if record.value_type == 'l':
+            record.set_value(cls.__load_value(record.value_link, [record.value], store))
+        elif record.value_type == 'u':
+            record.set_value(cls.__load_value(record.value_link, {record.value}, store))
+        return record
+
+    @classmethod
     # @profile
     def load_from_store(cls, position: int, store):
         raw = store.read(position)
         if raw is None:
             return None
         record = store.codec.decode_record(raw)
-        values = None
-        if record.value_type == 'l':
-            values = cls.__load_value(record.value_link, [record.value], store)
-        elif record.value_type == 'u':
-            values = cls.__load_value(record.value_link, {record.value}, store)
-        if values is not None:
-            record.set_value(values)
+        cls.materialize_values(record, store)
         return record
 
 
@@ -319,20 +324,22 @@ class Index:
         data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
         if data_at_index_position == self.empty_block:
             return None
+        # Walk the collision chain with unmarshal (O(1)); only load_from_store
+        # (which materializes the value chain) for the matched record.
         store_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
-        record = Record.load_from_store(store_pos, store)
+        record = store.codec.decode_record(store.read(store_pos))
         record.set_store_position(store_pos)
         self.logger.debug("read record " + str(record))
 
         if record.key == key:
-            return record
-        else:
-            while record.key_link != Record.RECORD_LINK_NULL:
-                self.logger.debug("record.key_link: " + str(record.key_link))
-                record = Record.load_from_store(record.key_link, store)
-                record.set_store_position(record.key_link)
-                if record.key == key:
-                    return record
+            return Record.materialize_values(record, store)
+        while record.key_link != Record.RECORD_LINK_NULL:
+            self.logger.debug("record.key_link: " + str(record.key_link))
+            store_pos = record.key_link
+            record = store.codec.decode_record(store.read(store_pos))
+            record.set_store_position(store_pos)
+            if record.key == key:
+                return Record.materialize_values(record, store)
         return None
 
     def get_head_only(self, key, store):
@@ -406,7 +413,9 @@ class Index:
             return False
 
         data_at_index_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
-        record = Record.load_from_store(data_at_index_position, store)
+        # delete only needs key/key_link/store_position — use unmarshal (O(1))
+        # instead of load_from_store, which would materialize the value chain.
+        record = store.codec.decode_record(store.read(data_at_index_position))
         record.set_store_position(data_at_index_position)
         self.logger.debug("read record " + str(record))
         if record.key == key:
@@ -422,8 +431,9 @@ class Index:
             """search bucket"""
             prev_record = record  # Initialize to the head record
             while record.key_link != Record.RECORD_LINK_NULL:
-                next_record = Record.load_from_store(record.key_link, store)
-                next_record.set_store_position(record.key_link)
+                next_pos = record.key_link
+                next_record = store.codec.decode_record(store.read(next_pos))
+                next_record.set_store_position(next_pos)
                 if next_record.key == key:
                     """
                     if same key found in bucket, update previous record in chain to point to key_link of this record
