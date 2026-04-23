@@ -19,6 +19,7 @@ Varint scheme (little-endian, used for string/bytes length prefixes):
 All multi-byte fields use little-endian throughout.
 """
 import struct
+import sys
 
 # Pre-compiled struct formatters for hot-path numeric fields.
 _pack_i64 = struct.Struct('<q').pack
@@ -152,4 +153,10 @@ def unpackb(buf):
     """Deserialize bytes to a (key, value) pair."""
     key, offset = _decode_field(buf, 0)
     value, _ = _decode_field(buf, offset)
+    # Intern strings so identical keys/values share one object in memory,
+    # turning == comparisons into fast pointer checks in bucket walks.
+    if type(key) is str:
+        key = sys.intern(key)
+    if type(value) is str:
+        value = sys.intern(value)
     return key, value
