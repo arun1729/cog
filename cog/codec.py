@@ -73,6 +73,11 @@ def _read_exactly(fh, n):
 
 
 def _encode_varint(length):
+    """Encode a non-negative integer as a 1-5 byte varint.
+
+    Uses big-endian multi-byte encoding to match the msgpack positive-uint
+    framing this scheme is modeled after.  This is intentionally different
+    from the little-endian struct fields used elsewhere in SpindleCodec."""
     if length <= 0x7f:
         return bytes([length])
     if length <= 0xff:
@@ -84,8 +89,14 @@ def _encode_varint(length):
     raise ValueError("value_len exceeds 2^32-1: " + str(length))
 
 
+# Varint tag -> number of extra bytes after the tag.
+_VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
+
+
 def _decode_varint(buf, offset):
-    """Return (value, size_in_bytes)."""
+    """Return (value, size_in_bytes).
+
+    Big-endian multi-byte encoding (msgpack convention); see _encode_varint."""
     tag = buf[offset]
     if tag <= 0x7f:
         return tag, 1
@@ -242,17 +253,26 @@ class SpindleCodec:
         ts = record.timestamp if record.timestamp is not None else 0
         vtype = _V2_CHAR_TO_BYTE[record.value_type]
         payload = spindle_pack.packb(record.key, record.value)
-        out = (
-            struct.pack('<q', key_link)
-            + bytes([vtype])
-            + struct.pack('<q', ts)
-            + _encode_varint(len(payload))
-            + payload
-        )
-        if record.value_type == 'l' or record.value_type == 'u':
+        varint = _encode_varint(len(payload))
+
+        has_vlink = record.value_type in ('l', 'u')
+        total = 17 + len(varint) + len(payload) + (8 if has_vlink else 0)
+        out = bytearray(total)
+
+        struct.pack_into('<q', out, 0, key_link)
+        out[8] = vtype
+        struct.pack_into('<q', out, 9, ts)
+        pos = 17
+        out[pos:pos + len(varint)] = varint
+        pos += len(varint)
+        out[pos:pos + len(payload)] = payload
+        pos += len(payload)
+
+        if has_vlink:
             vl = record.value_link if record.value_link is not None else -1
-            out += struct.pack('<q', vl)
-        return out
+            struct.pack_into('<q', out, pos, vl)
+
+        return bytes(out)
 
     def decode_record(self, raw_bytes):
         from cog.core import Record
@@ -285,33 +305,24 @@ class SpindleCodec:
             return None
         value_type = _V2_BYTE_TO_CHAR[vtype_byte]
 
+        # Read varint: peek at tag to determine total size, then delegate
+        # to _decode_varint for the actual value.
         tag = _read_exactly(fh, 1)
         if tag is None:
             return None
         t = tag[0]
-        if t <= 0x7f:
-            value_len = t
-            varint = tag
-        elif t == 0xcc:
-            rest = _read_exactly(fh, 1)
-            if rest is None or len(rest) < 1:
-                return None
-            value_len = rest[0]
-            varint = tag + rest
-        elif t == 0xcd:
-            rest = _read_exactly(fh, 2)
-            if rest is None or len(rest) < 2:
-                return None
-            value_len = struct.unpack('>H', rest)[0]
-            varint = tag + rest
-        elif t == 0xce:
-            rest = _read_exactly(fh, 4)
-            if rest is None or len(rest) < 4:
-                return None
-            value_len = struct.unpack('>I', rest)[0]
-            varint = tag + rest
-        else:
+        extra = _VARINT_EXTRA.get(t, 0) if t > 0x7f else 0
+        if t > 0x7f and t not in _VARINT_EXTRA:
             return None
+
+        if extra > 0:
+            rest = _read_exactly(fh, extra)
+            if rest is None or len(rest) < extra:
+                return None
+            varint_buf = tag + rest
+        else:
+            varint_buf = tag
+        value_len, _ = _decode_varint(varint_buf, 0)
 
         payload = _read_exactly(fh, value_len)
         if payload is None or len(payload) < value_len:
@@ -324,7 +335,7 @@ class SpindleCodec:
                 return None
             tail = vl
 
-        return header + varint + payload + tail
+        return header + varint_buf + payload + tail
 
     def update_key_link(self, fh, pos, new_link):
         fh.seek(pos)
