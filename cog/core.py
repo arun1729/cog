@@ -273,21 +273,23 @@ class Index:
                 key_link = existing_record.store_position
 
                 # check if this record exists in the bucket, if yes remove pointer.
-                prev_record = None
+                prev_record = existing_record  # start with the head
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
+                    next_pos = existing_record.key_link
                     # Use unmarshal (O(1)) instead of load_from_store (O(n))
-                    existing_record = store.codec.decode_record(store.read(existing_record.key_link))
-                    existing_record.set_store_position(existing_record.key_link)
-                    if existing_record.key == key and prev_record is not None:
+                    existing_record = store.codec.decode_record(store.read(next_pos))
+                    existing_record.set_store_position(next_pos)
+                    if existing_record.key == key:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
                         prev_rec -> current rec.key_link
                         curr_rec will not be linked in the bucket anymore.
                         """
-                        # update in place the key link pointer of pervios record, ! need to add fixed length padding.
                         store.update_record_link_inplace(prev_record.store_position, existing_record.key_link)
                         key_link = existing_record.key_link
-                    prev_record = existing_record
+                        # unlinked — don't advance prev_record
+                    else:
+                        prev_record = existing_record
 
         self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         return key_link
@@ -295,7 +297,10 @@ class Index:
     def get_index(self, key):
         num = cog_hash(key, self.config.INDEX_CAPACITY) % ((sys.maxsize + 1) * 2)
         self.logger.debug("hash for: " + key + " : " + str(num))
-        # there may be diff when using mem slice vs write (+1 needed)
+        # NOTE: the max(...-1, 0) causes hash 0 and 1 to collide at slot 0 and
+        # leaves slot INDEX_CAPACITY-1 unused.  The impact is negligible
+        # (~1 extra collision out of 100k slots) and changing it would break
+        # every existing index file on disk, so we keep it as is for now.
         index = (self.config.INDEX_BLOCK_LEN *
                  (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
         self.logger.debug("offset : " + key + " : " + str(index))
@@ -680,13 +685,19 @@ class Indexer:
 
     # @profile
     def get(self, key, store):
-        idx = self.index_list[0]  # only one index file.
-        return idx.get(key, store)
+        for idx in self.index_list:
+            result = idx.get(key, store)
+            if result is not None:
+                return result
+        return None
 
     def get_head_only(self, key, store):
         """Get head record only, O(1) - doesn't traverse value chain."""
-        idx = self.index_list[0]
-        return idx.get_head_only(key, store)
+        for idx in self.index_list:
+            record, pos = idx.get_head_only(key, store)
+            if record is not None:
+                return record, pos
+        return None, None
 
     def scanner(self, store):
         for idx in self.index_list:
@@ -698,8 +709,7 @@ class Indexer:
         for idx in self.index_list:
             if idx.delete(key, store):
                 return True
-            else:
-                return False
+        return False
 
 def cog_hash(string, index_capacity):
     return xxhash.xxh32(string, seed=2).intdigest() % index_capacity
