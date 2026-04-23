@@ -1,4 +1,5 @@
 import mmap
+import struct
 import os
 import os.path
 import sys
@@ -18,9 +19,10 @@ from cog.config import INDEX_BLOCK_LEN as _DEFAULT_INDEX_BLOCK_LEN
 import xxhash
 
 # Zero-byte sentinel for new indexes: ftruncate provides these for free.
+# Identical to struct.pack('<q', 0) — 8 bytes of 0x00.
 _ZERO_BLOCK = b'\x00' * _DEFAULT_INDEX_BLOCK_LEN
 # Legacy sentinel for backward compat with pre-v4 index files.
-_LEGACY_EMPTY_BLOCK = '-1'.zfill(_DEFAULT_INDEX_BLOCK_LEN).encode()
+_LEGACY_EMPTY_BLOCK = struct.pack('<q', -1)
 
 
 class TableMeta:
@@ -196,7 +198,7 @@ class Index:
 
     def _detect_sentinel(self, block_len):
         """Detect whether an existing index uses legacy ASCII sentinel or zero bytes."""
-        legacy = _LEGACY_EMPTY_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else '-1'.zfill(block_len).encode()
+        legacy = _LEGACY_EMPTY_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else struct.pack('<q', -1)
         zero = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
         with open(self.name, 'rb') as f:
             # Sample first block — if it matches legacy sentinel, use legacy.
@@ -224,7 +226,7 @@ class Index:
         self.db.close()
 
     def get_index_key(self, int_store_position):
-        return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
+        return struct.pack('<q', int_store_position)
 
     # @profile
     def put(self, key, store_position, store):
@@ -257,8 +259,9 @@ class Index:
         else:
             # there are records in the bucket
             # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
-            existing_record = store.codec.decode_record(store.read(int(index_value)))
-            existing_record.set_store_position(int(index_value))
+            head_pos = struct.unpack_from('<q', index_value)[0]
+            existing_record = store.codec.decode_record(store.read(head_pos))
+            existing_record.set_store_position(head_pos)
 
             if existing_record.key == key:
                 # the record at the top of the bucket has the same key, update the record in place.
@@ -316,9 +319,9 @@ class Index:
         data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
         if data_at_index_position == self.empty_block:
             return None
-        data_at_index_position = int(data_at_index_position)
-        record = Record.load_from_store(data_at_index_position, store)
-        record.set_store_position(data_at_index_position)
+        store_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
+        record = Record.load_from_store(store_pos, store)
+        record.set_store_position(store_pos)
         self.logger.debug("read record " + str(record))
 
         if record.key == key:
@@ -343,7 +346,7 @@ class Index:
         data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
         if data_at_index_position == self.empty_block:
             return None, None
-        store_position = int(data_at_index_position)
+        store_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
         # Only unmarshal, don't load value chain
         record = store.codec.decode_record(store.read(store_position))
         record.set_store_position(store_position)
@@ -377,7 +380,7 @@ class Index:
                 continue
             
             # Load head record and follow key_link chain to get all records in this bucket
-            store_position = int(data_at_position)
+            store_position = struct.unpack_from('<q', self.db_mem, scan_cursor)[0]
             while store_position != Record.RECORD_LINK_NULL:
                 record = Record.load_from_store(store_position, store)
                 if record is None:  # EOF store
@@ -402,7 +405,7 @@ class Index:
         if data_at_index_position == self.empty_block:
             return False
 
-        data_at_index_position = int(data_at_index_position)
+        data_at_index_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
         record = Record.load_from_store(data_at_index_position, store)
         record.set_store_position(data_at_index_position)
         self.logger.debug("read record " + str(record))

@@ -413,6 +413,42 @@ class TestCoreCoverage(unittest.TestCase):
         
         table.close()
 
+    def test_index_slot_binary_format(self):
+        """Verify index slots use 8-byte LE int64 encoding."""
+        import struct
+        logger = logging.getLogger()
+        table = Table("slot_fmt_test", "test_table", "test_slot_fmt_id", config)
+        store = table.store
+        index = table.indexer.index_list[0]
+
+        # Slot width must be 8
+        self.assertEqual(config.INDEX_BLOCK_LEN, 8)
+
+        # get_index_key returns exactly 8 bytes matching struct.pack
+        encoded = index.get_index_key(42)
+        self.assertEqual(len(encoded), 8)
+        self.assertEqual(encoded, struct.pack('<q', 42))
+
+        # Zero sentinel is 8 zero bytes
+        self.assertEqual(index.empty_block, b'\x00' * 8)
+
+        # Round-trip: put, get, scan, delete
+        rec = Record("slot_key", "slot_value")
+        pos = store.save(rec)
+        index.put(rec.key, pos, store)
+
+        got = index.get("slot_key", store)
+        self.assertIsNotNone(got)
+        self.assertEqual(got.value, "slot_value")
+
+        scanned = {r.key for r in index.scanner(store)}
+        self.assertIn("slot_key", scanned)
+
+        self.assertTrue(index.delete("slot_key", store))
+        self.assertIsNone(index.get("slot_key", store))
+
+        table.close()
+
 
 if __name__ == '__main__':
     unittest.main()
