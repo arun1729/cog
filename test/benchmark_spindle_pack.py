@@ -132,13 +132,13 @@ def correctness_check():
         ("", ""),
         ("k", "v"),
         ("hello", "world"),
-        ("a" * 127, "b"),              # boundary: tag == klen == 127
-        ("a" * 128, "b"),              # boundary: overflow to u16 klen
-        ("a" * 65535, "b"),            # boundary: max u16
-        ("a" * 65536, "b"),            # boundary: overflow to u32 klen
+        ("a" * 127, "b"),              
+        ("a" * 128, "b"),              
+        ("a" * 65535, "b"),            
+        ("a" * 65536, "b"),            
         ("unicode_☃", "snowman_⛄"),
-        ("k", [1.0, 2.0, 3.0]),        # non-str value -> msgpack fallback
-        ("k", 42),                     # non-str value -> msgpack fallback
+        ("k", 42),                     
+        ("k", 42.5),                   
     ]
     for k, v in cases:
         got_k, got_v = spindle_pack.unpackb(spindle_pack.packb(k, v))
