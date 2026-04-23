@@ -7,6 +7,7 @@ Wire format per field:
     type 'i' (0x69): [8B int64 LE]               — struct.pack('<q')
     type 'f' (0x66): [8B float64 LE]              — struct.pack('<d')
     type 'b' (0x62): [varint length] [raw bytes]
+    type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
 
 Varint scheme (msgpack-compatible positive-uint subset, big-endian by convention):
     tag <= 0x7f         -> value = tag                    (1 byte total)
@@ -73,6 +74,8 @@ def _decode_varint(buf, offset):
 
 def _encode_field(f):
     """Encode a single field to bytes."""
+    if type(f) is bool:
+        return b'B\x01' if f else b'B\x00'
     if type(f) is int:
         return b'i' + _pack_i64(f)
     if type(f) is float:
@@ -94,6 +97,11 @@ def _decode_field(buf, offset):
         raise ValueError("truncated buffer: cannot read type tag at offset " + str(offset))
     t = buf[offset]
     offset += 1
+
+    if t == 0x42:  # 'B' — bool
+        if offset + 1 > len(buf):
+            raise ValueError("truncated buffer: bool at offset " + str(offset))
+        return buf[offset] != 0, offset + 1
 
     if t == 0x69:  # 'i'
         if offset + 8 > len(buf):
