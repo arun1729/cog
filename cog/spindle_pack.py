@@ -8,6 +8,7 @@ Wire format per field:
     type 'f' (0x66): [8B float64 LE]              — struct.pack('<d')
     type 'b' (0x62): [varint length] [raw bytes]
     type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
+    type 'a' (0x61): [varint count] [count × 8B float64 LE]  — array of doubles
 
 Varint scheme (little-endian, used for string/bytes length prefixes):
     tag <= 0x7f         -> value = tag                       (1 byte total)
@@ -77,6 +78,10 @@ def _encode_field(f):
         return b'f' + _pack_f64(f)
     if type(f) is bytes:
         return b'b' + _encode_varint(len(f)) + f
+    if type(f) is list:
+        n = len(f)
+        payload = struct.pack('<' + 'd' * n, *f)
+        return b'a' + _encode_varint(n) + payload
     # Default: coerce to string.
     b = str(f).encode('utf-8')
     return b's' + _encode_varint(len(b)) + b
@@ -111,6 +116,19 @@ def _decode_field(buf, offset):
     # Variable-length: read varint, then payload.
     length, vsize = _decode_varint(buf, offset)
     offset += vsize
+
+    if t == 0x61:  # 'a' — array of float64
+        byte_len = length * 8
+        end = offset + byte_len
+        if end > len(buf):
+            raise ValueError(
+                "truncated buffer: float64 array needs " + str(byte_len)
+                + " bytes at offset " + str(offset)
+                + " but buffer has " + str(len(buf))
+            )
+        values = list(struct.unpack_from('<' + 'd' * length, buf, offset))
+        return values, end
+
     end = offset + length
     if end > len(buf):
         raise ValueError(
