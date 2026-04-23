@@ -14,7 +14,12 @@ from cog.codec import (
     detect_codec,
     LEGACY_V1_FLAG,
 )
+from cog.config import INDEX_BLOCK_LEN as _DEFAULT_INDEX_BLOCK_LEN
 import xxhash
+
+# Pre-computed sentinel: computed once at import time.
+# With INDEX_BLOCK_LEN=32 this is b'000000000000000000000000000000-1'.
+_EMPTY_BLOCK = '-1'.zfill(_DEFAULT_INDEX_BLOCK_LEN).encode()
 
 
 class TableMeta:
@@ -167,16 +172,16 @@ class Index:
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
-        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+        # Use config-aware empty block: recompute only if non-default block length
+        if self.config.INDEX_BLOCK_LEN == _DEFAULT_INDEX_BLOCK_LEN:
+            self.empty_block = _EMPTY_BLOCK
+        else:
+            self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
+            # Single C-level bytes multiply — no Python loop, no list, no join.
             f = open(self.name, 'wb+')
-            i = 0
-            e_blocks = []
-            while i < self.config.INDEX_CAPACITY:
-                e_blocks.append(self.empty_block)
-                i += 1
-            f.write(b''.join(e_blocks))
+            f.write(self.empty_block * self.config.INDEX_CAPACITY)
             self.file_limit = f.tell()
             f.close()
             self.logger.info("new index with capacity" + str(self.config.INDEX_CAPACITY) + "created: " + self.name)
@@ -426,7 +431,11 @@ class Store:
         self.flush_interval = flush_interval
         self.write_count = 0
         self._closed = False
-        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+        # Use pre-computed module constant when possible
+        if self.config.INDEX_BLOCK_LEN == _DEFAULT_INDEX_BLOCK_LEN:
+            self.empty_block = _EMPTY_BLOCK
+        else:
+            self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         self.store_cache = Cache(self.store, shared_cache)
