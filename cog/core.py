@@ -17,9 +17,10 @@ from cog.codec import (
 from cog.config import INDEX_BLOCK_LEN as _DEFAULT_INDEX_BLOCK_LEN
 import xxhash
 
-# Pre-computed sentinel: computed once at import time.
-# With INDEX_BLOCK_LEN=32 this is b'000000000000000000000000000000-1'.
-_EMPTY_BLOCK = '-1'.zfill(_DEFAULT_INDEX_BLOCK_LEN).encode()
+# Zero-byte sentinel for new indexes: ftruncate provides these for free.
+_ZERO_BLOCK = b'\x00' * _DEFAULT_INDEX_BLOCK_LEN
+# Legacy sentinel for backward compat with pre-v4 index files.
+_LEGACY_EMPTY_BLOCK = '-1'.zfill(_DEFAULT_INDEX_BLOCK_LEN).encode()
 
 
 class TableMeta:
@@ -172,25 +173,47 @@ class Index:
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
-        # Use config-aware empty block: recompute only if non-default block length
-        if self.config.INDEX_BLOCK_LEN == _DEFAULT_INDEX_BLOCK_LEN:
-            self.empty_block = _EMPTY_BLOCK
-        else:
-            self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+        block_len = self.config.INDEX_BLOCK_LEN
+        capacity = self.config.INDEX_CAPACITY
+
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
-            # Single C-level bytes multiply — no Python loop, no list, no join.
-            f = open(self.name, 'wb+')
-            f.write(self.empty_block * self.config.INDEX_CAPACITY)
-            self.file_limit = f.tell()
-            f.close()
-            self.logger.info("new index with capacity" + str(self.config.INDEX_CAPACITY) + "created: " + self.name)
+            # ftruncate: O(1) — OS provides zero-filled pages lazily, no disk I/O.
+            total_size = block_len * capacity
+            fd = os.open(self.name, os.O_RDWR | os.O_CREAT, 0o644)
+            os.ftruncate(fd, total_size)
+            os.close(fd)
+            self.empty_block = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
+            self.logger.info("new index with capacity" + str(capacity) + "created: " + self.name)
         else:
             self.logger.info("Index: "+self.name+" already exists.")
+            # Detect legacy vs zero-sentinel format.
+            self.empty_block = self._detect_sentinel(block_len)
 
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
         self._closed = False
+
+    def _detect_sentinel(self, block_len):
+        """Detect whether an existing index uses legacy ASCII sentinel or zero bytes."""
+        legacy = _LEGACY_EMPTY_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else '-1'.zfill(block_len).encode()
+        zero = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
+        with open(self.name, 'rb') as f:
+            # Sample first block — if it matches legacy sentinel, use legacy.
+            first = f.read(block_len)
+            if first == legacy:
+                return legacy
+            if first == zero:
+                return zero
+            # First slot is occupied; scan a few more to determine format.
+            for _ in range(min(63, self.config.INDEX_CAPACITY - 1)):
+                block = f.read(block_len)
+                if block == legacy:
+                    return legacy
+                if block == zero:
+                    return zero
+        # All sampled slots occupied — default to zero (new format).
+        return zero
 
     def close(self):
         if self._closed:
@@ -431,11 +454,7 @@ class Store:
         self.flush_interval = flush_interval
         self.write_count = 0
         self._closed = False
-        # Use pre-computed module constant when possible
-        if self.config.INDEX_BLOCK_LEN == _DEFAULT_INDEX_BLOCK_LEN:
-            self.empty_block = _EMPTY_BLOCK
-        else:
-            self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         self.store_cache = Cache(self.store, shared_cache)
