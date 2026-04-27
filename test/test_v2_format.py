@@ -199,10 +199,8 @@ class TestV2StoreTimestamps(unittest.TestCase):
         pos2 = store.save(Record("k2", "v2"))
         index.put("k2", pos2, store)
 
-        raw1 = store.read(pos1)
-        raw2 = store.read(pos2)
-        r1 = store.codec.decode_record(raw1)
-        r2 = store.codec.decode_record(raw2)
+        r1 = store.read(pos1)
+        r2 = store.read(pos2)
         self.assertGreaterEqual(r1.timestamp, created_at)
         self.assertGreaterEqual(r2.timestamp, created_at)
         self.assertGreater(r2.timestamp - r1.timestamp, 1_000_000)

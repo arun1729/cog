@@ -193,7 +193,7 @@ class Cog:
 
     def print_cache_info(self):
         print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name,
-                                                     str(self.current_table.store.store_cache.size_list())))
+                                                     self.current_table.store.store_cache.size()))
 
     def begin_batch(self):
         """

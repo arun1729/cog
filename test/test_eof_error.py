@@ -115,9 +115,8 @@ class TestStoreReadWithRecordSep(unittest.TestCase):
 
         # Read back and verify
         for (key, value), pos in zip(problematic_records, positions):
-            raw = store.read(pos)
-            self.assertIsNotNone(raw, f"Store.read returned None for key={key}")
-            recovered = Record.unmarshal(raw, store.codec)
+            recovered = store.read(pos)
+            self.assertIsNotNone(recovered, f"Store.read returned None for key={key}")
             self.assertEqual(recovered.key, key)
             self.assertAlmostEqual(recovered.value, value)
 

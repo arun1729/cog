@@ -132,8 +132,7 @@ class TestStoreFormatLocked(unittest.TestCase):
         table = Table("test_tbl", "freshv2_ns", "inst_fv2", config, logger)
         self.assertEqual(table.store.codec.VERSION, 2)
         pos = table.store.save(Record("k", "v"))
-        raw = table.store.read(pos)
-        rec = table.store.codec.decode_record(raw)
+        rec = table.store.read(pos)
         self.assertEqual(rec.key, "k")
         self.assertIsNotNone(rec.timestamp)
         table.close()
@@ -147,8 +146,8 @@ class TestStoreFormatLocked(unittest.TestCase):
         self.assertEqual(table.store.codec.VERSION, 1)
         self.assertIsInstance(table.store.codec, LegacyCodec)
         pos = table.store.save(Record("newkey", "newval"))
-        raw = table.store.read(pos)
-        self.assertEqual(raw[16], LEGACY_V1_FLAG)
+        rec = table.store.read(pos)
+        self.assertEqual(rec.format_version, '1')
         table.close()
 
     def test_legacy_v0_store_keeps_legacy_on_write(self):
@@ -159,8 +158,8 @@ class TestStoreFormatLocked(unittest.TestCase):
         table = Table(name, ns, inst, config, logger)
         self.assertEqual(table.store.codec.VERSION, 0)
         pos = table.store.save(Record("newkey", "newval"))
-        raw = table.store.read(pos)
-        self.assertEqual(raw[16], LEGACY_V0_FLAG)
+        rec = table.store.read(pos)
+        self.assertEqual(rec.format_version, '0')
         table.close()
 
     def test_v2_file_starts_with_magic(self):

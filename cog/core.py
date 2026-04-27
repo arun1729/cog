@@ -143,7 +143,7 @@ class Record:
     def __load_value(cls, store_pointer, val_list, store):
         """loads value from the store"""
         while store_pointer != Record.VALUE_LINK_NULL:
-            rec = store.codec.decode_record(store.read(store_pointer))
+            rec = store.read(store_pointer)
             if rec.value_type == 'l':
                 val_list.append(rec.value)
             else:
@@ -153,24 +153,28 @@ class Record:
 
     @classmethod
     def materialize_values(cls, record, store):
-        """Populate record.value with the full value chain in place for
-        list/set records. No-op for scalars. Call this when you already
-        decoded the head and need to pay the value-chain cost."""
+        """Return a new Record with the full value chain materialized for
+        list/set types. The original record is not mutated (important when
+        it lives in the store cache). No-op copy for scalars."""
         if record.value_type == 'l':
-            record.set_value(cls.__load_value(record.value_link, [record.value], store))
+            full_value = cls.__load_value(record.value_link, [record.value], store)
         elif record.value_type == 'u':
-            record.set_value(cls.__load_value(record.value_link, {record.value}, store))
-        return record
+            full_value = cls.__load_value(record.value_link, {record.value}, store)
+        else:
+            return record
+        out = Record(record.key, full_value, format_version=record.format_version,
+                     store_position=record.store_position, value_type=record.value_type,
+                     key_link=record.key_link, value_link=record.value_link,
+                     timestamp=record.timestamp)
+        return out
 
     @classmethod
     # @profile
     def load_from_store(cls, position: int, store):
-        raw = store.read(position)
-        if raw is None:
+        record = store.read(position)
+        if record is None:
             return None
-        record = store.codec.decode_record(raw)
-        cls.materialize_values(record, store)
-        return record
+        return cls.materialize_values(record, store)
 
 
 class Index:
@@ -263,7 +267,7 @@ class Index:
             # there are records in the bucket
             # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
             head_pos = struct.unpack_from('<q', index_value)[0]
-            existing_record = store.codec.decode_record(store.read(head_pos))
+            existing_record = store.read(head_pos)
             existing_record.set_store_position(head_pos)
 
             if existing_record.key == key:
@@ -283,7 +287,7 @@ class Index:
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
                     next_pos = existing_record.key_link
                     # Use unmarshal (O(1)) instead of load_from_store (O(n))
-                    existing_record = store.codec.decode_record(store.read(next_pos))
+                    existing_record = store.read(next_pos)
                     existing_record.set_store_position(next_pos)
                     if existing_record.key == key:
                         """
@@ -322,7 +326,7 @@ class Index:
         # Walk the collision chain with unmarshal (O(1)); only load_from_store
         # (which materializes the value chain) for the matched record.
         store_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
-        record = store.codec.decode_record(store.read(store_pos))
+        record = store.read(store_pos)
         record.set_store_position(store_pos)
         self.logger.debug("read record " + str(record))
 
@@ -331,7 +335,7 @@ class Index:
         while record.key_link != Record.RECORD_LINK_NULL:
             self.logger.debug("record.key_link: " + str(record.key_link))
             store_pos = record.key_link
-            record = store.codec.decode_record(store.read(store_pos))
+            record = store.read(store_pos)
             record.set_store_position(store_pos)
             if record.key == key:
                 return Record.materialize_values(record, store)
@@ -350,7 +354,7 @@ class Index:
             return None, None
         store_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
         # Only unmarshal, don't load value chain
-        record = store.codec.decode_record(store.read(store_position))
+        record = store.read(store_position)
         record.set_store_position(store_position)
 
         if record.key == key:
@@ -359,7 +363,7 @@ class Index:
             # Hash collision - follow key_link chain
             while record.key_link != Record.RECORD_LINK_NULL:
                 store_position = record.key_link
-                record = store.codec.decode_record(store.read(store_position))
+                record = store.read(store_position)
                 record.set_store_position(store_position)
                 if record.key == key:
                     return record, store_position
@@ -410,7 +414,7 @@ class Index:
         data_at_index_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
         # delete only needs key/key_link/store_position — use unmarshal (O(1))
         # instead of load_from_store, which would materialize the value chain.
-        record = store.codec.decode_record(store.read(data_at_index_position))
+        record = store.read(data_at_index_position)
         record.set_store_position(data_at_index_position)
         self.logger.debug("read record " + str(record))
         if record.key == key:
@@ -427,7 +431,7 @@ class Index:
             prev_record = record  # Initialize to the head record
             while record.key_link != Record.RECORD_LINK_NULL:
                 next_pos = record.key_link
-                next_record = store.codec.decode_record(store.read(next_pos))
+                next_record = store.read(next_pos)
                 next_record.set_store_position(next_pos)
                 if next_record.key == key:
                     """
@@ -602,6 +606,8 @@ class Store:
             if self._is_spindle:
                 record.timestamp = time.time_ns()
                 record.format_version = '2'
+            else:
+                record.format_version = self.codec._flag_char
             self.store_file.seek(0, 2)
             store_position = self.store_file.tell()
             record.set_store_position(store_position)
@@ -609,7 +615,7 @@ class Store:
             self.store_file.write(marshalled_record)
 
             if self.caching_enabled:
-                self.store_cache.put(store_position, marshalled_record)
+                self.store_cache.put(store_position, record)
 
             # Handle flush based on interval
             self._handle_write_flush()
@@ -629,7 +635,9 @@ class Store:
             self.store_file.write(byte_value)
 
             if self.caching_enabled:
-                self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
+                cached = self.store_cache.get(start_pos)
+                if cached is not None:
+                    cached.key_link = int_value
 
             self._handle_write_flush()
 
@@ -642,7 +650,11 @@ class Store:
                 return cached_record
 
         self.store_file.seek(position)
-        record = self.codec.read_record(self.store_file)
+        raw = self.codec.read_record(self.store_file)
+        if raw is None:
+            return None
+        record = self.codec.decode_record(raw)
+        record.set_store_position(position)
 
         if self.caching_enabled:
             self.store_cache.put(position, record)
