@@ -269,25 +269,30 @@ class SpindleCodec:
         return bytes(out)
 
     def decode_record(self, raw_bytes):
+        rec, _ = self.decode_at(raw_bytes, 0)
+        return rec
+
+    def decode_at(self, buf, offset):
         from cog.core import Record
-        key_link = struct.unpack_from('<q', raw_bytes, 0)[0]
-        vtype_byte = raw_bytes[8]
+        key_link = struct.unpack_from('<q', buf, offset)[0]
+        vtype_byte = buf[offset + 8]
         value_type = _V2_BYTE_TO_CHAR[vtype_byte]
-        timestamp = struct.unpack_from('<q', raw_bytes, 9)[0]
-        value_len, varint_size = _decode_varint(raw_bytes, 17)
-        payload_start = 17 + varint_size
-        payload = raw_bytes[payload_start: payload_start + value_len]
-        key, value = spindle_pack.unpackb(payload)
+        timestamp = struct.unpack_from('<q', buf, offset + 9)[0]
+        value_len, varint_size = _decode_varint(buf, offset + 17)
+        payload_start = offset + 17 + varint_size
+        payload_end = payload_start + value_len
+        key, value = spindle_pack.unpackb(buf[payload_start: payload_end])
 
         value_link = Record.VALUE_LINK_NULL
+        end = payload_end
         if value_type == 'l' or value_type == 'u':
-            vl_offset = payload_start + value_len
-            value_link = struct.unpack_from('<q', raw_bytes, vl_offset)[0]
+            value_link = struct.unpack_from('<q', buf, payload_end)[0]
+            end = payload_end + 8
 
         rec = Record(key, value, format_version='2', store_position=None,
                      value_type=value_type, key_link=key_link, value_link=value_link)
         rec.timestamp = timestamp
-        return rec
+        return rec, end
 
     def read_record(self, fh):
         # Fixed 17 bytes: key_link(8) + value_type(1) + timestamp(8)
