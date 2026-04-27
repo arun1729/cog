@@ -655,7 +655,7 @@ class Store:
             self.store_file.write(byte_value)
 
             if self.caching_enabled:
-                cached = self.store_cache.get(start_pos)
+                cached = self.store_cache.peek(start_pos)
                 if cached is not None:
                     cached.key_link = int_value
 

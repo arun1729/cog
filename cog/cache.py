@@ -38,5 +38,17 @@ class Cache:
         except KeyError:
             return None
 
+    def peek(self, key):
+        """Return cached value without promoting in LRU order."""
+        key = int(key)
+        return self.cache.get(key)
+
+    def evict(self, key):
+        key = int(key)
+        try:
+            del self.cache[key]
+        except KeyError:
+            pass
+
     def size(self):
         return len(self.cache)
