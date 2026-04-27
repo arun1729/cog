@@ -259,8 +259,6 @@ class Index:
             # First record in the key bucket, point next link to null
             store.update_record_link_inplace(store_position, Record.RECORD_LINK_NULL)
             key_link = store_position
-            # write the store position to the index
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # there are records in the bucket
             # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
@@ -313,9 +311,6 @@ class Index:
                  (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
         self.logger.debug("offset : " + key + " : " + str(index))
         return index, num
-
-    def cog_hash(self, string):
-        return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     # @profile
     def get(self, key, store):
@@ -476,15 +471,15 @@ class Store:
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         self.store_cache = Cache(self.store, shared_cache)
-        temp = open(self.store, 'a')  # create if not exist
-        temp.close()
-        self.store_file = open(self.store, 'rb+')
+        fd = os.open(self.store, os.O_RDWR | os.O_CREAT, 0o644)
+        self.store_file = os.fdopen(fd, 'rb+')
 
         # Format detection: pick codec based on file contents. Brand-new files
         # get Spindle; existing files keep their original format indefinitely.
         file_size = os.fstat(self.store_file.fileno()).st_size
         self.codec = detect_codec(self.store_file, file_size)
-        if file_size == 0 and isinstance(self.codec, SpindleCodec):
+        self._is_spindle = isinstance(self.codec, SpindleCodec)
+        if file_size == 0 and self._is_spindle:
             self.codec.write_header(self.store_file)
             self.store_file.flush()
         self.created_at = getattr(self.codec, 'created_at', None)
@@ -604,7 +599,7 @@ class Store:
         # Spindle stamps a fresh write timestamp inside the lock so positions and
         # timestamps are consistent under concurrent writers.
         with self._lock:
-            if isinstance(self.codec, SpindleCodec):
+            if self._is_spindle:
                 record.timestamp = time.time_ns()
                 record.format_version = '2'
             self.store_file.seek(0, 2)
