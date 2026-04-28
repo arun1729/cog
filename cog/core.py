@@ -10,10 +10,8 @@ import queue
 # from profilehooks import profile
 from cog.cache import Cache
 from cog.codec import (
-    LegacyCodec,
     SpindleCodec,
     detect_codec,
-    LEGACY_V1_FLAG,
 )
 from cog.config import INDEX_BLOCK_LEN as _DEFAULT_INDEX_BLOCK_LEN
 import xxhash
@@ -21,8 +19,6 @@ import xxhash
 # Zero-byte sentinel for new indexes: ftruncate provides these for free.
 # Identical to struct.pack('<q', 0) — 8 bytes of 0x00.
 _ZERO_BLOCK = b'\x00' * _DEFAULT_INDEX_BLOCK_LEN
-# Legacy sentinel for backward compat with pre-v4 index files.
-_LEGACY_EMPTY_BLOCK = struct.pack('<q', -1)
 
 
 class TableMeta:
@@ -68,25 +64,18 @@ class Record:
     '''
     Record is the basic unit of storage in cog.
     value_type: s - string, l - list, u - set
-    format_version: in-memory tag of which on-disk codec produced or will produce
-        this record. '0'/'1' = legacy marshal, '2' = Spindle binary+msgpack. Not
-        serialized for Spindle records (format is inferred from the file header).
-    timestamp: int64 nanoseconds since epoch. Stamped in Store.save at write
-        time for Spindle records; None for legacy records.
+    timestamp: int64 nanoseconds since epoch. Stamped in Store.save at write time.
     '''
-    __slots__ = ('key', 'value', 'format_version', 'timestamp',
+    __slots__ = ('key', 'value', 'timestamp',
                  'store_position', 'key_link', 'value_link', 'value_type')
 
-    RECORD_LINK_LEN = 16
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
-    CURRENT_FORMAT_VERSION = '1'
 
-    def __init__(self, key, value, format_version=None, store_position=None,
-                 value_type="s", key_link=-1, value_link=-1, timestamp=None):
+    def __init__(self, key, value, store_position=None,
+                 value_type="s", key_link=-1, value_link=-1, timestamp=None, **_ignored):
         self.key = key
         self.value = value
-        self.format_version = format_version if format_version is not None else Record.CURRENT_FORMAT_VERSION
         self.store_position = store_position
         self.key_link = key_link
         self.value_link = value_link
@@ -114,29 +103,25 @@ class Record:
         return self.key, self.value
 
     def marshal(self, codec=None):
-        """Serialize to on-disk bytes. Defaults to LegacyCodec v1 for
-        backward-compatible in-memory round-trips (tests); Store.save passes
-        the owning store's codec."""
+        """Serialize to on-disk bytes using the given codec (defaults to SpindleCodec)."""
         if codec is None:
-            codec = LegacyCodec(version_flag=LEGACY_V1_FLAG)
+            codec = SpindleCodec()
         return codec.encode_record(self)
 
     def is_empty(self):
         return self.key is None and self.value is None
 
     def __str__(self):
-        return ("key: {}, value: {}, format_version: {}, timestamp: {}, "
+        return ("key: {}, value: {}, timestamp: {}, "
                 "store_position: {}, key_link: {}, value_link: {}, value_type: {}").format(
-            self.key, self.value, self.format_version, self.timestamp,
+            self.key, self.value, self.timestamp,
             self.store_position, self.key_link, self.value_link, self.value_type)
 
     @classmethod
     def unmarshal(cls, store_bytes, codec=None):
-        """Deserialize from on-disk bytes. Defaults to LegacyCodec for
-        backward-compatible in-memory round-trips; Store.read paths pass the
-        owning store's codec."""
+        """Deserialize from on-disk bytes using the given codec (defaults to SpindleCodec)."""
         if codec is None:
-            codec = LegacyCodec(version_flag=LEGACY_V1_FLAG)
+            codec = SpindleCodec()
         return codec.decode_record(store_bytes)
 
     @classmethod
@@ -162,10 +147,9 @@ class Record:
             full_value = cls.__load_value(record.value_link, {record.value}, store)
         else:
             return record
-        out = Record(record.key, full_value, format_version=record.format_version,
-                     store_position=record.store_position, value_type=record.value_type,
-                     key_link=record.key_link, value_link=record.value_link,
-                     timestamp=record.timestamp)
+        out = Record(record.key, full_value, store_position=record.store_position,
+                     value_type=record.value_type, key_link=record.key_link,
+                     value_link=record.value_link, timestamp=record.timestamp)
         return out
 
     @classmethod
@@ -187,6 +171,8 @@ class Index:
         block_len = self.config.INDEX_BLOCK_LEN
         capacity = self.config.INDEX_CAPACITY
 
+        self.empty_block = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
+
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
             # ftruncate: O(1) — OS provides zero-filled pages lazily, no disk I/O.
@@ -194,37 +180,13 @@ class Index:
             fd = os.open(self.name, os.O_RDWR | os.O_CREAT, 0o644)
             os.ftruncate(fd, total_size)
             os.close(fd)
-            self.empty_block = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
             self.logger.info("new index with capacity" + str(capacity) + "created: " + self.name)
         else:
             self.logger.info("Index: "+self.name+" already exists.")
-            # Detect legacy vs zero-sentinel format.
-            self.empty_block = self._detect_sentinel(block_len)
 
         self.db = open(self.name, 'r+b')
         self.db_mem = mmap.mmap(self.db.fileno(), 0)
         self._closed = False
-
-    def _detect_sentinel(self, block_len):
-        """Detect whether an existing index uses legacy ASCII sentinel or zero bytes."""
-        legacy = _LEGACY_EMPTY_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else struct.pack('<q', -1)
-        zero = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
-        with open(self.name, 'rb') as f:
-            # Sample first block — if it matches legacy sentinel, use legacy.
-            first = f.read(block_len)
-            if first == legacy:
-                return legacy
-            if first == zero:
-                return zero
-            # First slot is occupied; scan a few more to determine format.
-            for _ in range(min(63, self.config.INDEX_CAPACITY - 1)):
-                block = f.read(block_len)
-                if block == legacy:
-                    return legacy
-                if block == zero:
-                    return zero
-        # All sampled slots occupied — default to zero (new format).
-        return zero
 
     def close(self):
         if self._closed:
@@ -266,7 +228,7 @@ class Index:
             key_link = store_position
         else:
             # there are records in the bucket
-            # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
+            # read existing record from the store - head only, not load_from_store (O(1) vs O(n))
             head_pos = struct.unpack_from('<q', index_value)[0]
             existing_record = store.read(head_pos)
 
@@ -286,7 +248,7 @@ class Index:
                 prev_record = existing_record  # start with the head
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
                     next_pos = existing_record.key_link
-                    # Use unmarshal (O(1)) instead of load_from_store (O(n))
+                    # Head-only read (O(1)) instead of load_from_store (O(n))
                     existing_record = store.read(next_pos)
                     if existing_record.key == key:
                         """
@@ -325,8 +287,8 @@ class Index:
         data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
         if data_at_index_position == self.empty_block:
             return None
-        # Walk the collision chain with unmarshal (O(1)); only load_from_store
-        # (which materializes the value chain) for the matched record.
+        # Walk the collision chain with head-only reads (O(1)); only
+        # load_from_store (which materializes the value chain) for the match.
         store_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
         record = store.read(store_pos)
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
@@ -355,7 +317,7 @@ class Index:
         if data_at_index_position == self.empty_block:
             return None, None
         store_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
-        # Only unmarshal, don't load value chain
+        # Head-only read, don't load value chain
         record = store.read(store_position)
 
         if record.key == key:
@@ -390,7 +352,7 @@ class Index:
                 if record is None:  # EOF store
                     self.logger.error("Store EOF reached! Iteration terminated.")
                     return
-                yield Record(record.key, record.value, record.format_version)
+                yield Record(record.key, record.value)
                 store_position = record.key_link
 
             scan_cursor += self.config.INDEX_BLOCK_LEN
@@ -411,7 +373,7 @@ class Index:
             return False
 
         head_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
-        # delete only needs key/key_link/store_position — use unmarshal (O(1))
+        # delete only needs key/key_link/store_position — head-only read (O(1))
         # instead of load_from_store, which would materialize the value chain.
         record = store.read(head_pos)
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
@@ -476,24 +438,20 @@ class Store:
         fd = os.open(self.store, os.O_RDWR | os.O_CREAT, 0o644)
         self.store_file = os.fdopen(fd, 'rb+')
 
-        # Format detection: pick codec based on file contents. Brand-new files
-        # get Spindle; existing files keep their original format indefinitely.
         file_size = os.fstat(self.store_file.fileno()).st_size
         self.codec = detect_codec(self.store_file, file_size)
-        self._is_spindle = isinstance(self.codec, SpindleCodec)
-        if file_size == 0 and self._is_spindle:
+        if file_size == 0:
             self.codec.write_header(self.store_file)
             self.store_file.flush()
-        self.created_at = getattr(self.codec, 'created_at', None)
+        self.created_at = self.codec.created_at
         self.data_start = self.codec.HEADER_SIZE
 
         # Thread safety
         self._lock = threading.Lock()
 
-        # Read-only mmap for Spindle fast-path reads. Writes go through the fd.
+        # Read-only mmap for fast-path reads. Writes go through the fd.
         self._mmap = None
-        if self._is_spindle:
-            self._refresh_mmap()
+        self._refresh_mmap()
 
         # Auto-enable async flush when interval > 1
         self._use_async = flush_interval > 1
@@ -506,8 +464,6 @@ class Store:
         logger.info(f"Store init: {self.store} (flush_interval={flush_interval}, codec=v{self.codec.VERSION})")
 
     def _refresh_mmap(self):
-        if not self._is_spindle:
-            return
         try:
             size = os.fstat(self.store_file.fileno()).st_size
         except (OSError, ValueError):
@@ -619,14 +575,10 @@ class Store:
         """
         Store data with configurable flush behavior.
         """
-        # Spindle stamps a fresh write timestamp inside the lock so positions and
+        # Stamp a fresh write timestamp inside the lock so positions and
         # timestamps are consistent under concurrent writers.
         with self._lock:
-            if self._is_spindle:
-                record.timestamp = time.time_ns()
-                record.format_version = '2'
-            else:
-                record.format_version = self.codec._flag_char
+            record.timestamp = time.time_ns()
             self.store_file.seek(0, 2)
             store_position = self.store_file.tell()
             record.set_store_position(store_position)
@@ -673,7 +625,7 @@ class Store:
         # mmap fast path — decode directly from the mapped region, no
         # intermediate raw-bytes copy or seek/read syscalls.
         mm = self._mmap
-        if self._is_spindle and (mm is None or position + 17 > len(mm)):
+        if mm is None or position + 17 > len(mm):
             self._refresh_mmap()
             mm = self._mmap
         if mm is not None and position + 17 <= len(mm):
@@ -687,7 +639,7 @@ class Store:
                     self.store_cache.put(position, record)
                 return record
 
-        # Fallback: legacy codec, position past the mapping, or truncated mmap.
+        # Fallback: position past the mapping or truncated mmap.
         self.store_file.seek(position)
         raw = self.codec.read_record(self.store_file)
         if raw is None:

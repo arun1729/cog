@@ -1,14 +1,7 @@
 """Record codecs for CogDB on-disk format.
 
-CogDB supports three on-disk formats:
-
-- v0: legacy marshal-based, byte-16 flag = 0x30 (ASCII '0', pre-commit e847922).
-- v1: legacy marshal-based, byte-16 flag = 0x31 (ASCII '1', post-commit e847922).
-- Spindle (on-disk version 2): binary header + spindle_pack payload + per-record int64 ns timestamp.
-
-v0 and v1 share LegacyCodec and differ only in the flag byte written into each
-record's format-version slot. A file's format is decided once, on Store open,
-and never changes for the lifetime of the file.
+Spindle (on-disk version 2): binary header + spindle_pack payload + per-record
+int64 ns timestamp.
 
 Spindle layout:
 
@@ -30,7 +23,6 @@ Varint scheme (little-endian):
     tag == 0xcd              -> value = next uint16 little-endian  (3 bytes)
     tag == 0xce              -> value = next uint32 little-endian  (5 bytes)
 """
-import marshal
 import struct
 import time
 
@@ -48,28 +40,9 @@ V2_VALUE_TYPE_SET = 0x02
 _V2_BYTE_TO_CHAR = {V2_VALUE_TYPE_STR: 's', V2_VALUE_TYPE_LIST: 'l', V2_VALUE_TYPE_SET: 'u'}
 _V2_CHAR_TO_BYTE = {'s': V2_VALUE_TYPE_STR, 'l': V2_VALUE_TYPE_LIST, 'u': V2_VALUE_TYPE_SET}
 
-RECORD_SEP = b'\xFD'
-UNIT_SEP = b'\xAC'
-RECORD_LINK_LEN = 16
 
-LEGACY_V0_FLAG = 0x30  # ASCII '0', pre-e847922 tombstone default
-LEGACY_V1_FLAG = 0x31  # ASCII '1', current CURRENT_FORMAT_VERSION
-
-
-def _read_exactly(fh, n):
-    """Read exactly n bytes from fh, or return None on EOF. Returns partial
-    bytes if EOF is hit mid-read (caller must check length)."""
-    if n == 0:
-        return b''
-    data = fh.read(n)
-    if len(data) == 0:
-        return None
-    while len(data) < n:
-        chunk = fh.read(n - len(data))
-        if len(chunk) == 0:
-            return data
-        data += chunk
-    return data
+# Varint tag -> number of extra bytes after the tag.
+_VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
 
 
 def _encode_varint(length):
@@ -83,10 +56,6 @@ def _encode_varint(length):
     if length <= 0xffffffff:
         return b'\xce' + struct.pack('<I', length)
     raise ValueError("value_len exceeds 2^32-1: " + str(length))
-
-
-# Varint tag -> number of extra bytes after the tag.
-_VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
 
 
 def _decode_varint(buf, offset):
@@ -103,120 +72,20 @@ def _decode_varint(buf, offset):
     raise ValueError("unknown varint tag: " + hex(tag))
 
 
-class LegacyCodec:
-    """v0 / v1 marshal-based format."""
-    HEADER_SIZE = 0
-
-    def __init__(self, version_flag=LEGACY_V1_FLAG):
-        self.version_flag = version_flag
-        self.VERSION = 0 if version_flag == LEGACY_V0_FLAG else 1
-        # Character form used when encoding a record's format_version slot.
-        self._flag_char = chr(version_flag)
-
-    def write_header(self, fh):
-        return
-
-    def encode_record(self, record):
-        # The codec's version_flag is authoritative — it matches the file's
-        # existing format. The record's in-memory format_version is ignored on
-        # write to guarantee no mixed-format files.
-        key_link_bytes = str(record.key_link).encode().rjust(RECORD_LINK_LEN)
-        serialized = marshal.dumps((record.key, record.value))
-        m_record = (
-            key_link_bytes
-            + bytes([self.version_flag])
-            + record.value_type.encode()
-            + str(len(serialized)).encode()
-            + UNIT_SEP
-            + serialized
-        )
-        if record.value_type == 'l' or record.value_type == 'u':
-            if record.value_link is not None:
-                m_record += str(record.value_link).encode()
-        m_record += RECORD_SEP
-        return m_record
-
-    def decode_record(self, store_bytes):
-        from cog.core import Record
-        key_link = int(store_bytes[0:RECORD_LINK_LEN])
-        format_version = store_bytes[RECORD_LINK_LEN:RECORD_LINK_LEN + 1].decode()
-        value_type = store_bytes[RECORD_LINK_LEN + 1:RECORD_LINK_LEN + 2].decode()
-        value_len_buf, end_pos = self._read_until(RECORD_LINK_LEN + 2, store_bytes, UNIT_SEP)
-        value_len = int(value_len_buf.decode())
-        payload = store_bytes[end_pos + 1: end_pos + 1 + value_len]
-        kv = marshal.loads(payload)
-
-        value_link = Record.VALUE_LINK_NULL
-        if value_type == 'l' or value_type == 'u':
-            vl_buf, _ = self._read_until(end_pos + value_len + 1, store_bytes, RECORD_SEP)
-            value_link = int(vl_buf.decode())
-
-        return Record(kv[0], kv[1], format_version=format_version, store_position=None,
-                      value_type=value_type, key_link=key_link, value_link=value_link)
-
-    def read_record(self, fh):
-        # Fixed 18-byte header: key_link(16) + flag(1) + value_type(1)
-        header = _read_exactly(fh, 18)
-        if header is None or len(header) < 18:
-            return None
-
-        value_type = chr(header[17])
-        if value_type not in ('s', 'l', 'u'):
-            return None
-
-        # Variable-length value_len ASCII digits terminated by UNIT_SEP
-        len_buf = b''
-        while True:
-            b = _read_exactly(fh, 1)
-            if b is None:
-                return None
-            if b == UNIT_SEP:
-                break
-            len_buf += b
-        try:
-            value_len = int(len_buf.decode())
-        except ValueError:
-            return None
-
-        payload = _read_exactly(fh, value_len)
-        if payload is None or len(payload) < value_len:
-            return None
-
-        tail = b''
-        if value_type in ('l', 'u'):
-            while True:
-                b = _read_exactly(fh, 1)
-                if b is None:
-                    break
-                tail += b
-                if b == RECORD_SEP:
-                    break
-        else:
-            sep = _read_exactly(fh, 1)
-            if sep is not None:
-                tail = sep
-
-        return header + len_buf + UNIT_SEP + payload + tail
-
-    def update_key_link(self, fh, pos, new_link):
-        fh.seek(pos)
-        fh.write(self.key_link_bytes(new_link))
-
-    def key_link_bytes(self, new_link):
-        if type(new_link) is not int:
-            raise ValueError("store position must be int but provided : " + str(new_link))
-        return str(new_link).encode().rjust(RECORD_LINK_LEN)
-
-    @staticmethod
-    def _read_until(start, sbytes, separator):
-        buff = b''
-        i = start
-        for i in range(start, len(sbytes)):
-            s_byte = sbytes[i: i + 1]
-            if s_byte == separator:
-                break
-            buff += s_byte
-        return buff, i
+def _read_exactly(fh, n):
+    """Read exactly n bytes from fh, or return None on EOF. Returns partial
+    bytes if EOF is hit mid-read (caller must check length)."""
+    if n == 0:
+        return b''
+    data = fh.read(n)
+    if len(data) == 0:
+        return None
+    while len(data) < n:
+        chunk = fh.read(n - len(data))
+        if len(chunk) == 0:
+            return data
+        data += chunk
+    return data
 
 
 class SpindleCodec:
@@ -289,7 +158,7 @@ class SpindleCodec:
             value_link = struct.unpack_from('<q', buf, payload_end)[0]
             end = payload_end + 8
 
-        rec = Record(key, value, format_version='2', store_position=None,
+        rec = Record(key, value, store_position=None,
                      value_type=value_type, key_link=key_link, value_link=value_link)
         rec.timestamp = timestamp
         return rec, end
@@ -371,24 +240,7 @@ def detect_codec(fh, file_size):
         created_at = struct.unpack('<q', created_at_bytes)[0]
         return SpindleCodec(created_at=created_at)
 
-    # A non-empty file shorter than the V2 magic that matches its prefix is a
-    # torn V2 header write, not a legacy record. Reject it.
-    if len(prefix) < 6 and V2_MAGIC.startswith(prefix):
-        raise ValueError(
-            "Spindle store file header truncated: got %d bytes, need %d"
-            % (file_size, V2_HEADER_SIZE)
-        )
-
-    # Legacy: the flag byte lives at offset 16 of the first record. If a
-    # legacy first-record write was torn below 17 bytes, fall back to the
-    # most-recent legacy format so the Store can still be opened for recovery;
-    # truncated reads will fail gracefully downstream.
-    if file_size < 17:
-        return LegacyCodec(version_flag=LEGACY_V1_FLAG)
-    fh.seek(16)
-    flag_byte = fh.read(1)[0]
-    if flag_byte == LEGACY_V0_FLAG:
-        return LegacyCodec(version_flag=LEGACY_V0_FLAG)
-    if flag_byte == LEGACY_V1_FLAG:
-        return LegacyCodec(version_flag=LEGACY_V1_FLAG)
-    raise ValueError("unrecognized store format; byte 16 = " + hex(flag_byte))
+    raise ValueError(
+        "unrecognized store format (legacy v0/v1 is no longer supported); "
+        "first 6 bytes: " + repr(prefix)
+    )

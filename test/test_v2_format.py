@@ -97,7 +97,7 @@ class TestSpindleCodecRoundTrip(unittest.TestCase):
         self.assertEqual(out.value_type, "s")
         self.assertEqual(out.key_link, 42)
         self.assertEqual(out.timestamp, ts)
-        self.assertEqual(out.format_version, "2")
+        self.assertEqual(out.value_type, "s")
 
     def test_list_record_with_value_link(self):
         r = Record("fruits", "mango", value_type="l", key_link=100, value_link=200)
@@ -117,7 +117,6 @@ class TestSpindleCodecRoundTrip(unittest.TestCase):
         self.assertEqual(out.value_link, -1)
 
     def test_payload_with_sentinel_bytes_roundtrips(self):
-        # Legacy was vulnerable to 0xFD inside float-serialised payloads.
         # Spindle has no separators — any byte sequence is safe.
         for byte_val in (0xAC, 0xFD, 0x00, 0xFF):
             r = Record("k", bytes([byte_val]) * 32)

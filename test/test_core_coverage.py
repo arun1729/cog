@@ -285,10 +285,10 @@ class TestCoreCoverage(unittest.TestCase):
 
     def test_record_str_representation(self):
         """Test Record __str__ method"""
-        record = Record("str_key", "str_value", format_version='1', store_position=100, 
+        record = Record("str_key", "str_value", store_position=100,
                        value_type='s', key_link=50, value_link=-1)
         str_repr = str(record)
-        
+
         self.assertIn("str_key", str_repr)
         self.assertIn("str_value", str_repr)
         self.assertIn("100", str_repr)  # store_position
