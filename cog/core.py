@@ -678,6 +678,8 @@ class Indexer:
 
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):
+            if f.endswith(('.v3_backup', '.v4_tmp')):
+                continue
             if self.config.INDEX in f:
                 if self.tablemeta.name == self.config.get_table_name(f):
                     self.logger.info("loading index file: " + f)
