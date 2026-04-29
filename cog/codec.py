@@ -26,7 +26,7 @@ Varint scheme (little-endian):
 import struct
 import time
 
-from cog import spindle_pack
+from cog.spindle_pack import _encode_varint, _decode_varint, packb, unpackb
 
 
 V2_MAGIC = b'COGDB\x00'
@@ -43,33 +43,6 @@ _V2_CHAR_TO_BYTE = {'s': V2_VALUE_TYPE_STR, 'l': V2_VALUE_TYPE_LIST, 'u': V2_VAL
 
 # Varint tag -> number of extra bytes after the tag.
 _VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
-
-
-def _encode_varint(length):
-    """Encode a non-negative integer as a 1-5 byte varint (little-endian)."""
-    if length <= 0x7f:
-        return bytes([length])
-    if length <= 0xff:
-        return b'\xcc' + bytes([length])
-    if length <= 0xffff:
-        return b'\xcd' + struct.pack('<H', length)
-    if length <= 0xffffffff:
-        return b'\xce' + struct.pack('<I', length)
-    raise ValueError("value_len exceeds 2^32-1: " + str(length))
-
-
-def _decode_varint(buf, offset):
-    """Return (value, size_in_bytes). Little-endian multi-byte encoding."""
-    tag = buf[offset]
-    if tag <= 0x7f:
-        return tag, 1
-    if tag == 0xcc:
-        return buf[offset + 1], 2
-    if tag == 0xcd:
-        return struct.unpack_from('<H', buf, offset + 1)[0], 3
-    if tag == 0xce:
-        return struct.unpack_from('<I', buf, offset + 1)[0], 5
-    raise ValueError("unknown varint tag: " + hex(tag))
 
 
 def _read_exactly(fh, n):
@@ -115,7 +88,7 @@ class SpindleCodec:
         key_link = record.key_link if record.key_link is not None else -1
         ts = record.timestamp if record.timestamp is not None else 0
         vtype = _V2_CHAR_TO_BYTE[record.value_type]
-        payload = spindle_pack.packb(record.key, record.value)
+        payload = packb(record.key, record.value)
         varint = _encode_varint(len(payload))
 
         has_vlink = record.value_type in ('l', 'u')
@@ -150,7 +123,7 @@ class SpindleCodec:
         value_len, varint_size = _decode_varint(buf, offset + 17)
         payload_start = offset + 17 + varint_size
         payload_end = payload_start + value_len
-        key, value = spindle_pack.unpackb(buf[payload_start: payload_end])
+        key, value = unpackb(buf[payload_start: payload_end])
 
         value_link = Record.VALUE_LINK_NULL
         end = payload_end
