@@ -33,11 +33,13 @@ _pack_u32le = struct.Struct('<I').pack
 _unpack_u16le = struct.Struct('<H').unpack_from
 _unpack_u32le = struct.Struct('<I').unpack_from
 
+_SINGLE_BYTES = [bytes([i]) for i in range(128)]
+
 
 def _encode_varint(length):
     """Encode a non-negative integer as a 1-5 byte varint (little-endian)."""
     if length <= 0x7f:
-        return bytes([length])
+        return _SINGLE_BYTES[length]
     if length <= 0xff:
         return b'\xcc' + bytes([length])
     if length <= 0xffff:
@@ -71,6 +73,9 @@ def _decode_varint(buf, offset):
 
 def _encode_field(f):
     """Encode a single field to bytes."""
+    if type(f) is str:
+        b = f.encode('utf-8')
+        return b's' + _encode_varint(len(b)) + b
     if type(f) is bool:
         return b'B\x01' if f else b'B\x00'
     if type(f) is int:
@@ -81,9 +86,8 @@ def _encode_field(f):
         return b'b' + _encode_varint(len(f)) + f
     if type(f) is list:
         n = len(f)
-        payload = struct.pack('<' + 'd' * n, *f)
+        payload = struct.pack(f'<{n}d', *f)
         return b'a' + _encode_varint(n) + payload
-    # Default: coerce to string.
     b = str(f).encode('utf-8')
     return b's' + _encode_varint(len(b)) + b
 
@@ -99,15 +103,27 @@ def _decode_field(buf, offset):
     t = buf[offset]
     offset += 1
 
-    if t == 0x42:  # 'B' — bool
-        if offset + 1 > len(buf):
-            raise ValueError("truncated buffer: bool at offset " + str(offset))
-        return buf[offset] != 0, offset + 1
+    if t == 0x73:  # 's' — string (most common)
+        length, vsize = _decode_varint(buf, offset)
+        offset += vsize
+        end = offset + length
+        if end > len(buf):
+            raise ValueError(
+                "truncated buffer: payload needs " + str(length)
+                + " bytes at offset " + str(offset)
+                + " but buffer has " + str(len(buf))
+            )
+        return buf[offset:end].decode('utf-8'), end
 
     if t == 0x69:  # 'i'
         if offset + 8 > len(buf):
             raise ValueError("truncated buffer: int64 at offset " + str(offset))
         return _unpack_i64(buf, offset)[0], offset + 8
+
+    if t == 0x42:  # 'B' — bool
+        if offset + 1 > len(buf):
+            raise ValueError("truncated buffer: bool at offset " + str(offset))
+        return buf[offset] != 0, offset + 1
 
     if t == 0x66:  # 'f'
         if offset + 8 > len(buf):
@@ -127,7 +143,7 @@ def _decode_field(buf, offset):
                 + " bytes at offset " + str(offset)
                 + " but buffer has " + str(len(buf))
             )
-        values = list(struct.unpack_from('<' + 'd' * length, buf, offset))
+        values = list(struct.unpack_from(f'<{length}d', buf, offset))
         return values, end
 
     end = offset + length
@@ -140,7 +156,6 @@ def _decode_field(buf, offset):
 
     if t == 0x62:  # 'b'
         return buf[offset:end], end
-    # 's' (0x73) or unknown — decode as UTF-8 string.
     return buf[offset:end].decode('utf-8'), end
 
 
