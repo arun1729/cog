@@ -20,6 +20,11 @@ import xxhash
 # Identical to struct.pack('<q', 0) — 8 bytes of 0x00.
 _ZERO_BLOCK = b'\x00' * _DEFAULT_INDEX_BLOCK_LEN
 
+# Pre-compiled struct for int64 LE — avoids re-parsing '<q' on every call.
+_I64 = struct.Struct('<q')
+_i64_pack = _I64.pack
+_i64_unpack_from = _I64.unpack_from
+
 
 class TableMeta:
     __slots__ = ('name', 'namespace', 'db_instance_id', 'column_mode')
@@ -168,19 +173,21 @@ class Index:
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
-        block_len = self.config.INDEX_BLOCK_LEN
-        capacity = self.config.INDEX_CAPACITY
 
-        self.empty_block = _ZERO_BLOCK if block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * block_len
+        # Cache hot config values as instance vars (LOAD_FAST vs LOAD_ATTR chain)
+        self._block_len = config.INDEX_BLOCK_LEN
+        self._capacity = config.INDEX_CAPACITY
+
+        self.empty_block = _ZERO_BLOCK if self._block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * self._block_len
 
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
             # ftruncate: O(1) — OS provides zero-filled pages lazily, no disk I/O.
-            total_size = block_len * capacity
+            total_size = self._block_len * self._capacity
             fd = os.open(self.name, os.O_RDWR | os.O_CREAT, 0o644)
             os.ftruncate(fd, total_size)
             os.close(fd)
-            self.logger.info("new index with capacity" + str(capacity) + "created: " + self.name)
+            self.logger.info("new index with capacity" + str(self._capacity) + "created: " + self.name)
         else:
             self.logger.info("Index: "+self.name+" already exists.")
 
@@ -197,7 +204,7 @@ class Index:
         self.db.close()
 
     def get_index_key(self, int_store_position):
-        return struct.pack('<q', int_store_position)
+        return _i64_pack(int_store_position)
 
     # @profile
     def put(self, key, store_position, store):
@@ -218,18 +225,19 @@ class Index:
         2. k4 -> k6 -> k5 -> k3 -> k2 -> k1
 
         """
+        block_len = self._block_len
+        db_mem = self.db_mem
         orig_position, orig_hash = self.get_index(key)
-        index_value = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
+        head_pos = _i64_unpack_from(db_mem, orig_position)[0]
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug('writing : %s current data at store position: %s', key, index_value)
-        if index_value == self.empty_block:
+            self.logger.debug('writing : %s current data at store position: %d', key, head_pos)
+        if head_pos == 0:
             # First record in the key bucket, point next link to null
             store.update_record_link_inplace(store_position, Record.RECORD_LINK_NULL)
             key_link = store_position
         else:
             # there are records in the bucket
             # read existing record from the store - head only, not load_from_store (O(1) vs O(n))
-            head_pos = struct.unpack_from('<q', index_value)[0]
             existing_record = store.read(head_pos)
 
             if existing_record.key == key:
@@ -262,19 +270,19 @@ class Index:
                     else:
                         prev_record = existing_record
 
-        self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
+        db_mem[orig_position: orig_position + block_len] = _i64_pack(store_position)
         return key_link
 
     def get_index(self, key):
-        num = cog_hash(key, self.config.INDEX_CAPACITY) % ((sys.maxsize + 1) * 2)
+        capacity = self._capacity
+        num = cog_hash(key, capacity) % ((sys.maxsize + 1) * 2)
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("hash for: %s : %d", key, num)
         # NOTE: the max(...-1, 0) causes hash 0 and 1 to collide at slot 0 and
         # leaves slot INDEX_CAPACITY-1 unused.  The impact is negligible
         # (~1 extra collision out of 100k slots) and changing it would break
         # every existing index file on disk, so we keep it as is for now.
-        index = (self.config.INDEX_BLOCK_LEN *
-                 (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
+        index = self._block_len * max((num % capacity) - 1, 0)
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("offset : %s : %d", key, index)
         return index, num
@@ -284,12 +292,12 @@ class Index:
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("GET: Reading index: %s", self.name)
         index_position, raw_hash = self.get_index(key)
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        db_mem = self.db_mem
+        store_pos = _i64_unpack_from(db_mem, index_position)[0]
+        if store_pos == 0:
             return None
         # Walk the collision chain with head-only reads (O(1)); only
         # load_from_store (which materializes the value chain) for the match.
-        store_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
         record = store.read(store_pos)
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("read record %s", record)
@@ -313,10 +321,9 @@ class Index:
         Returns: (record, store_position) or (None, None)
         """
         index_position, raw_hash = self.get_index(key)
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        store_position = _i64_unpack_from(self.db_mem, index_position)[0]
+        if store_position == 0:
             return None, None
-        store_position = struct.unpack_from('<q', self.db_mem, index_position)[0]
         # Head-only read, don't load value chain
         record = store.read(store_position)
 
@@ -336,17 +343,17 @@ class Index:
     '''
 
     def scanner(self, store):
+        block_len = self._block_len
+        db_mem = self.db_mem
+        mem_len = len(db_mem)
         scan_cursor = 0
-        while True:
-            data_at_position = self.db_mem[scan_cursor:scan_cursor + self.config.INDEX_BLOCK_LEN]
-            if len(data_at_position) == 0:  # EOF index
-                return
-            if data_at_position == self.empty_block:
-                scan_cursor += self.config.INDEX_BLOCK_LEN
+        while scan_cursor + block_len <= mem_len:
+            store_position = _i64_unpack_from(db_mem, scan_cursor)[0]
+            if store_position == 0:
+                scan_cursor += block_len
                 continue
 
             # Load head record and follow key_link chain to get all records in this bucket
-            store_position = struct.unpack_from('<q', self.db_mem, scan_cursor)[0]
             while store_position != Record.RECORD_LINK_NULL:
                 record = Record.load_from_store(store_position, store)
                 if record is None:  # EOF store
@@ -355,7 +362,7 @@ class Index:
                 yield Record(record.key, record.value)
                 store_position = record.key_link
 
-            scan_cursor += self.config.INDEX_BLOCK_LEN
+            scan_cursor += block_len
 
     def delete(self, key, store):
         """
@@ -366,13 +373,14 @@ class Index:
         """
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("DELETE: Reading index: %s", self.name)
+        block_len = self._block_len
+        db_mem = self.db_mem
         index_position, raw_hash = self.get_index(key)
 
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        head_pos = _i64_unpack_from(db_mem, index_position)[0]
+        if head_pos == 0:
             return False
 
-        head_pos = struct.unpack_from('<q', self.db_mem, index_position)[0]
         # delete only needs key/key_link/store_position — head-only read (O(1))
         # instead of load_from_store, which would materialize the value chain.
         record = store.read(head_pos)
@@ -382,10 +390,10 @@ class Index:
             """delete bucket => map hash table to empty block, or point to next in chain"""
             if record.key_link != Record.RECORD_LINK_NULL:
                 # Point index to next record in chain
-                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(record.key_link)
+                db_mem[index_position:index_position + block_len] = _i64_pack(record.key_link)
             else:
                 # No more records in chain, clear the bucket
-                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+                db_mem[index_position:index_position + block_len] = self.empty_block
             return True
         else:
             """search bucket"""
