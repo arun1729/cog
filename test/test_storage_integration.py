@@ -2,10 +2,10 @@
 Comprehensive integration test for CogDB's storage layer.
 
 Exercises the full read/write/reopen lifecycle across every data path:
-  - Raw Store read/write with problematic payloads (0xFD, 0xAC in marshal data)
+  - Raw Store read/write with float payloads
   - Database-level put/get for strings, lists, sets
   - Graph-level triples, traversals, batch inserts
-  - Embeddings (float vectors) — the primary trigger for the RECORD_SEP bug
+  - Embeddings (float vectors)
   - Close + reopen cycles verifying data survives persistence
   - Mutations after reopen (interleaved read/write)
   - Large-scale batch inserts with reopen
@@ -14,14 +14,13 @@ Exercises the full read/write/reopen lifecycle across every data path:
 """
 
 import logging
-import marshal
 import math
 import os
 import random
 import shutil
 import unittest
 
-from cog.core import Table, Record, Store, RECORD_SEP, UNIT_SEP
+from cog.core import Table, Record, Store
 from cog.database import Cog
 from cog.torque import Graph
 from cog import config
@@ -63,9 +62,10 @@ class TestStoreLayer(unittest.TestCase):
         logger = logging.getLogger()
         return Table(name, "test_table", "integ_store", config, logger)
 
-    # -- records whose marshalled payload contains RECORD_SEP (0xFD) ----------
-    def test_store_records_with_0xFD_in_payload(self):
-        table = self._make_table("fd_payload")
+    def test_store_float_records_roundtrip(self):
+        """Float payloads (the main source of arbitrary byte patterns) must
+        round-trip correctly through the Spindle codec."""
+        table = self._make_table("float_payload")
         store = table.store
         index = table.indexer.index_list[0]
 
@@ -79,76 +79,10 @@ class TestStoreLayer(unittest.TestCase):
             index.put(key, pos, store)
             written[key] = value
 
-        # Confirm some records actually contain 0xFD
-        fd_count = sum(
-            1 for k, v in written.items()
-            if RECORD_SEP in marshal.dumps((k, v))
-        )
-        self.assertGreater(fd_count, 0, "Need records with 0xFD in payload")
-
-        # Read back every record
         for key, expected_val in written.items():
             rec = index.get(key, store)
             self.assertIsNotNone(rec, f"Missing key: {key}")
             self.assertEqual(rec.key, key)
-            self.assertAlmostEqual(rec.value, expected_val)
-
-        table.close()
-
-    # -- records whose marshalled payload contains UNIT_SEP (0xAC) -----------
-    def test_store_records_with_0xAC_in_payload(self):
-        table = self._make_table("ac_payload")
-        store = table.store
-        index = table.indexer.index_list[0]
-
-        random.seed(99)
-        written = {}
-        for i in range(500):
-            key = f"u_{i}"
-            value = random.random()
-            rec = Record(key, value)
-            pos = store.save(rec)
-            index.put(key, pos, store)
-            written[key] = value
-
-        ac_count = sum(
-            1 for k, v in written.items()
-            if UNIT_SEP in marshal.dumps((k, v))
-        )
-        self.assertGreater(ac_count, 0, "Need records with 0xAC in payload")
-
-        for key, expected_val in written.items():
-            rec = index.get(key, store)
-            self.assertIsNotNone(rec, f"Missing key: {key}")
-            self.assertAlmostEqual(rec.value, expected_val)
-
-        table.close()
-
-    # -- records with both sentinels in payload -------------------------------
-    def test_store_records_with_both_sentinels(self):
-        table = self._make_table("both_sentinel")
-        store = table.store
-        index = table.indexer.index_list[0]
-
-        random.seed(7)
-        written = {}
-        for i in range(2000):
-            key = f"b_{i}"
-            value = random.random()
-            serialized = marshal.dumps((key, value))
-            if RECORD_SEP in serialized and UNIT_SEP in serialized:
-                rec = Record(key, value)
-                pos = store.save(rec)
-                index.put(key, pos, store)
-                written[key] = value
-            if len(written) >= 20:
-                break
-
-        self.assertGreater(len(written), 0, "Need records with both 0xFD and 0xAC")
-
-        for key, expected_val in written.items():
-            rec = index.get(key, store)
-            self.assertIsNotNone(rec, f"Missing key: {key}")
             self.assertAlmostEqual(rec.value, expected_val)
 
         table.close()

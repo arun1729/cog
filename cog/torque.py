@@ -816,17 +816,13 @@ class Graph(EmbeddingMixin, TraversalMixin):
     def __adjacent_vertices(self, vertex, predicates, direction='out'):
         self.cog.use_namespace(self.graph_name)
         adjacent_vertices = []
+        node_fn = out_nodes if direction == 'out' else in_nodes
         for predicate in predicates:
-            if direction == 'out':
-                out_record = self.cog.use_table(predicate).get(out_nodes(vertex.id))
-                if out_record is not None:
-                    for v_adj in out_record.value:
-                        adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
-            elif direction == 'in':
-                in_record = self.cog.use_table(predicate).get(in_nodes(vertex.id))
-                if in_record is not None:
-                    for v_adj in in_record.value:
-                        adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
+            table = self.cog.get_table(predicate, self.graph_name)
+            record = table.indexer.get(node_fn(vertex.id), table.store)
+            if record is not None:
+                for v_adj in record.value:
+                    adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
 
         return adjacent_vertices
 
@@ -917,13 +913,15 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.logger.debug("hopping from vertices: " + str(map(lambda x: x.id, self.last_visited_vertices)))
         self.logger.debug("direction: " + str(direction) + " predicates: " + str(self.all_predicates))
         traverse_vertex = []
+        node_fn = out_nodes if direction == "out" else in_nodes
         for predicate in predicates:
             self.logger.debug("__hop predicate: " + predicate + " of " + str(predicates))
+            table = self.cog.get_table(predicate, self.graph_name)
+            indexer = table.indexer
+            store = table.store
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
-                if direction == "out":
-                    record = self.cog.use_table(predicate).get(out_nodes(v.id))
-                else:
-                    record = self.cog.use_table(predicate).get(in_nodes(v.id))
+                record = indexer.get(node_fn(v.id), store)
                 if record is not None:
                     if record.value_type == "s":
                         v_adjacent = str(record.value)
@@ -933,20 +931,19 @@ class Graph(EmbeddingMixin, TraversalMixin):
                         v_adjacent_obj.tags.update(v.tags)
                         parent_path = v._path or [{'vertex': v.id}]
                         v_adjacent_obj._path = parent_path + [
-                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                            {'edge': edge_label},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adjacent_obj)
                     elif record.value_type == "l":
                         for v_adjacent in record.value:
-                            self.logger.debug("record v: " + str(record.value) + " type: " + str(record.value_type))
                             if func is not None and not func(v_adjacent):
                                 continue
                             v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
                             v_adjacent_obj.tags.update(v.tags)
                             parent_path = v._path or [{'vertex': v.id}]
                             v_adjacent_obj._path = parent_path + [
-                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                                {'edge': edge_label},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adjacent_obj)
@@ -985,9 +982,13 @@ class Graph(EmbeddingMixin, TraversalMixin):
         traverse_vertex = []
 
         for predicate in predicates:
+            table = self.cog.get_table(predicate, self.graph_name)
+            indexer = table.indexer
+            store = table.store
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
                 # Outgoing edges
-                out_record = self.cog.use_table(predicate).get(out_nodes(v.id))
+                out_record = indexer.get(out_nodes(v.id), store)
                 if out_record is not None:
                     if out_record.value_type == "s":
                         v_adjacent = str(out_record.value)
@@ -995,7 +996,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                         v_adj.tags.update(v.tags)
                         parent_path = v._path or [{'vertex': v.id}]
                         v_adj._path = parent_path + [
-                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                            {'edge': edge_label},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
@@ -1005,13 +1006,13 @@ class Graph(EmbeddingMixin, TraversalMixin):
                             v_adj.tags.update(v.tags)
                             parent_path = v._path or [{'vertex': v.id}]
                             v_adj._path = parent_path + [
-                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                                {'edge': edge_label},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adj)
 
                 # Incoming edges
-                in_record = self.cog.use_table(predicate).get(in_nodes(v.id))
+                in_record = indexer.get(in_nodes(v.id), store)
                 if in_record is not None:
                     if in_record.value_type == "s":
                         v_adjacent = str(in_record.value)
@@ -1019,7 +1020,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                         v_adj.tags.update(v.tags)
                         parent_path = v._path or [{'vertex': v.id}]
                         v_adj._path = parent_path + [
-                            {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                            {'edge': edge_label},
                             {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
@@ -1029,7 +1030,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                             v_adj.tags.update(v.tags)
                             parent_path = v._path or [{'vertex': v.id}]
                             v_adj._path = parent_path + [
-                                {'edge': self._predicate_reverse_lookup_cache.get(predicate, predicate)},
+                                {'edge': edge_label},
                                 {'vertex': v_adjacent}
                             ]
                             traverse_vertex.append(v_adj)

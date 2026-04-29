@@ -193,7 +193,7 @@ class Cog:
 
     def print_cache_info(self):
         print("::: cache info ::: {}, {}, {}".format(self.current_namespace, self.current_table.table_meta.name,
-                                                     str(self.current_table.store.store_cache.size_list())))
+                                                     self.current_table.store.store_cache.size()))
 
     def begin_batch(self):
         """
@@ -244,6 +244,23 @@ class Cog:
         for f in files:
             p.add(f.split("-")[0])
         return list(p)
+
+    def get_table(self, name, namespace=None):
+        """Return a Table object without mutating current_table.
+
+        Ensures the table is loaded (creates it on first access) but does not
+        change self.current_table, making it safe to call in tight loops where
+        the caller caches the reference.
+        """
+        ns = namespace or self.current_namespace
+        if ns not in self.namespaces:
+            self.namespaces[ns] = {}
+        tables = self.namespaces[ns]
+        if name not in tables:
+            tables[name] = Table(name, ns, self.instance_id, self.config,
+                                 shared_cache=self.shared_cache,
+                                 flush_interval=self.flush_interval)
+        return tables[name]
 
     def use_namespace(self, namespace):
         self.current_namespace = namespace

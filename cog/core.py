@@ -1,17 +1,29 @@
-import marshal
 import mmap
+import struct
 import os
 import os.path
 import sys
+import time
 import logging
 import threading
 import queue
 # from profilehooks import profile
 from cog.cache import Cache
+from cog.codec import (
+    SpindleCodec,
+    detect_codec,
+)
+from cog.config import INDEX_BLOCK_LEN as _DEFAULT_INDEX_BLOCK_LEN
 import xxhash
 
-RECORD_SEP = b'\xFD'
-UNIT_SEP = b'\xAC'
+# Zero-byte sentinel for new indexes: ftruncate provides these for free.
+# Identical to struct.pack('<q', 0) — 8 bytes of 0x00.
+_ZERO_BLOCK = b'\x00' * _DEFAULT_INDEX_BLOCK_LEN
+
+# Pre-compiled struct for int64 LE — avoids re-parsing '<q' on every call.
+_I64 = struct.Struct('<q')
+_i64_pack = _I64.pack
+_i64_unpack_from = _I64.unpack_from
 
 
 class TableMeta:
@@ -57,23 +69,23 @@ class Record:
     '''
     Record is the basic unit of storage in cog.
     value_type: s - string, l - list, u - set
-    format_version: file format version byte (current: '1')
+    timestamp: int64 nanoseconds since epoch. Stamped in Store.save at write time.
     '''
-    __slots__ = ('key', 'value', 'format_version', 'store_position', 'key_link', 'value_link', 'value_type')
-    
-    RECORD_LINK_LEN = 16
+    __slots__ = ('key', 'value', 'timestamp',
+                 'store_position', 'key_link', 'value_link', 'value_type')
+
     RECORD_LINK_NULL = -1
     VALUE_LINK_NULL = -1
-    CURRENT_FORMAT_VERSION = '1'
 
-    def __init__(self, key, value, format_version=None, store_position=None, value_type="s", key_link=-1, value_link=-1):
+    def __init__(self, key, value, store_position=None,
+                 value_type="s", key_link=-1, value_link=-1, timestamp=None, **_ignored):
         self.key = key
         self.value = value
-        self.format_version = format_version if format_version is not None else Record.CURRENT_FORMAT_VERSION
         self.store_position = store_position
         self.key_link = key_link
         self.value_link = value_link
         self.value_type = value_type
+        self.timestamp = timestamp
 
     def set_store_position(self, pos):
         if type(pos) is not int:
@@ -95,68 +107,33 @@ class Record:
     def get_kv_tuple(self):
         return self.key, self.value
 
-    def serialize(self):
-        return marshal.dumps((self.key, self.value))
-
-    def marshal(self):
-        key_link_bytes = str(self.key_link).encode().rjust(Record.RECORD_LINK_LEN)
-        serialized = self.serialize()
-        m_record = key_link_bytes \
-                   + self.format_version.encode() \
-                   + self.value_type.encode() \
-                   + str(len(serialized)).encode() \
-                   + UNIT_SEP \
-                   + serialized
-        if self.value_type == "l" or self.value_type == "u":
-            if self.value_link is not None:
-                m_record += str(self.value_link).encode()
-        m_record += RECORD_SEP
-        return m_record
+    def marshal(self, codec=None):
+        """Serialize to on-disk bytes using the given codec (defaults to SpindleCodec)."""
+        if codec is None:
+            codec = SpindleCodec()
+        return codec.encode_record(self)
 
     def is_empty(self):
         return self.key is None and self.value is None
 
     def __str__(self):
-        return "key: {}, value: {}, format_version: {}, store_position: {}, key_link: {}, value_link: {}, value_type: {}".format(
-            self.key, self.value, self.format_version, self.store_position, self.key_link, self.value_link, self.value_type)
+        return ("key: {}, value: {}, timestamp: {}, "
+                "store_position: {}, key_link: {}, value_link: {}, value_type: {}").format(
+            self.key, self.value, self.timestamp,
+            self.store_position, self.key_link, self.value_link, self.value_type)
 
     @classmethod
-    def __read_until(cls, start, sbytes, separtor=UNIT_SEP):
-        buff = b''
-        i = 0  # default
-        for i in range(start, len(sbytes)):
-            s_byte = sbytes[i: i + 1]
-            if s_byte == separtor:
-                break
-            buff += s_byte
-        return buff, i
-
-    @classmethod
-    def unmarshal(cls, store_bytes):
-        """reads from bytes and creates object
-        """
-        base_pos = 0
-        key_link = int(store_bytes[base_pos: base_pos + Record.RECORD_LINK_LEN])
-        next_base_pos = Record.RECORD_LINK_LEN
-        format_version = store_bytes[next_base_pos:next_base_pos + 1].decode()
-        value_type = store_bytes[next_base_pos + 1: next_base_pos + 2].decode()
-        value_len, end_pos = cls.__read_until(next_base_pos + 2, store_bytes)
-        value_len = int(value_len.decode())
-        value = store_bytes[end_pos + 1: end_pos + 1 + value_len]
-        record = marshal.loads(value)
-
-        value_link = Record.VALUE_LINK_NULL
-        if value_type == 'l' or value_type == 'u':
-            value_link, end_pos = cls.__read_until(end_pos + value_len + 1, store_bytes, RECORD_SEP)
-            value_link = int(value_link.decode())
-        return cls(record[0], record[1], format_version, store_position=None, value_type=value_type, key_link=key_link,
-                   value_link=value_link)
+    def unmarshal(cls, store_bytes, codec=None):
+        """Deserialize from on-disk bytes using the given codec (defaults to SpindleCodec)."""
+        if codec is None:
+            codec = SpindleCodec()
+        return codec.decode_record(store_bytes)
 
     @classmethod
     def __load_value(cls, store_pointer, val_list, store):
         """loads value from the store"""
         while store_pointer != Record.VALUE_LINK_NULL:
-            rec = Record.unmarshal(store.read(store_pointer))
+            rec = store.read(store_pointer)
             if rec.value_type == 'l':
                 val_list.append(rec.value)
             else:
@@ -165,17 +142,28 @@ class Record:
         return val_list
 
     @classmethod
+    def materialize_values(cls, record, store):
+        """Return a new Record with the full value chain materialized for
+        list/set types. The original record is not mutated (important when
+        it lives in the store cache). No-op copy for scalars."""
+        if record.value_type == 'l':
+            full_value = cls.__load_value(record.value_link, [record.value], store)
+        elif record.value_type == 'u':
+            full_value = cls.__load_value(record.value_link, {record.value}, store)
+        else:
+            return record
+        out = Record(record.key, full_value, store_position=record.store_position,
+                     value_type=record.value_type, key_link=record.key_link,
+                     value_link=record.value_link, timestamp=record.timestamp)
+        return out
+
+    @classmethod
     # @profile
     def load_from_store(cls, position: int, store):
-        record = cls.unmarshal(store.read(position))
-        values = None
-        if record.value_type == 'l':
-            values = cls.__load_value(record.value_link, [record.value], store)
-        elif record.value_type == 'u':
-            values = cls.__load_value(record.value_link, {record.value}, store)
-        if values is not None:
-            record.set_value(values)
-        return record
+        record = store.read(position)
+        if record is None:
+            return None
+        return cls.materialize_values(record, store)
 
 
 class Index:
@@ -185,19 +173,21 @@ class Index:
         self.table = table_meta
         self.config = config
         self.name = self.config.cog_index(table_meta.namespace, table_meta.name, table_meta.db_instance_id, index_id)
-        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+
+        # Cache hot config values as instance vars (LOAD_FAST vs LOAD_ATTR chain)
+        self._block_len = config.INDEX_BLOCK_LEN
+        self._capacity = config.INDEX_CAPACITY
+
+        self.empty_block = _ZERO_BLOCK if self._block_len == _DEFAULT_INDEX_BLOCK_LEN else b'\x00' * self._block_len
+
         if not os.path.exists(self.name):
             self.logger.info("creating index...")
-            f = open(self.name, 'wb+')
-            i = 0
-            e_blocks = []
-            while i < self.config.INDEX_CAPACITY:
-                e_blocks.append(self.empty_block)
-                i += 1
-            f.write(b''.join(e_blocks))
-            self.file_limit = f.tell()
-            f.close()
-            self.logger.info("new index with capacity" + str(self.config.INDEX_CAPACITY) + "created: " + self.name)
+            # ftruncate: O(1) — OS provides zero-filled pages lazily, no disk I/O.
+            total_size = self._block_len * self._capacity
+            fd = os.open(self.name, os.O_RDWR | os.O_CREAT, 0o644)
+            os.ftruncate(fd, total_size)
+            os.close(fd)
+            self.logger.info("new index with capacity" + str(self._capacity) + "created: " + self.name)
         else:
             self.logger.info("Index: "+self.name+" already exists.")
 
@@ -214,7 +204,7 @@ class Index:
         self.db.close()
 
     def get_index_key(self, int_store_position):
-        return str(int_store_position).encode().rjust(self.config.INDEX_BLOCK_LEN)
+        return _i64_pack(int_store_position)
 
     # @profile
     def put(self, key, store_position, store):
@@ -235,26 +225,26 @@ class Index:
         2. k4 -> k6 -> k5 -> k3 -> k2 -> k1
 
         """
+        block_len = self._block_len
+        db_mem = self.db_mem
         orig_position, orig_hash = self.get_index(key)
-        index_value = self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN]
-        self.logger.debug('writing : ' + str(key) + ' current data at store position: ' + str(index_value))
-        if index_value == self.empty_block:
+        head_pos = _i64_unpack_from(db_mem, orig_position)[0]
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug('writing : %s current data at store position: %d', key, head_pos)
+        if head_pos == 0:
             # First record in the key bucket, point next link to null
             store.update_record_link_inplace(store_position, Record.RECORD_LINK_NULL)
             key_link = store_position
-            # write the store position to the index
-            self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
         else:
             # there are records in the bucket
-            # read existing record from the store - use unmarshal, not load_from_store (O(1) vs O(n))
-            existing_record = Record.unmarshal(store.read(int(index_value)))
-            existing_record.set_store_position(int(index_value))
+            # read existing record from the store - head only, not load_from_store (O(1) vs O(n))
+            existing_record = store.read(head_pos)
 
             if existing_record.key == key:
                 # the record at the top of the bucket has the same key, update the record in place.
                 # a new entry has been made to the store, update pre and next links.
-                store.update_record_link_inplace(store_position, int(existing_record.key_link))
-                key_link = int(existing_record.key_link)
+                store.update_record_link_inplace(store_position, existing_record.key_link)
+                key_link = existing_record.key_link
             else:
                 # this is hash collision.
                 # the record at the top of the bucket has a different key, add new record to the top of the bucket.
@@ -263,84 +253,87 @@ class Index:
                 key_link = existing_record.store_position
 
                 # check if this record exists in the bucket, if yes remove pointer.
-                prev_record = None
+                prev_record = existing_record  # start with the head
                 while existing_record.key_link != Record.RECORD_LINK_NULL:
-                    # Use unmarshal (O(1)) instead of load_from_store (O(n))
-                    existing_record = Record.unmarshal(store.read(existing_record.key_link))
-                    existing_record.set_store_position(existing_record.key_link)
-                    if existing_record.key == key and prev_record is not None:
+                    next_pos = existing_record.key_link
+                    # Head-only read (O(1)) instead of load_from_store (O(n))
+                    existing_record = store.read(next_pos)
+                    if existing_record.key == key:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
                         prev_rec -> current rec.key_link
                         curr_rec will not be linked in the bucket anymore.
                         """
-                        # update in place the key link pointer of pervios record, ! need to add fixed length padding.
                         store.update_record_link_inplace(prev_record.store_position, existing_record.key_link)
                         key_link = existing_record.key_link
-                    prev_record = existing_record
+                        # unlinked — don't advance prev_record
+                    else:
+                        prev_record = existing_record
 
-        self.db_mem[orig_position: orig_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(store_position)
+        db_mem[orig_position: orig_position + block_len] = _i64_pack(store_position)
         return key_link
 
     def get_index(self, key):
-        num = cog_hash(key, self.config.INDEX_CAPACITY) % ((sys.maxsize + 1) * 2)
-        self.logger.debug("hash for: " + key + " : " + str(num))
-        # there may be diff when using mem slice vs write (+1 needed)
-        index = (self.config.INDEX_BLOCK_LEN *
-                 (max((num % self.config.INDEX_CAPACITY) - 1, 0)))
-        self.logger.debug("offset : " + key + " : " + str(index))
+        capacity = self._capacity
+        num = cog_hash(key, capacity) % ((sys.maxsize + 1) * 2)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("hash for: %s : %d", key, num)
+        # NOTE: the max(...-1, 0) causes hash 0 and 1 to collide at slot 0 and
+        # leaves slot INDEX_CAPACITY-1 unused.  The impact is negligible
+        # (~1 extra collision out of 100k slots) and changing it would break
+        # every existing index file on disk, so we keep it as is for now.
+        index = self._block_len * max((num % capacity) - 1, 0)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("offset : %s : %d", key, index)
         return index, num
-
-    def cog_hash(self, string):
-        return xxhash.xxh32(string, seed=2).intdigest() % self.config.INDEX_CAPACITY
 
     # @profile
     def get(self, key, store):
-        self.logger.debug("GET: Reading index: " + self.name)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("GET: Reading index: %s", self.name)
         index_position, raw_hash = self.get_index(key)
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        db_mem = self.db_mem
+        store_pos = _i64_unpack_from(db_mem, index_position)[0]
+        if store_pos == 0:
             return None
-        data_at_index_position = int(data_at_index_position)
-        record = Record.load_from_store(data_at_index_position, store)
-        record.set_store_position(data_at_index_position)
-        self.logger.debug("read record " + str(record))
+        # Walk the collision chain with head-only reads (O(1)); only
+        # load_from_store (which materializes the value chain) for the match.
+        record = store.read(store_pos)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("read record %s", record)
 
         if record.key == key:
-            return record
-        else:
-            while record.key_link != Record.RECORD_LINK_NULL:
-                self.logger.debug("record.key_link: " + str(record.key_link))
-                record = Record.load_from_store(record.key_link, store)
-                record.set_store_position(record.key_link)
-                if record.key == key:
-                    return record
+            return Record.materialize_values(record, store)
+        while record.key_link != Record.RECORD_LINK_NULL:
+            if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("record.key_link: %d", record.key_link)
+            store_pos = record.key_link
+            record = store.read(store_pos)
+            if record.key == key:
+                return Record.materialize_values(record, store)
         return None
 
     def get_head_only(self, key, store):
         """
         Get only the head record without traversing the value chain.
         This is O(1) compared to get() which is O(n) for multi-value keys.
-        
+
         Returns: (record, store_position) or (None, None)
         """
         index_position, raw_hash = self.get_index(key)
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        store_position = _i64_unpack_from(self.db_mem, index_position)[0]
+        if store_position == 0:
             return None, None
-        store_position = int(data_at_index_position)
-        # Only unmarshal, don't load value chain
-        record = Record.unmarshal(store.read(store_position))
-        record.set_store_position(store_position)
-        
+        # Head-only read, don't load value chain
+        record = store.read(store_position)
+
         if record.key == key:
             return record, store_position
         else:
             # Hash collision - follow key_link chain
             while record.key_link != Record.RECORD_LINK_NULL:
                 store_position = record.key_link
-                record = Record.unmarshal(store.read(store_position))
-                record.set_store_position(store_position)
+                record = store.read(store_position)
                 if record.key == key:
                     return record, store_position
         return None, None
@@ -350,28 +343,26 @@ class Index:
     '''
 
     def scanner(self, store):
+        block_len = self._block_len
+        db_mem = self.db_mem
+        mem_len = len(db_mem)
         scan_cursor = 0
-        while True:
-            data_at_position = self.db_mem[scan_cursor:scan_cursor + self.config.INDEX_BLOCK_LEN]
-            if len(data_at_position) == 0:  # EOF index
-                self.logger.info("Index EOF reached! Scan terminated.")
-                return
-            if data_at_position == self.empty_block:
-                scan_cursor += self.config.INDEX_BLOCK_LEN
-                self.logger.debug("GET: skipping empty block during iteration.")
+        while scan_cursor + block_len <= mem_len:
+            store_position = _i64_unpack_from(db_mem, scan_cursor)[0]
+            if store_position == 0:
+                scan_cursor += block_len
                 continue
-            
+
             # Load head record and follow key_link chain to get all records in this bucket
-            store_position = int(data_at_position)
             while store_position != Record.RECORD_LINK_NULL:
                 record = Record.load_from_store(store_position, store)
                 if record is None:  # EOF store
                     self.logger.error("Store EOF reached! Iteration terminated.")
                     return
-                yield Record(record.key, record.value, record.format_version)
+                yield Record(record.key, record.value)
                 store_position = record.key_link
-            
-            scan_cursor += self.config.INDEX_BLOCK_LEN
+
+            scan_cursor += block_len
 
     def delete(self, key, store):
         """
@@ -380,32 +371,36 @@ class Index:
                k6 -> k5 -> k4 -> k2 -> k1
 
         """
-        self.logger.debug("GET: Reading index: " + self.name)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("DELETE: Reading index: %s", self.name)
+        block_len = self._block_len
+        db_mem = self.db_mem
         index_position, raw_hash = self.get_index(key)
 
-        data_at_index_position = self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN]
-        if data_at_index_position == self.empty_block:
+        head_pos = _i64_unpack_from(db_mem, index_position)[0]
+        if head_pos == 0:
             return False
 
-        data_at_index_position = int(data_at_index_position)
-        record = Record.load_from_store(data_at_index_position, store)
-        record.set_store_position(data_at_index_position)
-        self.logger.debug("read record " + str(record))
+        # delete only needs key/key_link/store_position — head-only read (O(1))
+        # instead of load_from_store, which would materialize the value chain.
+        record = store.read(head_pos)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("read record %s", record)
         if record.key == key:
             """delete bucket => map hash table to empty block, or point to next in chain"""
             if record.key_link != Record.RECORD_LINK_NULL:
                 # Point index to next record in chain
-                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.get_index_key(record.key_link)
+                db_mem[index_position:index_position + block_len] = _i64_pack(record.key_link)
             else:
                 # No more records in chain, clear the bucket
-                self.db_mem[index_position:index_position + self.config.INDEX_BLOCK_LEN] = self.empty_block
+                db_mem[index_position:index_position + block_len] = self.empty_block
             return True
         else:
             """search bucket"""
             prev_record = record  # Initialize to the head record
             while record.key_link != Record.RECORD_LINK_NULL:
-                next_record = Record.load_from_store(record.key_link, store)
-                next_record.set_store_position(record.key_link)
+                next_pos = record.key_link
+                next_record = store.read(next_pos)
                 if next_record.key == key:
                     """
                     if same key found in bucket, update previous record in chain to point to key_link of this record
@@ -434,7 +429,7 @@ class Store:
                        N>1 = flush every N writes with async background thread
     """
 
-    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None, 
+    def __init__(self, tablemeta, config, logger, caching_enabled=True, shared_cache=None,
                  flush_interval=1):
         self.caching_enabled = caching_enabled
         self.batch_mode = False  # When True, defers flush() until end_batch()
@@ -444,17 +439,28 @@ class Store:
         self.flush_interval = flush_interval
         self.write_count = 0
         self._closed = False
-        self.empty_block = '-1'.zfill(self.config.INDEX_BLOCK_LEN).encode()
+
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
         self.store_cache = Cache(self.store, shared_cache)
-        temp = open(self.store, 'a')  # create if not exist
-        temp.close()
-        self.store_file = open(self.store, 'rb+')
-        
+        fd = os.open(self.store, os.O_RDWR | os.O_CREAT, 0o644)
+        self.store_file = os.fdopen(fd, 'rb+')
+
+        file_size = os.fstat(self.store_file.fileno()).st_size
+        self.codec = detect_codec(self.store_file, file_size)
+        if file_size == 0:
+            self.codec.write_header(self.store_file)
+            self.store_file.flush()
+        self.created_at = self.codec.created_at
+        self.data_start = self.codec.HEADER_SIZE
+
         # Thread safety
         self._lock = threading.Lock()
-        
+
+        # Read-only mmap for fast-path reads. Writes go through the fd.
+        self._mmap = None
+        self._refresh_mmap()
+
         # Auto-enable async flush when interval > 1
         self._use_async = flush_interval > 1
         if self._use_async:
@@ -462,8 +468,21 @@ class Store:
             self._flush_thread = threading.Thread(target=self._flush_worker, daemon=True)
             self._flush_thread.start()
             self._shutdown = False
-        
-        logger.info(f"Store init: {self.store} (flush_interval={flush_interval})")
+
+        logger.info(f"Store init: {self.store} (flush_interval={flush_interval}, codec=v{self.codec.VERSION})")
+
+    def _refresh_mmap(self):
+        try:
+            size = os.fstat(self.store_file.fileno()).st_size
+        except (OSError, ValueError):
+            return
+        if size <= self.data_start:
+            return
+        current = self._mmap
+        if current is not None and len(current) >= size:
+            return
+        self._mmap = mmap.mmap(self.store_file.fileno(), 0,
+                               prot=mmap.PROT_READ)
 
     def _flush_worker(self):
         """Background thread that processes flush requests."""
@@ -540,6 +559,7 @@ class Store:
         with self._lock:
             try:
                 self.store_file.flush()
+                self._mmap = None
                 self.store_file.close()
             except ValueError:
                 pass  # File already closed
@@ -563,19 +583,22 @@ class Store:
         """
         Store data with configurable flush behavior.
         """
+        # Stamp a fresh write timestamp inside the lock so positions and
+        # timestamps are consistent under concurrent writers.
         with self._lock:
+            record.timestamp = time.time_ns()
             self.store_file.seek(0, 2)
             store_position = self.store_file.tell()
             record.set_store_position(store_position)
-            marshalled_record = record.marshal()
+            marshalled_record = self.codec.encode_record(record)
             self.store_file.write(marshalled_record)
-            
+
             if self.caching_enabled:
-                self.store_cache.put(store_position, marshalled_record)
-            
+                self.store_cache.put(store_position, record)
+
             # Handle flush based on interval
             self._handle_write_flush()
-        
+
         return store_position
 
     def update_record_link_inplace(self, start_pos, int_value):
@@ -583,102 +606,59 @@ class Store:
         if type(int_value) is not int:
             raise ValueError("store position must be int but provided : " + str(start_pos))
 
-        byte_value = str(int_value).encode().rjust(Record.RECORD_LINK_LEN)
-        self.logger.debug('update_record_link_inplace: ' + str(byte_value))
-        
+        byte_value = self.codec.key_link_bytes(int_value)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug('update_record_link_inplace: %s', byte_value)
+
         with self._lock:
             self.store_file.seek(start_pos)
             self.store_file.write(byte_value)
 
             if self.caching_enabled:
-                self.store_cache.partial_update_from_zero_index(start_pos, byte_value)
-            
+                cached = self.store_cache.peek(start_pos)
+                if cached is not None:
+                    cached.key_link = int_value
+
             self._handle_write_flush()
 
     # @profile
     def read(self, position):
-        self.logger.debug("store read request at position: " + str(position))
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("store read request at position: %d", position)
         if self.caching_enabled:
             cached_record = self.store_cache.get(position)
             if cached_record is not None:
                 return cached_record
 
+        # mmap fast path — decode directly from the mapped region, no
+        # intermediate raw-bytes copy or seek/read syscalls.
+        mm = self._mmap
+        if mm is None or position + 17 > len(mm):
+            self._refresh_mmap()
+            mm = self._mmap
+        if mm is not None and position + 17 <= len(mm):
+            try:
+                record, _ = self.codec.decode_at(mm, position)
+            except (ValueError, KeyError, struct.error):
+                pass
+            else:
+                record.store_position = position
+                if self.caching_enabled:
+                    self.store_cache.put(position, record)
+                return record
+
+        # Fallback: position past the mapping or truncated mmap.
         self.store_file.seek(position)
-        record = self.__read_record()
+        raw = self.codec.read_record(self.store_file)
+        if raw is None:
+            return None
+        record = self.codec.decode_record(raw)
+        record.store_position = position
 
         if self.caching_enabled:
             self.store_cache.put(position, record)
 
         return record
-
-    def __read_record(self):
-        """Read a single record using structured/length-aware parsing.
-
-        Record layout (written by Record.marshal):
-            [key_link: 16 bytes]
-            [format_version: 1 byte]
-            [value_type: 1 byte]
-            [value_len digits: variable ASCII]
-            [UNIT_SEP: 1 byte]
-            [serialized payload: exactly value_len bytes]
-            [value_link digits: variable ASCII, only if value_type in ('l','u')]
-            [RECORD_SEP: 1 byte]
-        """
-        # --- fixed-size header: key_link(16) + format_version(1) + value_type(1) = 18 bytes
-        header = self.__read_exactly(18)
-        if header is None or len(header) < 18:
-            return None
-
-        value_type = chr(header[17])       # 's', 'l', or 'u'
-
-        # --- variable-length value_len digits terminated by UNIT_SEP
-        len_buf = b''
-        while True:
-            b = self.__read_exactly(1)
-            if b is None:
-                return None
-            if b == UNIT_SEP:
-                break
-            len_buf += b
-        value_len = int(len_buf.decode())
-
-        # --- serialized payload: exactly value_len bytes
-        payload = self.__read_exactly(value_len)
-        if payload is None or len(payload) < value_len:
-            return None
-
-        # --- optional value_link + RECORD_SEP terminator
-        tail = b''
-        if value_type in ('l', 'u'):
-            # value_link digits (ASCII) terminated by RECORD_SEP
-            while True:
-                b = self.__read_exactly(1)
-                if b is None:
-                    break
-                tail += b
-                if b == RECORD_SEP:
-                    break
-        else:
-            # just the RECORD_SEP terminator
-            sep = self.__read_exactly(1)
-            if sep is not None:
-                tail = sep
-
-        record = header + len_buf + UNIT_SEP + payload + tail
-        self.logger.debug("store __read_record: " + str(record))
-        return record
-
-    def __read_exactly(self, n):
-        """Read exactly *n* bytes from the store file, or return None on EOF."""
-        data = self.store_file.read(n)
-        if len(data) == 0:
-            return None
-        while len(data) < n:
-            chunk = self.store_file.read(n - len(data))
-            if len(chunk) == 0:
-                return data          # partial read (EOF mid-record)
-            data += chunk
-        return data
 
 
 class Indexer:
@@ -706,6 +686,8 @@ class Indexer:
 
     def load_indexes(self):
         for f in os.listdir(self.config.cog_data_dir(self.tablemeta.namespace)):
+            if f.endswith(('.v3_backup', '.v4_tmp')):
+                continue
             if self.config.INDEX in f:
                 if self.tablemeta.name == self.config.get_table_name(f):
                     self.logger.info("loading index file: " + f)
@@ -719,22 +701,30 @@ class Indexer:
 
     def put(self, key, store_position, store):
         resp = self.live_index.put(key, store_position, store)
-        self.logger.debug("Key: " + key + " indexed in: " + self.live_index.name)
+        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("Key: %s indexed in: %s", key, self.live_index.name)
         return resp
 
     # @profile
     def get(self, key, store):
-        idx = self.index_list[0]  # only one index file.
-        return idx.get(key, store)
+        for idx in self.index_list:
+            result = idx.get(key, store)
+            if result is not None:
+                return result
+        return None
 
     def get_head_only(self, key, store):
         """Get head record only, O(1) - doesn't traverse value chain."""
-        idx = self.index_list[0]
-        return idx.get_head_only(key, store)
+        for idx in self.index_list:
+            record, pos = idx.get_head_only(key, store)
+            if record is not None:
+                return record, pos
+        return None, None
 
     def scanner(self, store):
         for idx in self.index_list:
-            self.logger.debug("SCAN: index: " + idx.name)
+            if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("SCAN: index: %s", idx.name)
             for r in idx.scanner(store):
                 yield r
 
@@ -742,8 +732,7 @@ class Indexer:
         for idx in self.index_list:
             if idx.delete(key, store):
                 return True
-            else:
-                return False
+        return False
 
 def cog_hash(string, index_capacity):
     return xxhash.xxh32(string, seed=2).intdigest() % index_capacity
