@@ -13,8 +13,7 @@ Spindle layout:
         [value_len varint 1..5]  [payload N bytes spindle_pack (key,value)]
         [value_link 8 int64]   -- only if value_type is list (0x01) or set (0x02)
 
-The payload uses cog.spindle_pack (see that module for wire format). Payloads
-are length-addressable via the outer value_len varint; spindle_pack does not
+The payload uses cog.spindle_pack. Payloads are length-addressable via the outer value_len varint; spindle_pack does not
 carry its own length field for the fast-path value.
 
 Varint scheme (little-endian):
@@ -30,7 +29,7 @@ from cog.spindle_pack import _encode_varint, _decode_varint, packb, unpackb
 
 
 V2_MAGIC = b'COGDB\x00'
-V2_VERSION = 0x02
+V2_VERSION = 0x02 # V2 = Spindle. Older versions are V0, V1 (no special naming)
 V2_HEADER_SIZE = 23
 
 V2_VALUE_TYPE_STR = 0x00

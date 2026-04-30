@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 DEFAULT_MAX_SIZE = 100000
 
-
+# LRU cache used to store numbers.
 class Cache:
 
     def __init__(self, cache_id, shared_cache=None, max_size=DEFAULT_MAX_SIZE):
