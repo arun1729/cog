@@ -240,7 +240,9 @@ class TestMigrateWithIndex(unittest.TestCase):
             shutil.rmtree(self.dir)
 
     def test_index_converted_to_8byte_blocks(self):
-        """Index slots change from 32-byte ASCII to 8-byte int64 LE."""
+        """Index slots change from 32-byte ASCII to 8-byte int64 LE, and the
+        record is addressable under the current slot formula after migration."""
+        from cog.core import cog_hash
         capacity = 16
         store_path = os.path.join(self.dir, "ns", f"tbl{STORE_MARKER}inst1")
         index_path = os.path.join(self.dir, "ns", f"tbl{INDEX_MARKER}inst1-0")
@@ -250,25 +252,31 @@ class TestMigrateWithIndex(unittest.TestCase):
         ])
         old_pos = positions[0][0]
 
-        # Put the store position in slot 3
+        # Put the store position somewhere in the legacy index; migration
+        # rehashes under the current slot formula, so the exact legacy slot
+        # doesn't have to match the new slot.
         _write_legacy_index(index_path, {3: old_pos}, capacity)
 
         result = migrate(self.dir)
         self.assertEqual(result['stores_migrated'], 1)
         self.assertEqual(result['indexes_migrated'], 1)
 
-        # Verify new index file size: 8 bytes * capacity
+        # Verify new index file size: 8 bytes * capacity.
         self.assertEqual(os.path.getsize(index_path), 8 * capacity)
 
-        # Verify slot 3 now holds the new position
+        # The record must be placed at whatever slot cog_hash('k1', capacity)
+        # now chooses, with its store position pointing at the record body
+        # right after the Spindle header.
+        expected_slot = cog_hash('k1', capacity)
         with open(index_path, 'rb') as f:
-            f.seek(3 * 8)
+            f.seek(expected_slot * 8)
             new_pos = struct.unpack('<q', f.read(8))[0]
         self.assertEqual(new_pos, V2_HEADER_SIZE)
 
-        # Verify empty slots are zero
+        # A different slot (not the one we rehashed into) must stay zero.
+        empty_slot = (expected_slot + 1) % capacity
         with open(index_path, 'rb') as f:
-            f.seek(0 * 8)
+            f.seek(empty_slot * 8)
             self.assertEqual(f.read(8), b'\x00' * 8)
 
     def test_index_backup_created(self):

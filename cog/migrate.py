@@ -18,6 +18,8 @@ import time
 
 from cog.codec import SpindleCodec, V2_MAGIC, V2_HEADER_SIZE
 from cog import spindle_pack
+from cog.config import INDEX_BLOCK_LEN as _NEW_INDEX_BLOCK_LEN, INDEX_CAPACITY as _NEW_INDEX_CAPACITY
+from cog.core import cog_hash
 
 # ---------------------------------------------------------------------------
 # Legacy constants (duplicated here so the migrate module is self-contained
@@ -167,32 +169,60 @@ def _migrate_store(legacy_path):
 # Index migration
 # ---------------------------------------------------------------------------
 
-def _migrate_index(index_path, pos_map):
-    """Convert a single legacy 32-byte-per-slot index to 8-byte-per-slot."""
-    legacy_empty = '-1'.zfill(_LEGACY_INDEX_BLOCK_LEN).encode()
-    spindle_empty = b'\x00' * _SPINDLE_INDEX_BLOCK_LEN
+def _migrate_index(index_path, migrated_store_path):
+    """Rebuild an index file from the migrated Spindle store.
 
-    file_size = os.path.getsize(index_path)
-    if file_size % _LEGACY_INDEX_BLOCK_LEN != 0:
+    Rather than translating legacy slot positions (which are tied to the old
+    slot formula), we scan the migrated store and call Index.put for each
+    record. This builds chains correctly under the current slot formula.
+
+    Capacity is inferred from the legacy index file size so any user-custom
+    capacity is preserved across the migration.
+    """
+    block_len = _NEW_INDEX_BLOCK_LEN
+    legacy_size = os.path.getsize(index_path)
+    if legacy_size % _LEGACY_INDEX_BLOCK_LEN != 0:
         raise ValueError(
-            f"Index file {index_path} size {file_size} is not a multiple "
+            f"Index file {index_path} size {legacy_size} is not a multiple "
             f"of legacy block length {_LEGACY_INDEX_BLOCK_LEN}"
         )
-    num_slots = file_size // _LEGACY_INDEX_BLOCK_LEN
+    capacity = legacy_size // _LEGACY_INDEX_BLOCK_LEN
+
+    # Prepare an empty new-format index in memory, then populate by walking
+    # the migrated store and appending each record into its slot chain. This
+    # replicates Index.put without needing to open an Index instance.
+    slots = bytearray(capacity * block_len)
+
+    codec = SpindleCodec(created_at=None)
+    with open(migrated_store_path, 'rb+') as sf:
+        if sf.read(6) != V2_MAGIC:
+            raise ValueError(f"expected Spindle magic in {migrated_store_path}")
+        sf.seek(V2_HEADER_SIZE)
+
+        while True:
+            pos = sf.tell()
+            raw = codec.read_record(sf)
+            if raw is None:
+                break
+            rec = codec.decode_record(raw)
+
+            slot = cog_hash(rec.key, capacity)
+            offset = slot * block_len
+            existing_head = struct.unpack_from('<q', slots, offset)[0]
+
+            # New record becomes the slot's head; its key_link points to the
+            # previous head (which may be same-key or a collision — readers
+            # walk key_link until they find a matching key).
+            new_key_link = existing_head if existing_head != 0 else -1
+            after_record = sf.tell()
+            sf.seek(pos)
+            sf.write(struct.pack('<q', new_key_link))
+            sf.seek(after_record)
+            struct.pack_into('<q', slots, offset, pos)
 
     tmp_path = index_path + '.v4_tmp'
-    with open(index_path, 'rb') as src, open(tmp_path, 'wb') as dst:
-        for _ in range(num_slots):
-            block = src.read(_LEGACY_INDEX_BLOCK_LEN)
-            if block == legacy_empty:
-                dst.write(spindle_empty)
-            else:
-                old_pos = int(block)
-                new_pos = pos_map.get(old_pos)
-                if new_pos is None:
-                    dst.write(spindle_empty)
-                else:
-                    dst.write(struct.pack('<q', new_pos))
+    with open(tmp_path, 'wb') as dst:
+        dst.write(bytes(slots))
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +323,10 @@ def migrate(db_path, remove_backups=False):
 
             idx_paths = index_files.get(key, [])
             idx_ok = True
+            migrated_store_path = store_path + '.v4_tmp'
             for idx_path in idx_paths:
                 try:
-                    _migrate_index(idx_path, pos_map)
+                    _migrate_index(idx_path, migrated_store_path)
                 except Exception as e:
                     stats['errors'].append(f"{idx_path}: {e}")
                     idx_ok = False

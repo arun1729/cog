@@ -25,12 +25,19 @@ from collections import OrderedDict
 
 # functions
 
+# Direction prefix bytes for edge-table keys. Using a 1-byte prefix (was a
+# 9-byte string suffix "__:out:__"/"__:in:__") shrinks hash input and avoids
+# per-lookup Python string concatenation.
+_OUT_PREFIX = b'\x00'
+_IN_PREFIX = b'\x01'
+
+
 def out_nodes(v):
-    return v + "__:out:__"
+    return _OUT_PREFIX + v.encode('utf-8') if type(v) is str else _OUT_PREFIX + v
 
 
 def in_nodes(v):
-    return v + "__:in:__"
+    return _IN_PREFIX + v.encode('utf-8') if type(v) is str else _IN_PREFIX + v
 
 
 # https://www.w3.org/TR/n-triples/#sec-n-triples-language
@@ -280,7 +287,7 @@ class Cog:
         return self
 
     def put(self, data):
-        assert type(data.key) is str, "key must be a string."
+        assert isinstance(data.key, (str, bytes)), "key must be str or bytes."
         position = self.current_table.store.save(data)
         self.current_table.indexer.put(data.key, position, self.current_table.store)
 
@@ -291,7 +298,7 @@ class Cog:
         :param data:
         :return:
         '''
-        assert type(data.key) is str, "Only string type is supported."
+        assert isinstance(data.key, (str, bytes)), "key must be str or bytes."
         assert type(data.value) is str, "Only string type is supported."
         # Use O(1) head lookup instead of O(n) full record load
         record, head_pos = self.current_table.indexer.get_head_only(data.key, self.current_table.store)
@@ -306,7 +313,7 @@ class Cog:
         Add a value to a set. Deduplicates via in-memory cache.
         Optimized: Uses O(1) head lookup instead of O(n) value chain traversal.
         """
-        assert isinstance(data.key, str), "Only string type is supported."
+        assert isinstance(data.key, (str, bytes)), "key must be str or bytes."
         assert isinstance(data.value, str), "Only string type is supported."
 
         cache_key = (self.current_table.table_meta.name, data.key)

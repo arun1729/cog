@@ -2,7 +2,6 @@ import mmap
 import struct
 import os
 import os.path
-import sys
 import time
 import logging
 import threading
@@ -227,7 +226,7 @@ class Index:
         """
         block_len = self._block_len
         db_mem = self.db_mem
-        orig_position, orig_hash = self.get_index(key)
+        orig_position = self.get_index(key)
         head_pos = _i64_unpack_from(db_mem, orig_position)[0]
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug('writing : %s current data at store position: %d', key, head_pos)
@@ -274,24 +273,13 @@ class Index:
         return key_link
 
     def get_index(self, key):
-        capacity = self._capacity
-        num = cog_hash(key, capacity) % ((sys.maxsize + 1) * 2)
-        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug("hash for: %s : %d", key, num)
-        # NOTE: the max(...-1, 0) causes hash 0 and 1 to collide at slot 0 and
-        # leaves slot INDEX_CAPACITY-1 unused.  The impact is negligible
-        # (~1 extra collision out of 100k slots) and changing it would break
-        # every existing index file on disk, so we keep it as is for now.
-        index = self._block_len * max((num % capacity) - 1, 0)
-        if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug("offset : %s : %d", key, index)
-        return index, num
+        return self._block_len * cog_hash(key, self._capacity)
 
     # @profile
     def get(self, key, store):
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("GET: Reading index: %s", self.name)
-        index_position, raw_hash = self.get_index(key)
+        index_position = self.get_index(key)
         db_mem = self.db_mem
         store_pos = _i64_unpack_from(db_mem, index_position)[0]
         if store_pos == 0:
@@ -320,7 +308,7 @@ class Index:
 
         Returns: (record, store_position) or (None, None)
         """
-        index_position, raw_hash = self.get_index(key)
+        index_position = self.get_index(key)
         store_position = _i64_unpack_from(self.db_mem, index_position)[0]
         if store_position == 0:
             return None, None
@@ -375,7 +363,7 @@ class Index:
             self.logger.debug("DELETE: Reading index: %s", self.name)
         block_len = self._block_len
         db_mem = self.db_mem
-        index_position, raw_hash = self.get_index(key)
+        index_position = self.get_index(key)
 
         head_pos = _i64_unpack_from(db_mem, index_position)[0]
         if head_pos == 0:
