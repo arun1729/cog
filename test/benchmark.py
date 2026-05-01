@@ -210,6 +210,36 @@ def benchmark_query_multi_hop(g: Graph, sample_vertices: List[str], label: str) 
     )
 
 
+def benchmark_query_three_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().out().out().all() — three-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").out("follows").out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().out().out().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_four_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().out().out().out().all() — four-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").out("follows").out("follows").out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out()x4.all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
 def benchmark_query_reverse(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
     """v(x).inc().all() — reverse traversal (who follows x?)"""
     n = len(sample_vertices)
@@ -325,18 +355,41 @@ def run_query_benchmarks(sizes: List[int] = None):
         # A fixed target for has() filter
         target = f"user_{num_users // 2}"
 
-        print(f"\n--- Query benchmarks on social graph with {num_users} users ---")
+        # --- Pass A: paths ON (default — backward-compat behavior) ---
+        g._track_paths = True
+        print(f"\n--- Query benchmarks on social graph with {num_users} users [paths=ON] ---")
 
-        for bench_fn, extra_args in [
+        bench_specs = [
             (benchmark_query_single_hop, (g, sample, label)),
-            (benchmark_query_multi_hop, (g, sample, label)),
-            (benchmark_query_reverse,   (g, sample, label)),
+            (benchmark_query_multi_hop,  (g, sample, label)),
+            (benchmark_query_three_hop,  (g, sample[:20], label)),  # 3-hop fanout grows fast
+            (benchmark_query_four_hop,   (g, sample[:10], label)),  # 4-hop fanout very large
+            (benchmark_query_reverse,    (g, sample, label)),
             (benchmark_query_has_filter, (g, sample, target, label)),
-            (benchmark_query_count,     (g, sample, label)),
-            (benchmark_query_bfs,       (g, sample[:10], label)),  # BFS is expensive, fewer ops
-            (benchmark_query_tagged,    (g, sample, label)),
-            (benchmark_query_scan,      (g, 50, label)),
-        ]:
+            (benchmark_query_count,      (g, sample, label)),
+            (benchmark_query_bfs,        (g, sample[:10], label)),  # BFS is expensive, fewer ops
+            (benchmark_query_tagged,     (g, sample, label)),
+            (benchmark_query_scan,       (g, 50, label)),
+        ]
+        for bench_fn, extra_args in bench_specs:
+            result = bench_fn(*extra_args)
+            all_results.append(result)
+            print(result)
+
+        # --- Pass B: paths OFF (fast traversal — skips _path/tags + dedupes frontier) ---
+        # Skip benchmark_query_tagged (requires path tracking) and scan (irrelevant).
+        g._track_paths = False
+        print(f"\n--- Query benchmarks on social graph with {num_users} users [paths=OFF] ---")
+        fast_specs = [
+            (benchmark_query_single_hop, (g, sample, label + "/fast")),
+            (benchmark_query_multi_hop,  (g, sample, label + "/fast")),
+            (benchmark_query_three_hop,  (g, sample[:20], label + "/fast")),
+            (benchmark_query_four_hop,   (g, sample[:10], label + "/fast")),
+            (benchmark_query_reverse,    (g, sample, label + "/fast")),
+            (benchmark_query_count,      (g, sample, label + "/fast")),
+            (benchmark_query_bfs,        (g, sample[:10], label + "/fast")),
+        ]
+        for bench_fn, extra_args in fast_specs:
             result = bench_fn(*extra_args)
             all_results.append(result)
             print(result)

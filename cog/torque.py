@@ -116,6 +116,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._default_provider = "cogdb"
             self._default_provider_kwargs = {}
             self._vectorize_configured = False
+            self._track_paths = True
             self.logger.debug(f"Torque cloud mode on graph: {graph_name}")
             # No local storage initialized
             return
@@ -169,6 +170,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self._server_port = None  # Port this graph is being served on
         self._default_provider = "cogdb"  # Provider for auto-embed in queries
         self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
+        self._track_paths = True
         self._vectorize_configured = False  # True after explicit vectorize() call
 
     # === Cloud Traversal Helpers ===
@@ -914,39 +916,44 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.logger.debug("direction: " + str(direction) + " predicates: " + str(self.all_predicates))
         traverse_vertex = []
         node_fn = out_nodes if direction == "out" else in_nodes
+        track = self._track_paths
+        seen = None if track else set()
         for predicate in predicates:
             self.logger.debug("__hop predicate: " + predicate + " of " + str(predicates))
             table = self.cog.get_table(predicate, self.graph_name)
             indexer = table.indexer
             store = table.store
-            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate) if track else None
             for v in self.last_visited_vertices:
                 record = indexer.get(node_fn(v.id), store)
-                if record is not None:
-                    if record.value_type == "s":
-                        v_adjacent = str(record.value)
+                if record is None:
+                    continue
+                if record.value_type == "s":
+                    neighbors = [str(record.value)]
+                else:
+                    neighbors = list(record.value)
+                if track:
+                    parent_path = v._path or [{'vertex': v.id}]
+                    v_tags = v.tags
+                    for v_adjacent in neighbors:
                         if func is not None and not func(v_adjacent):
                             continue
-                        v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
-                        v_adjacent_obj.tags.update(v.tags)
-                        parent_path = v._path or [{'vertex': v.id}]
-                        v_adjacent_obj._path = parent_path + [
+                        v_obj = Vertex(v_adjacent).set_edge(predicate)
+                        if v_tags:
+                            v_obj.tags.update(v_tags)
+                        v_obj._path = parent_path + [
                             {'edge': edge_label},
                             {'vertex': v_adjacent}
                         ]
-                        traverse_vertex.append(v_adjacent_obj)
-                    elif record.value_type == "l":
-                        for v_adjacent in record.value:
-                            if func is not None and not func(v_adjacent):
-                                continue
-                            v_adjacent_obj = Vertex(v_adjacent).set_edge(predicate)
-                            v_adjacent_obj.tags.update(v.tags)
-                            parent_path = v._path or [{'vertex': v.id}]
-                            v_adjacent_obj._path = parent_path + [
-                                {'edge': edge_label},
-                                {'vertex': v_adjacent}
-                            ]
-                            traverse_vertex.append(v_adjacent_obj)
+                        traverse_vertex.append(v_obj)
+                else:
+                    for v_adjacent in neighbors:
+                        if v_adjacent in seen:
+                            continue
+                        if func is not None and not func(v_adjacent):
+                            continue
+                        seen.add(v_adjacent)
+                        traverse_vertex.append(Vertex(v_adjacent))
         self.last_visited_vertices = traverse_vertex
 
     def filter(self, func):
@@ -980,60 +987,53 @@ class Graph(EmbeddingMixin, TraversalMixin):
 
         self.cog.use_namespace(self.graph_name)
         traverse_vertex = []
+        track = self._track_paths
+        seen = None if track else set()
+
+        def _resolve(key, node_fn, indexer, store):
+            rec = indexer.get(node_fn(key), store)
+            if rec is None:
+                return ()
+            return [str(rec.value)] if rec.value_type == "s" else list(rec.value)
 
         for predicate in predicates:
             table = self.cog.get_table(predicate, self.graph_name)
             indexer = table.indexer
             store = table.store
-            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate) if track else None
             for v in self.last_visited_vertices:
-                # Outgoing edges
-                out_record = indexer.get(out_nodes(v.id), store)
-                if out_record is not None:
-                    if out_record.value_type == "s":
-                        v_adjacent = str(out_record.value)
+                out_neighbors = _resolve(v.id, out_nodes, indexer, store)
+                in_neighbors = _resolve(v.id, in_nodes, indexer, store)
+                if track:
+                    parent_path = v._path or [{'vertex': v.id}]
+                    v_tags = v.tags
+                    for v_adjacent in out_neighbors:
                         v_adj = Vertex(v_adjacent).set_edge(predicate)
-                        v_adj.tags.update(v.tags)
-                        parent_path = v._path or [{'vertex': v.id}]
+                        if v_tags:
+                            v_adj.tags.update(v_tags)
                         v_adj._path = parent_path + [
-                            {'edge': edge_label},
-                            {'vertex': v_adjacent}
+                            {'edge': edge_label}, {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
-                    elif out_record.value_type == "l":
-                        for v_adjacent in out_record.value:
-                            v_adj = Vertex(v_adjacent).set_edge(predicate)
-                            v_adj.tags.update(v.tags)
-                            parent_path = v._path or [{'vertex': v.id}]
-                            v_adj._path = parent_path + [
-                                {'edge': edge_label},
-                                {'vertex': v_adjacent}
-                            ]
-                            traverse_vertex.append(v_adj)
-
-                # Incoming edges
-                in_record = indexer.get(in_nodes(v.id), store)
-                if in_record is not None:
-                    if in_record.value_type == "s":
-                        v_adjacent = str(in_record.value)
+                    for v_adjacent in in_neighbors:
                         v_adj = Vertex(v_adjacent).set_edge(predicate)
-                        v_adj.tags.update(v.tags)
-                        parent_path = v._path or [{'vertex': v.id}]
+                        if v_tags:
+                            v_adj.tags.update(v_tags)
                         v_adj._path = parent_path + [
-                            {'edge': edge_label},
-                            {'vertex': v_adjacent}
+                            {'edge': edge_label}, {'vertex': v_adjacent}
                         ]
                         traverse_vertex.append(v_adj)
-                    elif in_record.value_type == "l":
-                        for v_adjacent in in_record.value:
-                            v_adj = Vertex(v_adjacent).set_edge(predicate)
-                            v_adj.tags.update(v.tags)
-                            parent_path = v._path or [{'vertex': v.id}]
-                            v_adj._path = parent_path + [
-                                {'edge': edge_label},
-                                {'vertex': v_adjacent}
-                            ]
-                            traverse_vertex.append(v_adj)
+                else:
+                    for v_adjacent in out_neighbors:
+                        if v_adjacent in seen:
+                            continue
+                        seen.add(v_adjacent)
+                        traverse_vertex.append(Vertex(v_adjacent))
+                    for v_adjacent in in_neighbors:
+                        if v_adjacent in seen:
+                            continue
+                        seen.add(v_adjacent)
+                        traverse_vertex.append(Vertex(v_adjacent))
 
         self.last_visited_vertices = traverse_vertex
         return self
