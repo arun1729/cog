@@ -57,6 +57,7 @@ class TraversalMixin:
             predicates = self.all_predicates
 
         from cog.torque import Vertex
+        self._materialize()
         result_vertices = []
         visited = set()
         queue = deque()  # (vertex, depth)
@@ -152,6 +153,7 @@ class TraversalMixin:
             predicates = self.all_predicates
 
         from cog.torque import Vertex
+        self._materialize()
         result_vertices = []
         visited = set()
         stack = []  # (vertex, depth)

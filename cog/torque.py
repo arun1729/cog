@@ -1,5 +1,6 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate, parse_tripple
+from cog.matrix_graph import MatrixGraph
 import json
 import logging
 from . import config as cfg
@@ -117,6 +118,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._default_provider_kwargs = {}
             self._vectorize_configured = False
             self._track_paths = True
+            self._mg = {}
             self.logger.debug(f"Torque cloud mode on graph: {graph_name}")
             # No local storage initialized
             return
@@ -171,6 +173,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self._default_provider = "cogdb"  # Provider for auto-embed in queries
         self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
         self._track_paths = True
+        self._mg = {}  # pred_hash -> MatrixGraph, lazily loaded
         self._vectorize_configured = False  # True after explicit vectorize() call
 
     # === Cloud Traversal Helpers ===
@@ -342,6 +345,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
     def refresh(self):
         if self._cloud:
             return  # No-op in cloud mode
+        self._mg.clear()
         self.cog.refresh_all()
 
     def ls(self):
@@ -408,6 +412,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.all_predicates = self.cog.list_tables()
         # Rebuild predicate reverse lookup cache for the new graph
         self._predicate_reverse_lookup_cache = {}
+        self._mg.clear()
         try:
             for pred_hash in self.all_predicates:
                 edge_record = self.cog.use_table(
@@ -523,6 +528,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_triples(graph_data_path, graph_name)
         self.all_predicates = self.cog.list_tables()
+        self._mg.clear()
         # Rebuild _predicate_reverse_lookup_cache by parsing the triples file
         with open(graph_data_path) as f:
             for line in f:
@@ -564,6 +570,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         graph_name = self.graph_name if graph_name is None else graph_name
         self.cog.load_csv(csv_path, id_column_name, graph_name)
         self.all_predicates = self.cog.list_tables()
+        self._mg.clear()
         # Rebuild _predicate_reverse_lookup_cache from CSV column headers
         import csv
         with open(csv_path) as csv_file:
@@ -584,7 +591,8 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._cloud_client.mutate_put(vertex1, predicate, vertex2,
                                           update=update, create_new_edge=create_new_edge)
             return self
-        self._predicate_reverse_lookup_cache[hash_predicate(predicate)] = predicate
+        pred_h = hash_predicate(predicate)
+        self._predicate_reverse_lookup_cache[pred_h] = predicate
         self.cog.use_namespace(self.graph_name)
         if update:
             if create_new_edge:
@@ -593,6 +601,12 @@ class Graph(EmbeddingMixin, TraversalMixin):
                 self.cog.update_edge(vertex1, predicate, vertex2)
         else:
             self.cog.put_node(vertex1, predicate, vertex2)
+        mg = self._mg.get(pred_h)
+        if mg is not None:
+            if update and not create_new_edge:
+                mg.replace_out(str(vertex1), str(vertex2))
+            else:
+                mg.add_edge(str(vertex1), str(vertex2))
         self.all_predicates = self.cog.list_tables()
         return self
 
@@ -625,8 +639,12 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.cog.begin_batch()
         try:
             for v1, pred, v2 in triples:
-                self._predicate_reverse_lookup_cache[hash_predicate(pred)] = pred
+                pred_h = hash_predicate(pred)
+                self._predicate_reverse_lookup_cache[pred_h] = pred
                 self.cog.put_node(v1, pred, v2)
+                mg = self._mg.get(pred_h)
+                if mg is not None:
+                    mg.add_edge(str(v1), str(v2))
         finally:
             self.cog.end_batch()
         self.all_predicates = self.cog.list_tables()
@@ -649,6 +667,10 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._cloud_client.mutate_delete(vertex1, predicate, vertex2)
             return self
         self.cog.delete_edge(vertex1, predicate, vertex2)
+        pred_h = hash_predicate(predicate)
+        mg = self._mg.get(pred_h)
+        if mg is not None:
+            mg.remove_edge(str(vertex1), str(vertex2))
         return self
 
     def drop(self, *args):
@@ -672,10 +694,11 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._cloud_client.mutate_drop()
             return
         
-        # Clear the cache
+        # Clear caches
         if self.cache is not None:
             self.cache.clear()
-        
+        self._mg.clear()
+
         # Unregister from server if currently served
         self.stop()
         
@@ -724,9 +747,10 @@ class Graph(EmbeddingMixin, TraversalMixin):
                     else:
                         os.remove(item_path)
             
-            # Clear the cache to prevent stale data
+            # Clear caches to prevent stale data
             if self.cache is not None:
                 self.cache.clear()
+            self._mg.clear()
         finally:
             # Re-initialize the graph to ensure the object remains usable,
             # even if some files could not be deleted.
@@ -815,15 +839,30 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.__hop("in", predicates, func=func)
         return self
 
+    def _materialize(self):
+        """If last_visited_vertices is a raw set of IDs (fast-path), convert to Vertex list."""
+        lvv = self.last_visited_vertices
+        if isinstance(lvv, set):
+            self.last_visited_vertices = [Vertex(nid) for nid in lvv]
+
+    def _get_mg(self, pred_hash):
+        mg = self._mg.get(pred_hash)
+        if mg is None:
+            mg = MatrixGraph()
+            table = self.cog.get_table(pred_hash, self.graph_name)
+            mg.load_from_table(table)
+            self._mg[pred_hash] = mg
+        return mg
+
     def __adjacent_vertices(self, vertex, predicates, direction='out'):
         self.cog.use_namespace(self.graph_name)
         adjacent_vertices = []
-        node_fn = out_nodes if direction == 'out' else in_nodes
+        get_nbrs = (lambda mg, nid: mg.get_out(nid)) if direction == 'out' else (lambda mg, nid: mg.get_in(nid))
         for predicate in predicates:
-            table = self.cog.get_table(predicate, self.graph_name)
-            record = table.indexer.get(node_fn(vertex.id), table.store)
-            if record is not None:
-                for v_adj in record.value:
+            mg = self._get_mg(predicate)
+            nbrs = get_nbrs(mg, vertex.id)
+            if nbrs:
+                for v_adj in nbrs:
                     adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
 
         return adjacent_vertices
@@ -844,6 +883,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                 predicates = [predicates]
             predicates = list(map(hash_predicate, predicates))
 
+        self._materialize()
         has_vertices = []
         for lv in self.last_visited_vertices:
             adj_vertices = self.__adjacent_vertices(lv, predicates)
@@ -870,6 +910,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                 predicates = [predicates]
             predicates = list(map(hash_predicate, predicates))
 
+        self._materialize()
         has_vertices = []
         for lv in self.last_visited_vertices:
             adj_vertices = self.__adjacent_vertices(lv, predicates, 'in')
@@ -914,46 +955,55 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self.cog.use_namespace(self.graph_name)
         self.logger.debug("hopping from vertices: " + str(map(lambda x: x.id, self.last_visited_vertices)))
         self.logger.debug("direction: " + str(direction) + " predicates: " + str(self.all_predicates))
-        traverse_vertex = []
-        node_fn = out_nodes if direction == "out" else in_nodes
+
         track = self._track_paths
-        seen = None if track else set()
+
+        if not track:
+            # Bulk set expansion — no Vertex objects between hops.
+            # last_visited_vertices may be a set of raw IDs (from a previous
+            # fast-path hop) or a list of Vertex objects (from v() or track mode).
+            lvv = self.last_visited_vertices
+            if lvv and isinstance(lvv, set):
+                frontier_ids = lvv
+            else:
+                frontier_ids = {v.id for v in lvv}
+            result_ids = set()
+            for predicate in predicates:
+                mg = self._get_mg(predicate)
+                get_nbrs = mg.get_out if direction == "out" else mg.get_in
+                for nid in frontier_ids:
+                    nbrs = get_nbrs(nid)
+                    if nbrs:
+                        result_ids.update(nbrs)
+            if func is not None:
+                result_ids = {nid for nid in result_ids if func(nid)}
+            self.last_visited_vertices = result_ids
+            return
+
+        # Track-paths path: full bookkeeping.
+        traverse_vertex = []
         for predicate in predicates:
             self.logger.debug("__hop predicate: " + predicate + " of " + str(predicates))
-            table = self.cog.get_table(predicate, self.graph_name)
-            indexer = table.indexer
-            store = table.store
-            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate) if track else None
+            mg = self._get_mg(predicate)
+            get_nbrs = mg.get_out if direction == "out" else mg.get_in
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
-                record = indexer.get(node_fn(v.id), store)
-                if record is None:
+                neighbors = get_nbrs(v.id)
+                if not neighbors:
                     continue
-                if record.value_type == "s":
-                    neighbors = [str(record.value)]
-                else:
-                    neighbors = list(record.value)
-                if track:
-                    parent_path = v._path or [{'vertex': v.id}]
-                    v_tags = v.tags
-                    for v_adjacent in neighbors:
-                        if func is not None and not func(v_adjacent):
-                            continue
-                        v_obj = Vertex(v_adjacent).set_edge(predicate)
-                        if v_tags:
-                            v_obj.tags.update(v_tags)
-                        v_obj._path = parent_path + [
-                            {'edge': edge_label},
-                            {'vertex': v_adjacent}
-                        ]
-                        traverse_vertex.append(v_obj)
-                else:
-                    for v_adjacent in neighbors:
-                        if v_adjacent in seen:
-                            continue
-                        if func is not None and not func(v_adjacent):
-                            continue
-                        seen.add(v_adjacent)
-                        traverse_vertex.append(Vertex(v_adjacent))
+                parent_path = v._path or [{'vertex': v.id}]
+                v_tags = v.tags
+                for v_adjacent in neighbors:
+                    if func is not None and not func(v_adjacent):
+                        continue
+                    v_obj = Vertex(v_adjacent).set_edge(predicate)
+                    if v_tags:
+                        v_obj.tags.update(v_tags)
+                    v_obj._path = parent_path + [
+                        {'edge': edge_label},
+                        {'vertex': v_adjacent}
+                    ]
+                    traverse_vertex.append(v_obj)
         self.last_visited_vertices = traverse_vertex
 
     def filter(self, func):
@@ -965,6 +1015,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
                 "filter() with a Python lambda is not supported in cloud mode. "
                 "Use has()/hasr()/is_() for server-side filtering."
             )
+        self._materialize()
         self.last_visited_vertices = [v for v in self.last_visited_vertices if func(v.id)]
         return self
 
@@ -986,54 +1037,48 @@ class Graph(EmbeddingMixin, TraversalMixin):
             predicates = self.all_predicates
 
         self.cog.use_namespace(self.graph_name)
+
+        if not self._track_paths:
+            lvv = self.last_visited_vertices
+            frontier = lvv if isinstance(lvv, set) else {v.id for v in lvv}
+            result = set()
+            for predicate in predicates:
+                mg = self._get_mg(predicate)
+                for nid in frontier:
+                    nbrs = mg.get_out(nid)
+                    if nbrs:
+                        result.update(nbrs)
+                    nbrs = mg.get_in(nid)
+                    if nbrs:
+                        result.update(nbrs)
+            self.last_visited_vertices = result
+            return self
+
         traverse_vertex = []
-        track = self._track_paths
-        seen = None if track else set()
-
-        def _resolve(key, node_fn, indexer, store):
-            rec = indexer.get(node_fn(key), store)
-            if rec is None:
-                return ()
-            return [str(rec.value)] if rec.value_type == "s" else list(rec.value)
-
         for predicate in predicates:
-            table = self.cog.get_table(predicate, self.graph_name)
-            indexer = table.indexer
-            store = table.store
-            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate) if track else None
+            mg = self._get_mg(predicate)
+            edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
-                out_neighbors = _resolve(v.id, out_nodes, indexer, store)
-                in_neighbors = _resolve(v.id, in_nodes, indexer, store)
-                if track:
-                    parent_path = v._path or [{'vertex': v.id}]
-                    v_tags = v.tags
-                    for v_adjacent in out_neighbors:
-                        v_adj = Vertex(v_adjacent).set_edge(predicate)
-                        if v_tags:
-                            v_adj.tags.update(v_tags)
-                        v_adj._path = parent_path + [
-                            {'edge': edge_label}, {'vertex': v_adjacent}
-                        ]
-                        traverse_vertex.append(v_adj)
-                    for v_adjacent in in_neighbors:
-                        v_adj = Vertex(v_adjacent).set_edge(predicate)
-                        if v_tags:
-                            v_adj.tags.update(v_tags)
-                        v_adj._path = parent_path + [
-                            {'edge': edge_label}, {'vertex': v_adjacent}
-                        ]
-                        traverse_vertex.append(v_adj)
-                else:
-                    for v_adjacent in out_neighbors:
-                        if v_adjacent in seen:
-                            continue
-                        seen.add(v_adjacent)
-                        traverse_vertex.append(Vertex(v_adjacent))
-                    for v_adjacent in in_neighbors:
-                        if v_adjacent in seen:
-                            continue
-                        seen.add(v_adjacent)
-                        traverse_vertex.append(Vertex(v_adjacent))
+                out_neighbors = mg.get_out(v.id) or ()
+                in_neighbors = mg.get_in(v.id) or ()
+                parent_path = v._path or [{'vertex': v.id}]
+                v_tags = v.tags
+                for v_adjacent in out_neighbors:
+                    v_adj = Vertex(v_adjacent).set_edge(predicate)
+                    if v_tags:
+                        v_adj.tags.update(v_tags)
+                    v_adj._path = parent_path + [
+                        {'edge': edge_label}, {'vertex': v_adjacent}
+                    ]
+                    traverse_vertex.append(v_adj)
+                for v_adjacent in in_neighbors:
+                    v_adj = Vertex(v_adjacent).set_edge(predicate)
+                    if v_tags:
+                        v_adj.tags.update(v_tags)
+                    v_adj._path = parent_path + [
+                        {'edge': edge_label}, {'vertex': v_adjacent}
+                    ]
+                    traverse_vertex.append(v_adj)
 
         self.last_visited_vertices = traverse_vertex
         return self
@@ -1051,7 +1096,11 @@ class Graph(EmbeddingMixin, TraversalMixin):
             node_set = set(nodes[0])
         else:
             node_set = set(nodes)
-        self.last_visited_vertices = [v for v in self.last_visited_vertices if v.id in node_set]
+        lvv = self.last_visited_vertices
+        if isinstance(lvv, set):
+            self.last_visited_vertices = [Vertex(nid) for nid in lvv if nid in node_set]
+        else:
+            self.last_visited_vertices = [v for v in lvv if v.id in node_set]
         return self
 
     def unique(self):
@@ -1061,6 +1110,9 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         if self._cloud:
             return self._cloud_append("unique")
+        if isinstance(self.last_visited_vertices, set):
+            self.last_visited_vertices = [Vertex(nid) for nid in self.last_visited_vertices]
+            return self
         seen = set()
         unique_vertices = []
         for v in self.last_visited_vertices:
@@ -1078,6 +1130,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         if self._cloud:
             return self._cloud_append("limit", n=n)
+        self._materialize()
         self.last_visited_vertices = self.last_visited_vertices[:n]
         return self
 
@@ -1089,6 +1142,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         if self._cloud:
             return self._cloud_append("skip", n=n)
+        self._materialize()
         self.last_visited_vertices = self.last_visited_vertices[n:]
         return self
 
@@ -1104,6 +1158,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         '''
         if self._cloud:
             return self._cloud_append("order", direction=direction)
+        self._materialize()
         reverse = (direction == "desc")
         self.last_visited_vertices = sorted(self.last_visited_vertices, key=lambda v: v.id, reverse=reverse)
         return self
@@ -1141,6 +1196,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
             return self._cloud_append("tag", tag_names=names)
         if not isinstance(tag_names, list):
             tag_names = [tag_names]
+        self._materialize()
         for v in self.last_visited_vertices:
             for tag_name in tag_names:
                 # Validate tag name to prevent XSS in view output
@@ -1163,6 +1219,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         if self._cloud:
             return self._cloud_execute_chain("all", options=options)
+        self._materialize()
         result = []
         show_edge = True if options is not None and 'e' in options else False
         for v in self.last_visited_vertices:
