@@ -1,6 +1,6 @@
 from cog.database import Cog
 from cog.database import in_nodes, out_nodes, hash_predicate, parse_tripple
-from cog.matrix_graph import MatrixGraph
+from cog.memory_view import MemoryView
 import json
 import logging
 from . import config as cfg
@@ -173,7 +173,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self._default_provider = "cogdb"  # Provider for auto-embed in queries
         self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
         self._track_paths = True
-        self._mg = {}  # pred_hash -> MatrixGraph, lazily loaded
+        self._mg = {}  # pred_hash -> MemoryView, lazily loaded
         self._vectorize_configured = False  # True after explicit vectorize() call
 
     # === Cloud Traversal Helpers ===
@@ -848,7 +848,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
     def _get_mg(self, pred_hash):
         mg = self._mg.get(pred_hash)
         if mg is None:
-            mg = MatrixGraph()
+            mg = MemoryView()
             table = self.cog.get_table(pred_hash, self.graph_name)
             mg.load_from_table(table)
             self._mg[pred_hash] = mg

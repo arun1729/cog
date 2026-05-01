@@ -15,7 +15,7 @@ from cog.database import hash_predicate
 _PRESENT = True
 
 
-class MatrixGraph:
+class MemoryView:
 
     def __init__(self):
         self._out = {}  # src -> dict{target: True}  (ordered set)
