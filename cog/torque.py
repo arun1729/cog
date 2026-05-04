@@ -848,9 +848,8 @@ class Graph(EmbeddingMixin, TraversalMixin):
     def _get_mg(self, pred_hash):
         mg = self._mg.get(pred_hash)
         if mg is None:
-            mg = MemoryView()
             table = self.cog.get_table(pred_hash, self.graph_name)
-            mg.load_from_table(table)
+            mg = MemoryView(table)
             self._mg[pred_hash] = mg
         return mg
 

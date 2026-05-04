@@ -1,42 +1,83 @@
 """
-In-memory adjacency graph for fast multi-hop traversals.
+In-memory adjacency view with demand paging.
 
-Maintains outgoing and incoming edge dicts that are kept in sync
-with the on-disk store via add_edge / remove_edge calls from Graph.
+Loads edges from a predicate table in pages using a resumable scanner.
+On a cache miss, falls back to a single-key disk read and caches the
+result so the same vertex never misses twice.
 
-Uses dicts-as-ordered-sets to preserve insertion order from disk,
-which matters for tests that assert result ordering.
+Writes are applied inline via add_edge / remove_edge so the view
+never goes stale relative to disk.
 
 Pure Python, no external dependencies.
 """
 
-from cog.database import hash_predicate
+from cog.database import out_nodes, in_nodes
 
 _PRESENT = True
+
+DEFAULT_PAGE_SIZE = 50_000
 
 
 class MemoryView:
 
-    def __init__(self):
-        self._out = {}  # src -> dict{target: True}  (ordered set)
-        self._in = {}   # tgt -> dict{source: True}
+    def __init__(self, table, page_size=None):
+        self._table = table
+        self._page_size = page_size or DEFAULT_PAGE_SIZE
+        self._out = {}   # src -> dict{target: True}  (ordered set)
+        self._in = {}    # tgt -> dict{source: True}
+        self._scanner = table.indexer.scanner(table.store)
+        self._fully_loaded = False
+        self._load_page()
 
-    def load_from_table(self, table):
-        out = {}
-        inv = {}
-        for record in table.indexer.scanner(table.store):
-            key_bytes = record.key
-            if not isinstance(key_bytes, (bytes, bytearray)):
-                continue
-            prefix = key_bytes[0:1]
-            node = key_bytes[1:].decode('utf-8')
-            targets = dict.fromkeys(record.value, _PRESENT)
-            if prefix == b'\x00':
-                out[node] = targets
-            elif prefix == b'\x01':
-                inv[node] = targets
-        self._out = out
-        self._in = inv
+    def _load_page(self):
+        if self._fully_loaded:
+            return
+        count = 0
+        for record in self._scanner:
+            self._ingest_record(record)
+            count += 1
+            if count >= self._page_size:
+                return
+        self._fully_loaded = True
+        self._scanner = None
+
+    def _ingest_record(self, record):
+        key_bytes = record.key
+        if not isinstance(key_bytes, (bytes, bytearray)):
+            return
+        prefix = key_bytes[0:1]
+        node = key_bytes[1:].decode('utf-8')
+        targets = dict.fromkeys(record.value, _PRESENT)
+        if prefix == b'\x00':
+            self._out[node] = targets
+        elif prefix == b'\x01':
+            self._in[node] = targets
+
+    def _demand_load(self, node_id, direction):
+        """Single-key disk read on cache miss. Caches the result."""
+        indexer = self._table.indexer
+        store = self._table.store
+        if direction == 'out':
+            record = indexer.get(out_nodes(node_id), store)
+            if record is not None:
+                self._out[node_id] = dict.fromkeys(record.value, _PRESENT)
+                return self._out[node_id]
+            self._out[node_id] = {}
+            return None
+        else:
+            record = indexer.get(in_nodes(node_id), store)
+            if record is not None:
+                self._in[node_id] = dict.fromkeys(record.value, _PRESENT)
+                return self._in[node_id]
+            self._in[node_id] = {}
+            return None
+
+    def load_more(self):
+        self._load_page()
+
+    @property
+    def fully_loaded(self):
+        return self._fully_loaded
 
     def add_edge(self, src, tgt):
         o = self._out.get(src)
@@ -75,9 +116,21 @@ class MemoryView:
     def clear(self):
         self._out.clear()
         self._in.clear()
+        self._scanner = self._table.indexer.scanner(self._table.store)
+        self._fully_loaded = False
 
     def get_out(self, node_id):
-        return self._out.get(node_id)
+        result = self._out.get(node_id)
+        if result is not None:
+            return result if result else None
+        if not self._fully_loaded:
+            return self._demand_load(node_id, 'out')
+        return None
 
     def get_in(self, node_id):
-        return self._in.get(node_id)
+        result = self._in.get(node_id)
+        if result is not None:
+            return result if result else None
+        if not self._fully_loaded:
+            return self._demand_load(node_id, 'in')
+        return None
