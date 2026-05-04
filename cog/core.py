@@ -7,7 +7,7 @@ import logging
 import threading
 import queue
 # from profilehooks import profile
-from cog.cache import Cache
+from cog.store_cache import StoreCache
 from cog.codec import (
     SpindleCodec,
     detect_codec,
@@ -430,7 +430,7 @@ class Store:
 
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
-        self.store_cache = Cache(self.store, shared_cache)
+        self.store_cache = StoreCache(self.store, shared_cache)
         fd = os.open(self.store, os.O_RDWR | os.O_CREAT, 0o644)
         self.store_file = os.fdopen(fd, 'rb+')
 

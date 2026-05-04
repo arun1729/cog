@@ -1,14 +1,14 @@
 from cog.core import Record
-from cog.cache import Cache
+from cog.store_cache import StoreCache
 import unittest
 
 DIR_NAME = "TestCore"
 
 
-class TestCache(unittest.TestCase):
+class TestStoreCache(unittest.TestCase):
 
     def test_record(self):
-        cache = Cache("test_cache")
+        cache = StoreCache("test_cache")
         record = Record("rocket", "saturn-v", store_position=25, key_link=5, value_type='l', value_link=54378)
         cache.put(0, record)
         cached = cache.get(0)

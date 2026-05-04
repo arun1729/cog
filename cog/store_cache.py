@@ -4,8 +4,8 @@ from collections import OrderedDict
 
 DEFAULT_MAX_SIZE = 100000
 
-# LRU cache used to store numbers.
-class Cache:
+# LRU cache for Store record lookups by position.
+class StoreCache:
 
     def __init__(self, cache_id, shared_cache=None, max_size=DEFAULT_MAX_SIZE):
         self.logger = logging.getLogger(__name__)
