@@ -20,14 +20,19 @@ DEFAULT_PAGE_SIZE = 50_000
 
 class MemoryView:
 
-    def __init__(self, table, page_size=None):
+    def __init__(self, table, page_size=None, shared_out=None, shared_in=None):
         self._table = table
         self._page_size = page_size or DEFAULT_PAGE_SIZE
-        self._out = {}   # src -> dict{target: True}  (ordered set)
-        self._in = {}    # tgt -> dict{source: True}
-        self._scanner = table.indexer.scanner(table.store)
-        self._fully_loaded = False
-        self._load_page()
+        self._out = shared_out if shared_out is not None else {}
+        self._in = shared_in if shared_in is not None else {}
+        self._shared = shared_out is not None
+        if self._shared:
+            self._scanner = None
+            self._fully_loaded = True
+        else:
+            self._scanner = table.indexer.scanner(table.store)
+            self._fully_loaded = False
+            self._load_page()
 
     def _load_page(self):
         if self._fully_loaded:
@@ -116,8 +121,9 @@ class MemoryView:
     def clear(self):
         self._out.clear()
         self._in.clear()
-        self._scanner = self._table.indexer.scanner(self._table.store)
-        self._fully_loaded = False
+        if not self._shared:
+            self._scanner = self._table.indexer.scanner(self._table.store)
+            self._fully_loaded = False
 
     def get_out(self, node_id):
         result = self._out.get(node_id)
