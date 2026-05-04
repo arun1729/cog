@@ -57,9 +57,11 @@ class TraversalMixin:
             predicates = self.all_predicates
 
         from cog.torque import Vertex
+        self._materialize()
         result_vertices = []
         visited = set()
         queue = deque()  # (vertex, depth)
+        track = self._track_paths
 
         # Initialize with current vertices at depth 0
         for v in self.last_visited_vertices:
@@ -72,20 +74,26 @@ class TraversalMixin:
 
             if until and until(current.id):
                 if depth >= min_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
+                    if track:
+                        result_vertex = Vertex(current.id)
+                        result_vertex.tags = current.tags.copy()
+                        result_vertex.edges = current.edges.copy()
+                        result_vertex._path = current._path
+                        result_vertices.append(result_vertex)
+                    else:
+                        result_vertices.append(Vertex(current.id))
                 continue
 
             if depth > 0 and depth >= min_depth:
                 if max_depth is None or depth <= max_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
+                    if track:
+                        result_vertex = Vertex(current.id)
+                        result_vertex.tags = current.tags.copy()
+                        result_vertex.edges = current.edges.copy()
+                        result_vertex._path = current._path
+                        result_vertices.append(result_vertex)
+                    else:
+                        result_vertices.append(Vertex(current.id))
 
             # Stop exploring if at max depth
             if max_depth is not None and depth >= max_depth:
@@ -97,12 +105,12 @@ class TraversalMixin:
                     if adj.id in visited:
                         continue
                     visited.add(adj.id)
-                adj.tags = current.tags.copy()
-                # Build path for neighbor from parent's path
-                parent_path = current._path or [{'vertex': current.id}]
-                edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
-                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
+                if track:
+                    adj.tags = current.tags.copy()
+                    parent_path = current._path or [{'vertex': current.id}]
+                    edge_hash = next(iter(adj.edges)) if adj.edges else None
+                    edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
+                    adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 queue.append((adj, depth + 1))
 
         self.last_visited_vertices = result_vertices
@@ -145,9 +153,11 @@ class TraversalMixin:
             predicates = self.all_predicates
 
         from cog.torque import Vertex
+        self._materialize()
         result_vertices = []
         visited = set()
         stack = []  # (vertex, depth)
+        track = self._track_paths
 
         # Initialize with current vertices at depth 0
         for v in self.last_visited_vertices:
@@ -160,20 +170,26 @@ class TraversalMixin:
 
             if until and until(current.id):
                 if depth >= min_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
+                    if track:
+                        result_vertex = Vertex(current.id)
+                        result_vertex.tags = current.tags.copy()
+                        result_vertex.edges = current.edges.copy()
+                        result_vertex._path = current._path
+                        result_vertices.append(result_vertex)
+                    else:
+                        result_vertices.append(Vertex(current.id))
                 continue
 
             if depth > 0 and depth >= min_depth:
                 if max_depth is None or depth <= max_depth:
-                    result_vertex = Vertex(current.id)
-                    result_vertex.tags = current.tags.copy()
-                    result_vertex.edges = current.edges.copy()
-                    result_vertex._path = current._path
-                    result_vertices.append(result_vertex)
+                    if track:
+                        result_vertex = Vertex(current.id)
+                        result_vertex.tags = current.tags.copy()
+                        result_vertex.edges = current.edges.copy()
+                        result_vertex._path = current._path
+                        result_vertices.append(result_vertex)
+                    else:
+                        result_vertices.append(Vertex(current.id))
 
             # Stop exploring if at max depth
             if max_depth is not None and depth >= max_depth:
@@ -185,12 +201,12 @@ class TraversalMixin:
                     if adj.id in visited:
                         continue
                     visited.add(adj.id)
-                adj.tags = current.tags.copy()
-                # Build path for neighbor from parent's path
-                parent_path = current._path or [{'vertex': current.id}]
-                edge_hash = next(iter(adj.edges)) if adj.edges else None
-                edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
-                adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
+                if track:
+                    adj.tags = current.tags.copy()
+                    parent_path = current._path or [{'vertex': current.id}]
+                    edge_hash = next(iter(adj.edges)) if adj.edges else None
+                    edge_name = self._predicate_reverse_lookup_cache.get(edge_hash, edge_hash) if edge_hash else None
+                    adj._path = list(parent_path) + ([{'edge': edge_name}] if edge_name else []) + [{'vertex': adj.id}]
                 stack.append((adj, depth + 1))
 
         self.last_visited_vertices = result_vertices
