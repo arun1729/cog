@@ -1,0 +1,177 @@
+"""
+Binary packer for key-value pairs.
+
+Wire format per field:
+    [type 1B]
+    type 's' (0x73): [varint length] [utf-8 bytes]
+    type 'i' (0x69): [8B int64 LE]               — struct.pack('<q')
+    type 'f' (0x66): [8B float64 LE]              — struct.pack('<d')
+    type 'b' (0x62): [varint length] [raw bytes]
+    type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
+    type 'a' (0x61): [varint count] [count × 8B float64 LE]  — array of doubles
+
+Varint scheme (little-endian, used for string/bytes length prefixes):
+    tag <= 0x7f         -> value = tag                       (1 byte total)
+    tag == 0xcc         -> value = next uint8                (2 bytes total)
+    tag == 0xcd         -> value = next uint16 little-endian (3 bytes total)
+    tag == 0xce         -> value = next uint32 little-endian (5 bytes total)
+
+All multi-byte fields use little-endian throughout.
+"""
+import struct
+import sys
+
+# Pre-compiled struct formatters for hot-path numeric fields.
+_pack_i64 = struct.Struct('<q').pack
+_unpack_i64 = struct.Struct('<q').unpack_from
+_pack_f64 = struct.Struct('<d').pack
+_unpack_f64 = struct.Struct('<d').unpack_from
+
+# Varint helpers (same scheme as codec.py, duplicated to avoid import coupling).
+_pack_u16le = struct.Struct('<H').pack
+_pack_u32le = struct.Struct('<I').pack
+_unpack_u16le = struct.Struct('<H').unpack_from
+_unpack_u32le = struct.Struct('<I').unpack_from
+
+_SINGLE_BYTES = [bytes([i]) for i in range(128)]
+
+
+def _encode_varint(length):
+    """Encode a non-negative integer as a 1-5 byte varint (little-endian)."""
+    if length <= 0x7f:
+        return _SINGLE_BYTES[length]
+    if length <= 0xff:
+        return b'\xcc' + bytes([length])
+    if length <= 0xffff:
+        return b'\xcd' + _pack_u16le(length)
+    if length <= 0xffffffff:
+        return b'\xce' + _pack_u32le(length)
+    raise ValueError("field length exceeds 2^32-1: " + str(length))
+
+
+def _decode_varint(buf, offset):
+    """Return (value, bytes_consumed). Raises ValueError on truncated/unknown tags."""
+    if offset >= len(buf):
+        raise ValueError("truncated buffer: cannot read varint tag at offset " + str(offset))
+    tag = buf[offset]
+    if tag <= 0x7f:
+        return tag, 1
+    if tag == 0xcc:
+        if offset + 2 > len(buf):
+            raise ValueError("truncated buffer: varint 0xcc at offset " + str(offset))
+        return buf[offset + 1], 2
+    if tag == 0xcd:
+        if offset + 3 > len(buf):
+            raise ValueError("truncated buffer: varint 0xcd at offset " + str(offset))
+        return _unpack_u16le(buf, offset + 1)[0], 3
+    if tag == 0xce:
+        if offset + 5 > len(buf):
+            raise ValueError("truncated buffer: varint 0xce at offset " + str(offset))
+        return _unpack_u32le(buf, offset + 1)[0], 5
+    raise ValueError("unknown varint tag: " + hex(tag))
+
+
+def _encode_field(f):
+    """Encode a single field to bytes."""
+    if type(f) is str:
+        b = f.encode('utf-8')
+        return b's' + _encode_varint(len(b)) + b
+    if type(f) is bool:
+        return b'B\x01' if f else b'B\x00'
+    if type(f) is int:
+        return b'i' + _pack_i64(f)
+    if type(f) is float:
+        return b'f' + _pack_f64(f)
+    if type(f) is bytes:
+        return b'b' + _encode_varint(len(f)) + f
+    if type(f) is list:
+        n = len(f)
+        payload = struct.pack(f'<{n}d', *f)
+        return b'a' + _encode_varint(n) + payload
+    b = str(f).encode('utf-8')
+    return b's' + _encode_varint(len(b)) + b
+
+
+def _decode_field(buf, offset):
+    """Decode a single field starting at *offset*.
+
+    Returns (value, new_offset).
+    Raises ValueError on truncated or malformed buffers.
+    """
+    if offset >= len(buf):
+        raise ValueError("truncated buffer: cannot read type tag at offset " + str(offset))
+    t = buf[offset]
+    offset += 1
+
+    if t == 0x73:  # 's' — string (most common)
+        length, vsize = _decode_varint(buf, offset)
+        offset += vsize
+        end = offset + length
+        if end > len(buf):
+            raise ValueError(
+                "truncated buffer: payload needs " + str(length)
+                + " bytes at offset " + str(offset)
+                + " but buffer has " + str(len(buf))
+            )
+        return buf[offset:end].decode('utf-8'), end
+
+    if t == 0x69:  # 'i'
+        if offset + 8 > len(buf):
+            raise ValueError("truncated buffer: int64 at offset " + str(offset))
+        return _unpack_i64(buf, offset)[0], offset + 8
+
+    if t == 0x42:  # 'B' — bool
+        if offset + 1 > len(buf):
+            raise ValueError("truncated buffer: bool at offset " + str(offset))
+        return buf[offset] != 0, offset + 1
+
+    if t == 0x66:  # 'f'
+        if offset + 8 > len(buf):
+            raise ValueError("truncated buffer: float64 at offset " + str(offset))
+        return _unpack_f64(buf, offset)[0], offset + 8
+
+    # Variable-length: read varint, then payload.
+    length, vsize = _decode_varint(buf, offset)
+    offset += vsize
+
+    if t == 0x61:  # 'a' — array of float64
+        byte_len = length * 8
+        end = offset + byte_len
+        if end > len(buf):
+            raise ValueError(
+                "truncated buffer: float64 array needs " + str(byte_len)
+                + " bytes at offset " + str(offset)
+                + " but buffer has " + str(len(buf))
+            )
+        values = list(struct.unpack_from(f'<{length}d', buf, offset))
+        return values, end
+
+    end = offset + length
+    if end > len(buf):
+        raise ValueError(
+            "truncated buffer: payload needs " + str(length)
+            + " bytes at offset " + str(offset)
+            + " but buffer has " + str(len(buf))
+        )
+
+    if t == 0x62:  # 'b'
+        return buf[offset:end], end
+    return buf[offset:end].decode('utf-8'), end
+
+
+def packb(key, value):
+    """Serialize a (key, value) pair to bytes."""
+    return _encode_field(key) + _encode_field(value)
+
+
+def unpackb(buf):
+    """Deserialize bytes to a (key, value) pair."""
+    key, offset = _decode_field(buf, 0)
+    value, _ = _decode_field(buf, offset)
+    # Intern strings so identical keys/values share one object in memory,
+    # turning == comparisons into fast pointer checks in bucket walks.
+    if type(key) is str:
+        key = sys.intern(key)
+    if type(value) is str:
+        value = sys.intern(value)
+    return key, value

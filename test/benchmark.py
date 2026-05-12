@@ -156,6 +156,266 @@ def benchmark_reads(graph_name: str, sample_vertices: List[str]) -> BenchmarkRes
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Query Benchmarks
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class QueryBenchmarkResult:
+    name: str
+    num_queries: int
+    time_seconds: float
+    queries_per_second: float
+
+    def __str__(self):
+        return f"{self.name:45} | {self.num_queries:6} ops | {self.time_seconds:8.3f}s | {self.queries_per_second:10.0f} qps"
+
+
+def _populate_social_graph(graph_name: str, num_users: int) -> Graph:
+    """Create and populate a social graph for query benchmarks."""
+    triples = generate_social_graph(num_users, avg_connections=10)
+    g = create_graph(graph_name)
+    g.put_batch(triples)
+    g.sync()
+    return g
+
+
+def benchmark_query_single_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().all() — single-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_multi_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().out().all() — two-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().out().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_three_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().out().out().all() — three-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").out("follows").out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().out().out().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_four_hop(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().out().out().out().all() — four-hop forward traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").out("follows").out("follows").out("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out()x4.all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_reverse(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).inc().all() — reverse traversal (who follows x?)"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).inc("follows").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().inc().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_has_filter(g: Graph, sample_vertices: List[str], target: str, label: str) -> QueryBenchmarkResult:
+    """v(x).out().has('follows', target).all() — filtered traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").has("follows", target).all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().has().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_count(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).out().count() — count outgoing edges"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).out("follows").count()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().out().count() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_bfs(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).bfs(max_depth=2).all() — breadth-first to depth 2"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).bfs(predicates="follows", max_depth=2).all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().bfs(depth=2).all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_tagged(g: Graph, sample_vertices: List[str], label: str) -> QueryBenchmarkResult:
+    """v(x).tag('src').out().tag('dst').all() — tagged traversal"""
+    n = len(sample_vertices)
+    start = timeit.default_timer()
+    for v in sample_vertices:
+        g.v(v).tag("src").out("follows").tag("dst").all()
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"v().tag().out().tag().all() ({label})",
+        num_queries=n,
+        time_seconds=elapsed,
+        queries_per_second=n / elapsed if elapsed > 0 else 0,
+    )
+
+
+def benchmark_query_scan(g: Graph, num_scans: int, label: str) -> QueryBenchmarkResult:
+    """scan(limit=100) — vertex scan"""
+    start = timeit.default_timer()
+    for _ in range(num_scans):
+        g.scan(limit=100)
+    elapsed = timeit.default_timer() - start
+    return QueryBenchmarkResult(
+        name=f"scan(limit=100) ({label})",
+        num_queries=num_scans,
+        time_seconds=elapsed,
+        queries_per_second=num_scans / elapsed if elapsed > 0 else 0,
+    )
+
+
+def run_query_benchmarks(sizes: List[int] = None):
+    """Run query benchmarks on social graphs of varying sizes."""
+    if sizes is None:
+        sizes = [100, 500, 1000]
+
+    import random
+    random.seed(42)
+
+    all_results: List[QueryBenchmarkResult] = []
+
+    print("\n" + "=" * 90)
+    print("CogDB Query Benchmark")
+    if FLUSH_INTERVAL != 1:
+        print(f"  flush_interval={FLUSH_INTERVAL} (async enabled)")
+    print("=" * 90)
+
+    for num_users in sizes:
+        label = f"{num_users}u"
+        setup()
+        g = _populate_social_graph(f"social_q_{num_users}", num_users)
+
+        # Sample vertices for queries (up to 50)
+        sample = [f"user_{i}" for i in random.sample(range(num_users), min(50, num_users))]
+        # A fixed target for has() filter
+        target = f"user_{num_users // 2}"
+
+        # --- Pass A: paths ON (default — backward-compat behavior) ---
+        g._track_paths = True
+        print(f"\n--- Query benchmarks on social graph with {num_users} users [paths=ON] ---")
+
+        bench_specs = [
+            (benchmark_query_single_hop, (g, sample, label)),
+            (benchmark_query_multi_hop,  (g, sample, label)),
+            (benchmark_query_three_hop,  (g, sample[:20], label)),  # 3-hop fanout grows fast
+            (benchmark_query_four_hop,   (g, sample[:10], label)),  # 4-hop fanout very large
+            (benchmark_query_reverse,    (g, sample, label)),
+            (benchmark_query_has_filter, (g, sample, target, label)),
+            (benchmark_query_count,      (g, sample, label)),
+            (benchmark_query_bfs,        (g, sample[:10], label)),  # BFS is expensive, fewer ops
+            (benchmark_query_tagged,     (g, sample, label)),
+            (benchmark_query_scan,       (g, 50, label)),
+        ]
+        for bench_fn, extra_args in bench_specs:
+            result = bench_fn(*extra_args)
+            all_results.append(result)
+            print(result)
+
+        # --- Pass B: paths OFF (fast traversal — skips _path/tags + dedupes frontier) ---
+        # Skip benchmark_query_tagged (requires path tracking) and scan (irrelevant).
+        g._track_paths = False
+        print(f"\n--- Query benchmarks on social graph with {num_users} users [paths=OFF] ---")
+        fast_specs = [
+            (benchmark_query_single_hop, (g, sample, label + "/fast")),
+            (benchmark_query_multi_hop,  (g, sample, label + "/fast")),
+            (benchmark_query_three_hop,  (g, sample[:20], label + "/fast")),
+            (benchmark_query_four_hop,   (g, sample[:10], label + "/fast")),
+            (benchmark_query_reverse,    (g, sample, label + "/fast")),
+            (benchmark_query_count,      (g, sample, label + "/fast")),
+            (benchmark_query_bfs,        (g, sample[:10], label + "/fast")),
+        ]
+        for bench_fn, extra_args in fast_specs:
+            result = bench_fn(*extra_args)
+            all_results.append(result)
+            print(result)
+
+        g.close()
+        cleanup()
+
+    # ── Summary ──────────────────────────────────────────────────────────────
+    print("\n" + "=" * 90)
+    print("Query Benchmark Summary")
+    print("=" * 90)
+
+    # Group by query type (strip the label suffix)
+    from collections import defaultdict
+    by_type = defaultdict(list)
+    for r in all_results:
+        qtype = r.name.rsplit("(", 1)[0].strip()
+        by_type[qtype].append(r)
+
+    for qtype, results in by_type.items():
+        avg_qps = sum(r.queries_per_second for r in results) / len(results)
+        print(f"  {qtype:42} avg {avg_qps:>10,.0f} qps")
+
+    return all_results
+
+
 def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
     """Run all benchmarks"""
     if sizes is None:
@@ -229,7 +489,7 @@ def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
     
     # Summary
     print("\n" + "=" * 85)
-    print("Summary")
+    print("Write Benchmark Summary")
     print("=" * 85)
     
     batch_results = [r for r in results if "Batch" in r.name]
@@ -249,6 +509,12 @@ def run_benchmarks(sizes: List[int] = None, skip_individual: bool = False):
                 speedup = ind_results[0].time_seconds / batch_results[0].time_seconds
                 print(f"Size {size:5}: Batch is {speedup:.2f}x faster than individual puts")
     
+    # Benchmark 5: Query benchmarks
+    query_sizes = [s for s in sizes if s <= 1000]  # cap query graph sizes at 1000
+    if not query_sizes:
+        query_sizes = [100, 500, 1000]
+    query_results = run_query_benchmarks(sizes=query_sizes)
+    
     return results
 
 
@@ -266,6 +532,8 @@ def main():
                         help="Use flush_interval=100 for faster writes (auto-enables async)")
     parser.add_argument("--flush-interval", type=int, default=1,
                         help="Custom flush interval (default: 1, >1 auto-enables async)")
+    parser.add_argument("--queries-only", action="store_true",
+                        help="Run only the query benchmarks (skip write benchmarks)")
     args = parser.parse_args()
     
     # Set global flush settings
@@ -277,7 +545,11 @@ def main():
     sizes = [50, 100, 200] if args.quick else args.sizes
     
     try:
-        run_benchmarks(sizes=sizes, skip_individual=args.skip_individual)
+        if args.queries_only:
+            query_sizes = [s for s in sizes if s <= 1000] or [100, 500, 1000]
+            run_query_benchmarks(sizes=query_sizes)
+        else:
+            run_benchmarks(sizes=sizes, skip_individual=args.skip_individual)
     finally:
         cleanup()
     
@@ -286,4 +558,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
