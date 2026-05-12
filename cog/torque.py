@@ -85,7 +85,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
     """
 
     def __init__(self, graph_name="default", cog_home="cog_home", cog_path_prefix=None, enable_caching=True,
-                 flush_interval=1, config=None, api_key=None):
+                 flush_interval=1, config=None, api_key=None, use_memory_view=True):
         """
         :param graph_name: Name of the graph (default: "default")
         :param cog_home: Home directory name, for most use cases use default.
@@ -93,6 +93,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
         :param flush_interval: Number of writes before auto-flush. 1 = every write (safest).
         :param config: Optional CogConfig instance. Overrides cog_home and cog_path_prefix when provided.
         :param api_key: API key for CogDB Cloud mode.
+        :param use_memory_view: When True (default), traversals use an in-memory adjacency cache. When False, every traversal reads from disk.
         """
 
 
@@ -173,8 +174,18 @@ class Graph(EmbeddingMixin, TraversalMixin):
         self._default_provider = "cogdb"  # Provider for auto-embed in queries
         self._default_provider_kwargs = {}  # Provider kwargs (e.g. api_key)
         self._track_paths = True
+        self._use_memory_view = use_memory_view
         self._mg = {}  # pred_hash -> MemoryView, lazily loaded
         self._vectorize_configured = False  # True after explicit vectorize() call
+
+    # === Memory View Control ===
+
+    def enable_memory_view(self):
+        self._use_memory_view = True
+
+    def disable_memory_view(self):
+        self._use_memory_view = False
+        self._mg.clear()
 
     # === Cloud Traversal Helpers ===
 
@@ -846,6 +857,8 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self.last_visited_vertices = [Vertex(nid) for nid in lvv]
 
     def _get_mg(self, pred_hash):
+        if not self._use_memory_view:
+            return None
         mg = self._mg.get(pred_hash)
         if mg is None:
             table = self.cog.get_table(pred_hash, self.graph_name)
@@ -853,13 +866,23 @@ class Graph(EmbeddingMixin, TraversalMixin):
             self._mg[pred_hash] = mg
         return mg
 
+    def _disk_get_neighbors(self, pred_hash, node_id, direction='out'):
+        table = self.cog.get_table(pred_hash, self.graph_name)
+        key_fn = out_nodes if direction == 'out' else in_nodes
+        record = table.indexer.get(key_fn(node_id), table.store)
+        if record is not None:
+            return record.value
+        return None
+
     def __adjacent_vertices(self, vertex, predicates, direction='out'):
         self.cog.use_namespace(self.graph_name)
         adjacent_vertices = []
-        get_nbrs = (lambda mg, nid: mg.get_out(nid)) if direction == 'out' else (lambda mg, nid: mg.get_in(nid))
         for predicate in predicates:
             mg = self._get_mg(predicate)
-            nbrs = get_nbrs(mg, vertex.id)
+            if mg is not None:
+                nbrs = mg.get_out(vertex.id) if direction == 'out' else mg.get_in(vertex.id)
+            else:
+                nbrs = self._disk_get_neighbors(predicate, vertex.id, direction)
             if nbrs:
                 for v_adj in nbrs:
                     adjacent_vertices.append(Vertex(v_adj).set_edge(predicate))
@@ -969,9 +992,11 @@ class Graph(EmbeddingMixin, TraversalMixin):
             result_ids = set()
             for predicate in predicates:
                 mg = self._get_mg(predicate)
-                get_nbrs = mg.get_out if direction == "out" else mg.get_in
                 for nid in frontier_ids:
-                    nbrs = get_nbrs(nid)
+                    if mg is not None:
+                        nbrs = mg.get_out(nid) if direction == "out" else mg.get_in(nid)
+                    else:
+                        nbrs = self._disk_get_neighbors(predicate, nid, direction)
                     if nbrs:
                         result_ids.update(nbrs)
             if func is not None:
@@ -984,10 +1009,12 @@ class Graph(EmbeddingMixin, TraversalMixin):
         for predicate in predicates:
             self.logger.debug("__hop predicate: " + predicate + " of " + str(predicates))
             mg = self._get_mg(predicate)
-            get_nbrs = mg.get_out if direction == "out" else mg.get_in
             edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
-                neighbors = get_nbrs(v.id)
+                if mg is not None:
+                    neighbors = mg.get_out(v.id) if direction == "out" else mg.get_in(v.id)
+                else:
+                    neighbors = self._disk_get_neighbors(predicate, v.id, direction)
                 if not neighbors:
                     continue
                 parent_path = v._path or [{'vertex': v.id}]
@@ -1044,10 +1071,16 @@ class Graph(EmbeddingMixin, TraversalMixin):
             for predicate in predicates:
                 mg = self._get_mg(predicate)
                 for nid in frontier:
-                    nbrs = mg.get_out(nid)
+                    if mg is not None:
+                        nbrs = mg.get_out(nid)
+                    else:
+                        nbrs = self._disk_get_neighbors(predicate, nid, 'out')
                     if nbrs:
                         result.update(nbrs)
-                    nbrs = mg.get_in(nid)
+                    if mg is not None:
+                        nbrs = mg.get_in(nid)
+                    else:
+                        nbrs = self._disk_get_neighbors(predicate, nid, 'in')
                     if nbrs:
                         result.update(nbrs)
             self.last_visited_vertices = result
@@ -1058,8 +1091,12 @@ class Graph(EmbeddingMixin, TraversalMixin):
             mg = self._get_mg(predicate)
             edge_label = self._predicate_reverse_lookup_cache.get(predicate, predicate)
             for v in self.last_visited_vertices:
-                out_neighbors = mg.get_out(v.id) or ()
-                in_neighbors = mg.get_in(v.id) or ()
+                if mg is not None:
+                    out_neighbors = mg.get_out(v.id) or ()
+                    in_neighbors = mg.get_in(v.id) or ()
+                else:
+                    out_neighbors = self._disk_get_neighbors(predicate, v.id, 'out') or ()
+                    in_neighbors = self._disk_get_neighbors(predicate, v.id, 'in') or ()
                 parent_path = v._path or [{'vertex': v.id}]
                 v_tags = v.tags
                 for v_adjacent in out_neighbors:
