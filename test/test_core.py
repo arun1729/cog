@@ -20,38 +20,36 @@ class TestCore(unittest.TestCase):
 
 
     def test_record(self):
-        record = Record("rocket", "saturn-v", format_version='1', store_position=25,  key_link=5, value_type='s', value_link=54378)
-        print(record.marshal())
+        record = Record("rocket", "saturn-v", store_position=25, key_link=5, value_type='s', value_link=54378)
+        record.timestamp = 1
         unmarshalled_record = Record.unmarshal(record.marshal())
-        print(unmarshalled_record)
         self.assertTrue(record.is_equal_val(unmarshalled_record))
         self.assertEqual(record.key, unmarshalled_record.key)
         self.assertEqual(record.value, unmarshalled_record.value)
-        self.assertEqual(record.format_version, unmarshalled_record.format_version)
         self.assertEqual(record.key_link, unmarshalled_record.key_link)
         self.assertEqual(record.value_type, unmarshalled_record.value_type)
         self.assertEqual(Record.RECORD_LINK_NULL, unmarshalled_record.value_link)
 
     def test_record2(self):
-        record = Record("rocket", "saturn-v", format_version='1', store_position=25,  key_link=5, value_type='l', value_link=54378)
+        record = Record("rocket", "saturn-v", store_position=25, key_link=5, value_type='l', value_link=54378)
+        record.timestamp = 1
         unmarshalled_record = Record.unmarshal(record.marshal())
-        print(unmarshalled_record)
         self.assertTrue(record.is_equal_val(unmarshalled_record))
         self.assertEqual(record.key, unmarshalled_record.key)
         self.assertEqual(record.value, unmarshalled_record.value)
-        self.assertEqual(record.format_version, unmarshalled_record.format_version)
         self.assertEqual(record.key_link, unmarshalled_record.key_link)
         self.assertEqual(record.value_type, unmarshalled_record.value_type)
         self.assertEqual(record.value_link, unmarshalled_record.value_link)
 
-    def test_record_list(self):
-        record = Record("rockets", ["saturn-v","delta","atlas","mercury"], format_version='1', store_position=25,  key_link=5, value_type='l', value_link=54378)
+    def test_record_list_element(self):
+        """A list-typed record holds a single element; the full list is
+        assembled by following value_link pointers at read time."""
+        record = Record("rockets", "saturn-v", store_position=25, key_link=5, value_type='l', value_link=54378)
+        record.timestamp = 1
         unmarshalled_record = Record.unmarshal(record.marshal())
-        print(unmarshalled_record)
         self.assertTrue(record.is_equal_val(unmarshalled_record))
         self.assertEqual(record.key, unmarshalled_record.key)
         self.assertEqual(record.value, unmarshalled_record.value)
-        self.assertEqual(record.format_version, unmarshalled_record.format_version)
         self.assertEqual(record.key_link, unmarshalled_record.key_link)
         self.assertEqual(record.value_type, unmarshalled_record.value_type)
         self.assertEqual(record.value_link, unmarshalled_record.value_link)

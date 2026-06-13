@@ -1,4 +1,7 @@
-# This workflow will upload a Python Package using Twine when a release is created
+# This workflow builds and uploads a Python package with Twine when a release
+# is created. The upload is gated behind the full test suite: the `deploy` job
+# declares `needs: test`, so PyPI publishing only happens if every matrix test
+# job passes on the exact ref being released.
 name: Upload Python Package
 
 on:
@@ -6,7 +9,33 @@ on:
     types: [created]
 
 jobs:
+  # Gate: run the suite on the released ref across all supported Pythons.
+  # If any of these fail, `deploy` is skipped and nothing is published.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          python -m pytest test/ --ignore=test/bench.py --ignore=test/benchmark.py -m "not cloud"
+
   deploy:
+    needs: test          # only publish if every test matrix job passed
     runs-on: ubuntu-latest
 
     permissions:
