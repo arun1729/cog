@@ -551,3 +551,9 @@ Run benchmarks with: `python3 test/benchmark.py`
 **Batch vs Individual Insert:**
 - 1.6x faster at 5,000 edges
 - Read performance: 20,000+ ops/second
+
+## Trademarks
+
+CogDB™ and the CogDB logo are trademarks of NodeFn Inc. The MIT License covers the CogDB source code and does not grant any right to use the CogDB name or logo.
+
+You may use the CogDB name to truthfully describe your software — for example, that it works with, is built on, or depends on CogDB — as long as you don't suggest endorsement or affiliation. Please don't use the CogDB name or logo as the name of your own product, project, company, or domain, or in a modified form, without prior written permission. All other rights reserved by NodeFn Inc.
