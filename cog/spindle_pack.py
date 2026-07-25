@@ -10,6 +10,12 @@ Wire format per field:
     type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
     type 'a' (0x61): [varint count] [count × 8B float64 LE]  — array of doubles
 
+These tags are the complete value domain. Values with no tag (dict, None,
+tuple, non-numeric lists, ints outside int64, ...) raise ValueError — never
+a silent str()/repr() degrade. The tags cover everything the cogdb API ever
+wrote: strings everywhere, plus numeric lists from put_embedding (numeric
+elements widen to float64, matching embedding semantics).
+
 Varint scheme (little-endian, used for string/bytes length prefixes):
     tag <= 0x7f         -> value = tag                       (1 byte total)
     tag == 0xcc         -> value = next uint8                (2 bytes total)
@@ -89,6 +95,8 @@ def _encode_field(f):
     if type(f) is bytes:
         return b'b' + _encode_varint(len(f)) + f
     if type(f) is list:
+        # Numeric lists (embeddings) encode as a fixed-width float64 array;
+        # int elements widen to float, matching embedding semantics.
         n = len(f)
         for i, elem in enumerate(f):
             if type(elem) is not int and type(elem) is not float:
@@ -98,8 +106,7 @@ def _encode_field(f):
                 )
         payload = struct.pack(f'<{n}d', *f)
         return b'a' + _encode_varint(n) + payload
-    b = str(f).encode('utf-8')
-    return b's' + _encode_varint(len(b)) + b
+    raise ValueError("unsupported value type: " + type(f).__name__)
 
 
 def _decode_field(buf, offset):
@@ -166,7 +173,10 @@ def _decode_field(buf, offset):
 
     if t == 0x62:  # 'b'
         return buf[offset:end], end
-    return buf[offset:end].decode('utf-8'), end
+    # Unknown tag: corrupt record content (bit rot, torn sector). ValueError
+    # is what every reader treats as "record unreadable", so one bad record
+    # degrades to a miss instead of returning garbage from get()/scanner().
+    raise ValueError("unknown field type tag: " + hex(t))
 
 
 def packb(key, value):

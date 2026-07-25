@@ -66,10 +66,9 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
             self.assertEqual(_roundtrip("k", n), ("k", n))
 
     def test_int_out_of_range_raises(self):
-        with self.assertRaises(ValueError):
-            packb("k", 2**63)
-        with self.assertRaises(ValueError):
-            packb("k", -(2**63) - 1)
+        for n in (2**63, -(2**63) - 1, 2**70, -(2**200)):
+            with self.assertRaises(ValueError):
+                packb("k", n)
 
     def test_float(self):
         for f in (0.0, -0.0, 3.14159, -2.5e300, 1e-300):
@@ -88,11 +87,16 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
         _, v = _roundtrip("k", [1.5, 2.5, 3.5])
         self.assertEqual(v, [1.5, 2.5, 3.5])
 
-    def test_list_of_ints_becomes_floats(self):
-        # Lists are encoded as a float64 array — ints widen to float.
+    def test_list_of_ints_widens_to_floats(self):
+        # Lists are float64 arrays (embedding semantics) — int elements widen.
         _, v = _roundtrip("embedding", [1, 2, 3])
         self.assertEqual(v, [1.0, 2.0, 3.0])
-        self.assertTrue(all(isinstance(x, float) for x in v))
+        self.assertTrue(all(type(x) is float for x in v))
+
+    def test_mixed_numeric_list_widens(self):
+        _, v = _roundtrip("embedding", [0, 1.5, 2])
+        self.assertEqual(v, [0.0, 1.5, 2.0])
+        self.assertTrue(all(type(x) is float for x in v))
 
     def test_empty_list(self):
         self.assertEqual(_roundtrip("k", []), ("k", []))
@@ -103,12 +107,27 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
         self.assertEqual(v, arr)
 
     def test_list_with_non_numeric_raises(self):
-        with self.assertRaises(ValueError):
-            packb("k", [1.0, "x", 2.0])
+        for lst in ([1.0, "x", 2.0], ["a", "b", "c"], [1, "two", 3.0]):
+            with self.assertRaises(ValueError):
+                packb("k", lst)
 
-    def test_unknown_type_falls_back_to_str(self):
-        # Documented fallback: unsupported value types are str()'d.
-        self.assertEqual(_roundtrip("k", None), ("k", "None"))
+    def test_untagged_types_raise(self):
+        # No silent str()/repr() degrade: types outside the wire format are
+        # rejected at write time so nothing unreadable ever reaches disk.
+        class NotStorable:
+            pass
+        for val in (None, {"a": 1}, (1, 2, 3), {1, 2}, NotStorable()):
+            with self.assertRaises(ValueError):
+                packb("k", val)
+
+    def test_unknown_type_tag_raises_valueerror(self):
+        # Readers treat ValueError as "record unreadable" — a corrupted type
+        # tag (bit rot, torn sector) must surface as ValueError so one bad
+        # record degrades to a miss instead of returning garbage.
+        key_field = b's\x01k'  # _encode_field("k")
+        buf = key_field + b'm' + _encode_varint(3) + b'\xff\xff\xff'
+        with self.assertRaises(ValueError):
+            unpackb(buf)
 
 
 class TestSpindlePackInterning(unittest.TestCase):

@@ -16,3 +16,4 @@ private/
 scripts/*
 docs/architecture.md
 .vscode/settings.json
+venv/*
