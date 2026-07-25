@@ -135,6 +135,43 @@ class TestDatabaseLayer(unittest.TestCase):
             self.assertEqual(rec.value, v)
         db2.close()
 
+    def test_int_list_widens_identically_cached_and_from_disk(self):
+        """Lists persist as float64 arrays (ints widen). A cached read right
+        after put must return the same widened floats a disk read returns
+        after reopen — never the original int objects."""
+        db = Cog()
+        db.create_or_load_namespace("ns_widen")
+        db.create_table("tbl_widen", "ns_widen")
+        db.put(Record("vec", [1, 2, 3]))
+
+        rec = db.get("vec")  # served from the write-through cache
+        self.assertEqual(rec.value, [1.0, 2.0, 3.0])
+        self.assertTrue(all(type(x) is float for x in rec.value))
+        db.close()
+
+        db2 = Cog()
+        db2.create_or_load_namespace("ns_widen")
+        db2.create_table("tbl_widen", "ns_widen")
+        rec = db2.get("vec")  # decoded from disk
+        self.assertEqual(rec.value, [1.0, 2.0, 3.0])
+        self.assertTrue(all(type(x) is float for x in rec.value))
+        db2.close()
+
+    def test_unsupported_value_type_put_raises(self):
+        """Out-of-domain values (dict/None/tuple/mixed lists) are rejected at
+        write time with ValueError — nothing unreadable reaches disk and the
+        table stays usable afterwards."""
+        db = Cog()
+        db.create_or_load_namespace("ns_strict")
+        db.create_table("tbl_strict", "ns_strict")
+        for bad in (None, {"a": 1}, (1, 2), [1, "two"], 2 ** 70):
+            with self.assertRaises(ValueError):
+                db.put(Record("bad_key", bad))
+        self.assertIsNone(db.get("bad_key"))
+        db.put(Record("good_key", "still_works"))
+        self.assertEqual(db.get("good_key").value, "still_works")
+        db.close()
+
     def test_list_put_get_reopen(self):
         """Write list records, close, reopen, verify."""
         db = Cog()

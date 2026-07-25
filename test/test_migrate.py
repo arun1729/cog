@@ -301,6 +301,7 @@ class TestMigrateEndToEnd(unittest.TestCase):
         config.CUSTOM_COG_DB_PATH = self.dir
 
     def tearDown(self):
+        config.CUSTOM_COG_DB_PATH = None
         if os.path.exists(self.dir):
             shutil.rmtree(self.dir)
 
@@ -381,6 +382,10 @@ class TestMigrateEndToEnd(unittest.TestCase):
             ("bob" + "__:in:__", "alice"),
         ]
         self._build_legacy_db("edge_tbl", "inst_edge", legacy_pairs)
+        # The rewrite only applies to graph namespaces — mark this one by
+        # giving it a node-set table, as any real torque namespace has.
+        node_set_store = config.cog_store("ns", config.GRAPH_NODE_SET_TABLE_NAME, "inst_edge")
+        open(node_set_store, 'wb').close()
 
         result = migrate(self.dir)
         self.assertEqual(result['errors'], [])
@@ -402,6 +407,31 @@ class TestMigrateEndToEnd(unittest.TestCase):
 
             # The old string key must no longer resolve.
             self.assertIsNone(table.indexer.get("alice" + "__:out:__", store))
+        finally:
+            table.close()
+
+    def test_kv_keys_with_edge_suffix_not_rewritten(self):
+        """In a plain KV namespace (no TOR_NODE_SET table), user keys that
+        happen to end with the legacy edge suffixes are data, not edge keys —
+        rewriting them would silently lose them."""
+        legacy_pairs = [
+            ("report__:out:__", "user_value_1"),
+            ("__:in:__", "user_value_2"),
+            ("normal_key", "user_value_3"),
+        ]
+        self._build_legacy_db("kv_tbl", "inst_kv", legacy_pairs)
+
+        result = migrate(self.dir)
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(result['stores_migrated'], 1)
+
+        import logging
+        table = Table("kv_tbl", "ns", "inst_kv", config, logging.getLogger())
+        try:
+            for key, expected_val in legacy_pairs:
+                rec = table.indexer.get(key, table.store)
+                self.assertIsNotNone(rec, f"KV key {key!r} lost after migration")
+                self.assertEqual(rec.value, expected_val)
         finally:
             table.close()
 
@@ -436,6 +466,277 @@ class TestMigrateEndToEnd(unittest.TestCase):
         r2 = migrate(self.dir)
         self.assertEqual(r2['stores_migrated'], 0)
         self.assertEqual(r2['skipped'], 1)
+
+
+class TestMigrateLiveness(unittest.TestCase):
+    """Deletions and same-key updates in 3.x live only in the legacy index
+    (the store is an append-only log). The rebuilt 4.x index must contain
+    exactly the live record for each key: deleted keys stay deleted, updated
+    keys resolve to the newest value, and each key appears at most once in a
+    bucket chain (the invariant scanner/MemoryView depend on)."""
+
+    def setUp(self):
+        self.dir = DB_PATH + "_live"
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+        os.makedirs(os.path.join(self.dir, "ns"), exist_ok=True)
+        config.CUSTOM_COG_DB_PATH = self.dir
+
+    def tearDown(self):
+        config.CUSTOM_COG_DB_PATH = None
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+
+    def _legacy_slot(self, key, capacity):
+        import xxhash
+        num = xxhash.xxh32(key, seed=2).intdigest() % capacity
+        return max((num % capacity) - 1, 0)
+
+    def _open_table(self, table_name, instance_id):
+        import logging
+        return Table(table_name, "ns", instance_id, config, logging.getLogger())
+
+    def test_deleted_key_stays_deleted(self):
+        """3.x Cog.delete unlinks the index entry but leaves the record in the
+        store. The record must NOT be re-indexed by migration."""
+        capacity = config.INDEX_CAPACITY
+        store_path = config.cog_store("ns", "del_tbl", "inst_del")
+        index_path = config.cog_index("ns", "del_tbl", "inst_del", 0)
+
+        positions = _write_legacy_store(store_path, [
+            ("dead_key", "temp", "s", -1, -1),   # was deleted in 3.x
+            ("alive_key", "ok", "s", -1, -1),
+        ])
+        alive_pos = positions[1][0]
+
+        slot_alive = self._legacy_slot("alive_key", capacity)
+        slot_dead = self._legacy_slot("dead_key", capacity)
+        self.assertNotEqual(slot_alive, slot_dead)
+        # deleted key: slot back to the empty sentinel (what 3.x delete did)
+        _write_legacy_index(index_path, {slot_alive: alive_pos}, capacity)
+
+        result = migrate(self.dir)
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(result['stores_migrated'], 1)
+
+        table = self._open_table("del_tbl", "inst_del")
+        try:
+            rec = table.indexer.get("alive_key", table.store)
+            self.assertIsNotNone(rec)
+            self.assertEqual(rec.value, "ok")
+            self.assertIsNone(table.indexer.get("dead_key", table.store),
+                              "key deleted in 3.x resurrected after migration")
+            scanned = [r.key for r in table.indexer.scanner(table.store)]
+            self.assertEqual(scanned, ["alive_key"])
+        finally:
+            table.close()
+
+    def test_updated_key_indexed_once_with_newest_value(self):
+        """A key written N times leaves N records in the legacy store but must
+        appear exactly once in the rebuilt index, resolving to the newest
+        value (both via get and via scanner, which MemoryView relies on)."""
+        capacity = config.INDEX_CAPACITY
+        store_path = config.cog_store("ns", "upd_tbl", "inst_upd")
+        index_path = config.cog_index("ns", "upd_tbl", "inst_upd", 0)
+
+        # Legacy same-key update: new head takes the old head's key_link (-1);
+        # the old record stays in the store, unreachable from the index.
+        positions = _write_legacy_store(store_path, [
+            ("u_key", "old_value", "s", -1, -1),
+            ("u_key", "new_value", "s", -1, -1),
+        ])
+        newest_pos = positions[1][0]
+        slot = self._legacy_slot("u_key", capacity)
+        _write_legacy_index(index_path, {slot: newest_pos}, capacity)
+
+        result = migrate(self.dir)
+        self.assertEqual(result['errors'], [])
+
+        table = self._open_table("upd_tbl", "inst_upd")
+        try:
+            rec = table.indexer.get("u_key", table.store)
+            self.assertEqual(rec.value, "new_value")
+            scanned = [(r.key, r.value) for r in table.indexer.scanner(table.store)]
+            self.assertEqual(scanned, [("u_key", "new_value")],
+                             "scanner must yield exactly one entry per key")
+        finally:
+            table.close()
+
+    def test_list_key_indexed_once_with_full_chain(self):
+        """put_list appends one store record per element, each indexed over the
+        previous. Only the newest head is live; its value chain must
+        materialize the full list, and scan must not duplicate the key."""
+        capacity = config.INDEX_CAPACITY
+        store_path = config.cog_store("ns", "list_tbl", "inst_list")
+        index_path = config.cog_index("ns", "list_tbl", "inst_list", 0)
+
+        rec0 = _legacy_marshal_record("fruits", "apple", "l", -1, -1)
+        pos0 = 0
+        pos1 = len(rec0)
+        rec1 = _legacy_marshal_record("fruits", "banana", "l", -1, pos0)
+        with open(store_path, 'wb') as f:
+            f.write(rec0)
+            f.write(rec1)
+        slot = self._legacy_slot("fruits", capacity)
+        _write_legacy_index(index_path, {slot: pos1}, capacity)
+
+        result = migrate(self.dir)
+        self.assertEqual(result['errors'], [])
+
+        table = self._open_table("list_tbl", "inst_list")
+        try:
+            rec = table.indexer.get("fruits", table.store)
+            self.assertEqual(rec.value, ["banana", "apple"])
+            scanned = [r.key for r in table.indexer.scanner(table.store)]
+            self.assertEqual(scanned, ["fruits"])
+        finally:
+            table.close()
+
+
+class TestOpenAfterMigration(unittest.TestCase):
+    """The default migrate() leaves .v3_backup files next to the migrated
+    files. Opening the database afterwards must work, and one unloadable
+    table must not take the whole namespace down."""
+
+    def setUp(self):
+        self.dir = DB_PATH + "_open"
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+        os.makedirs(self.dir, exist_ok=True)
+
+    def tearDown(self):
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+
+    def _new_cog(self):
+        from cog.database import Cog
+        from cog.config import CogConfig
+        return Cog(config=CogConfig(COG_PATH_PREFIX=self.dir, COG_HOME="home"))
+
+    def test_namespace_opens_with_backup_and_junk_files(self):
+        from cog.core import Record as R
+        c = self._new_cog()
+        c.create_or_load_namespace("ns")
+        c.create_table("t1", "ns")
+        c.put(R("k1", "v1"))
+        c.sync()
+        c.close()
+
+        ns_dir = os.path.join(self.dir, "home", "ns")
+        index_file = next(f for f in os.listdir(ns_dir) if INDEX_MARKER in f)
+        store_file = next(f for f in os.listdir(ns_dir) if STORE_MARKER in f)
+        # what migrate() leaves behind, plus an unparseable stray file
+        open(os.path.join(ns_dir, index_file + ".v3_backup"), 'wb').close()
+        open(os.path.join(ns_dir, store_file + ".v3_backup"), 'wb').close()
+        open(os.path.join(ns_dir, store_file + ".v4_tmp"), 'wb').close()
+        open(os.path.join(ns_dir, "stray-index-notanumber"), 'wb').close()
+
+        c2 = self._new_cog()
+        c2.create_or_load_namespace("ns")  # raised ValueError in 4.0.0rc1
+        c2.use_table("t1")
+        rec = c2.get("k1")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec.value, "v1")
+        c2.close()
+
+    def test_one_legacy_table_does_not_brick_namespace(self):
+        from cog.core import Record as R
+        c = self._new_cog()
+        c.create_or_load_namespace("ns")
+        c.create_table("t_good", "ns")
+        c.put(R("k_good", "v_good"))
+        c.create_table("t_bad", "ns")
+        c.put(R("k_bad", "v_bad"))
+        c.sync()
+        c.close()
+
+        # replace t_bad's store with legacy-format bytes (unmigrated table)
+        ns_dir = os.path.join(self.dir, "home", "ns")
+        bad_store = next(f for f in os.listdir(ns_dir)
+                         if f.startswith("t_bad") and STORE_MARKER in f)
+        with open(os.path.join(ns_dir, bad_store), 'wb') as f:
+            f.write(_legacy_marshal_record("k_bad", "v_bad"))
+
+        c2 = self._new_cog()
+        c2.create_or_load_namespace("ns")  # must not raise
+        c2.use_table("t_good")
+        rec = c2.get("k_good")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec.value, "v_good")
+        with self.assertRaises(ValueError):
+            c2.use_table("t_bad")  # direct access still fails loudly
+        c2.close()
+
+
+class TestMigratePreflight(unittest.TestCase):
+    """If any record cannot be encoded, migrate() must report every problem
+    and convert nothing (no half-migrated database)."""
+
+    def setUp(self):
+        self.dir = DB_PATH + "_preflight"
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+        os.makedirs(os.path.join(self.dir, "ns"), exist_ok=True)
+
+    def tearDown(self):
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+
+    def test_preflight_failure_reports_all_and_converts_nothing(self):
+        import cog.migrate as M
+        good = os.path.join(self.dir, "ns", f"good{STORE_MARKER}i1")
+        bad = os.path.join(self.dir, "ns", f"bad{STORE_MARKER}i1")
+        _write_legacy_store(good, [("k1", "v1", "s", -1, -1)])
+        _write_legacy_store(bad, [
+            ("k2", "v2", "s", -1, -1),
+            ("poison_a", "x", "s", -1, -1),
+            ("poison_b", "x", "s", -1, -1),
+        ])
+
+        orig = M.spindle_pack.packb
+
+        def poisoned(key, value):
+            if isinstance(key, str) and key.startswith("poison"):
+                raise ValueError("simulated unencodable value")
+            return orig(key, value)
+
+        M.spindle_pack.packb = poisoned
+        try:
+            stats = migrate(self.dir)
+        finally:
+            M.spindle_pack.packb = orig
+
+        self.assertEqual(stats['stores_migrated'], 0)
+        self.assertEqual(len(stats['errors']), 2)  # BOTH poison records reported
+        self.assertTrue(all('bad' in e for e in stats['errors']))
+        # nothing on disk was touched
+        self.assertEqual(sorted(os.listdir(os.path.join(self.dir, "ns"))),
+                         sorted([os.path.basename(good), os.path.basename(bad)]))
+
+        # with the poison gone, the same database migrates cleanly
+        stats2 = migrate(self.dir)
+        self.assertEqual(stats2['errors'], [])
+        self.assertEqual(stats2['stores_migrated'], 2)
+
+    def test_corrupt_record_mid_store_aborts_migration(self):
+        """A record the sequential reader cannot parse would make migration
+        silently drop everything after it — pre-flight must refuse instead."""
+        bad = os.path.join(self.dir, "ns", f"corrupt{STORE_MARKER}i1")
+        good_rec = _legacy_marshal_record("k1", "v1")
+        with open(bad, 'wb') as f:
+            f.write(good_rec)
+            # 18-byte pseudo-header with an invalid value_type, then junk the
+            # reader can never resynchronize past.
+            f.write(b"1".rjust(16) + b"1z" + b"\x00" * 32)
+            f.write(good_rec)  # a record that WOULD be lost
+
+        stats = migrate(self.dir)
+        self.assertEqual(stats['stores_migrated'], 0)
+        self.assertEqual(len(stats['errors']), 1)
+        self.assertIn("would be lost", stats['errors'][0])
+        # original file untouched
+        self.assertEqual(sorted(os.listdir(os.path.join(self.dir, "ns"))),
+                         [os.path.basename(bad)])
 
 
 class TestMigrateEdgeCases(unittest.TestCase):

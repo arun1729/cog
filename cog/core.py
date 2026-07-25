@@ -133,6 +133,10 @@ class Record:
         """loads value from the store"""
         while store_pointer != Record.VALUE_LINK_NULL:
             rec = store.read(store_pointer)
+            if rec is None:
+                # dangling value link (e.g. store truncated by a crash) —
+                # return what is intact rather than crash.
+                break
             if rec.value_type == 'l':
                 val_list.append(rec.value)
             else:
@@ -230,15 +234,14 @@ class Index:
         head_pos = _i64_unpack_from(db_mem, orig_position)[0]
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug('writing : %s current data at store position: %d', key, head_pos)
-        if head_pos == 0:
-            # First record in the key bucket, point next link to null
+        existing_record = None if head_pos == 0 else store.read(head_pos)
+        if existing_record is None:
+            # First record in the key bucket (or the head pointer dangles into
+            # a truncated/corrupt region — abandon that chain), point next
+            # link to null.
             store.update_record_link_inplace(store_position, Record.RECORD_LINK_NULL)
             key_link = store_position
         else:
-            # there are records in the bucket
-            # read existing record from the store - head only, not load_from_store (O(1) vs O(n))
-            existing_record = store.read(head_pos)
-
             if existing_record.key == key:
                 # the record at the top of the bucket has the same key, update the record in place.
                 # a new entry has been made to the store, update pre and next links.
@@ -257,6 +260,8 @@ class Index:
                     next_pos = existing_record.key_link
                     # Head-only read (O(1)) instead of load_from_store (O(n))
                     existing_record = store.read(next_pos)
+                    if existing_record is None:
+                        break  # chain runs into an unreadable record
                     if existing_record.key == key:
                         """
                         if same key found in bucket, update previous record in chain to point to key_link of this record
@@ -287,6 +292,8 @@ class Index:
         # Walk the collision chain with head-only reads (O(1)); only
         # load_from_store (which materializes the value chain) for the match.
         record = store.read(store_pos)
+        if record is None:
+            return None
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("read record %s", record)
 
@@ -297,6 +304,8 @@ class Index:
                 self.logger.debug("record.key_link: %d", record.key_link)
             store_pos = record.key_link
             record = store.read(store_pos)
+            if record is None:
+                return None
             if record.key == key:
                 return Record.materialize_values(record, store)
         return None
@@ -314,6 +323,8 @@ class Index:
             return None, None
         # Head-only read, don't load value chain
         record = store.read(store_position)
+        if record is None:
+            return None, None
 
         if record.key == key:
             return record, store_position
@@ -322,6 +333,8 @@ class Index:
             while record.key_link != Record.RECORD_LINK_NULL:
                 store_position = record.key_link
                 record = store.read(store_position)
+                if record is None:
+                    return None, None
                 if record.key == key:
                     return record, store_position
         return None, None
@@ -344,9 +357,15 @@ class Index:
             # Load head record and follow key_link chain to get all records in this bucket
             while store_position != Record.RECORD_LINK_NULL:
                 record = Record.load_from_store(store_position, store)
-                if record is None:  # EOF store
-                    self.logger.error("Store EOF reached! Iteration terminated.")
-                    return
+                if record is None:
+                    # unreadable record (e.g. store truncated by a crash) —
+                    # skip the rest of this bucket chain but keep scanning
+                    # the remaining buckets, otherwise one bad record hides
+                    # every record after it.
+                    self.logger.error(
+                        "unreadable record at store position %d; skipping rest of bucket chain",
+                        store_position)
+                    break
                 yield Record(record.key, record.value)
                 store_position = record.key_link
 
@@ -372,6 +391,8 @@ class Index:
         # delete only needs key/key_link/store_position — head-only read (O(1))
         # instead of load_from_store, which would materialize the value chain.
         record = store.read(head_pos)
+        if record is None:
+            return False
         if __debug__ and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("read record %s", record)
         if record.key == key:
@@ -389,6 +410,8 @@ class Index:
             while record.key_link != Record.RECORD_LINK_NULL:
                 next_pos = record.key_link
                 next_record = store.read(next_pos)
+                if next_record is None:
+                    return False
                 if next_record.key == key:
                     """
                     if same key found in bucket, update previous record in chain to point to key_link of this record
@@ -594,6 +617,12 @@ class Store:
             self.store_file.write(marshalled_record)
             self._dirty = True
 
+            if type(record.value) is list:
+                # Lists persist as float64 arrays (int elements widen), so
+                # normalize the in-memory record too — a cache hit must
+                # return exactly what a disk read would.
+                record.value = [float(e) for e in record.value]
+
             if self.caching_enabled:
                 self.store_cache.put(store_position, record)
 
@@ -676,7 +705,12 @@ class Store:
             raw = self.codec.read_record(self.store_file)
         if raw is None:
             return None
-        record = self.codec.decode_record(raw)
+        try:
+            record = self.codec.decode_record(raw)
+        except (ValueError, KeyError, struct.error):
+            # corrupt record content (the mmap fast path above tolerates the
+            # same errors) — treat as unreadable rather than crash the reader.
+            return None
         record.store_position = position
 
         if self.caching_enabled:

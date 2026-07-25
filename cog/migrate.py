@@ -19,6 +19,7 @@ import time
 from cog.codec import SpindleCodec, V2_MAGIC, V2_HEADER_SIZE
 from cog import spindle_pack
 from cog.config import INDEX_BLOCK_LEN as _NEW_INDEX_BLOCK_LEN, INDEX_CAPACITY as _NEW_INDEX_CAPACITY
+from cog.config import GRAPH_NODE_SET_TABLE_NAME as _GRAPH_NODE_SET_TABLE_NAME
 from cog.core import cog_hash
 
 # ---------------------------------------------------------------------------
@@ -35,8 +36,12 @@ _LEGACY_INDEX_BLOCK_LEN = 32
 # uses a 1-byte direction prefix on utf-8 bytes (b'\x00alice'). These keys hash
 # to different slots and are different key values, so a faithful byte-for-byte
 # migration would leave graph edges unreachable. Rewrite them here so migrated
-# graphs are traversable. Non-edge keys (node-set, edge-set, plain KV) never
-# carry these suffixes and are left untouched.
+# graphs are traversable.
+#
+# The rewrite is applied ONLY in graph namespaces (namespaces containing a
+# TOR_NODE_SET table). In a plain KV namespace a user key that happens to end
+# with "__:out:__" is legitimate data — rewriting it would silently rename the
+# key and lose it.
 _LEGACY_OUT_SUFFIX = "__:out:__"
 _LEGACY_IN_SUFFIX = "__:in:__"
 _OUT_PREFIX = b'\x00'
@@ -132,11 +137,16 @@ def _read_legacy_record(fh):
 # Store migration
 # ---------------------------------------------------------------------------
 
-def _migrate_store(legacy_path):
+def _migrate_store(legacy_path, rewrite_edge_keys=False):
     """Convert a single legacy store file to Spindle format.
 
     Returns the old_pos -> new_pos mapping (needed for index conversion),
     or None if the file is already Spindle or empty.
+
+    *rewrite_edge_keys* must be True only for tables in graph namespaces (see
+    _migrate_edge_key): there the legacy "__:out:__"/"__:in:__" suffix keys
+    are torque edge keys and must be rewritten; anywhere else such keys are
+    user data and must be preserved byte-for-byte.
     """
     with open(legacy_path, 'rb') as fh:
         head = fh.read(6)
@@ -160,7 +170,8 @@ def _migrate_store(legacy_path):
 
             # Rewrite legacy graph edge keys to the v4 byte-prefix encoding so
             # migrated graphs remain traversable (see _migrate_edge_key).
-            key = _migrate_edge_key(key)
+            if rewrite_edge_keys:
+                key = _migrate_edge_key(key)
 
             new_key_link = pos_map.get(old_key_link, -1) if old_key_link != -1 else -1
             new_value_link = pos_map.get(old_value_link, -1) if old_value_link != -1 else -1
@@ -194,15 +205,84 @@ def _migrate_store(legacy_path):
 
 
 # ---------------------------------------------------------------------------
+# Legacy liveness
+# ---------------------------------------------------------------------------
+#
+# The legacy store is an append-only log: same-key updates append a new record
+# and Cog.delete only unlinks the index entry, leaving the record in the file.
+# Which records are *live* is therefore recorded exclusively in the legacy
+# index (chain heads) and the key_link chains threaded through the store.
+# Rebuilding the new index from the store log alone would resurrect deleted
+# keys and chain every historical record (breaking the 4.x one-entry-per-key
+# invariant that scanner/MemoryView rely on), so liveness must be derived by
+# walking the legacy index.
+
+_LEGACY_EMPTY_INDEX_BLOCK = '-1'.zfill(_LEGACY_INDEX_BLOCK_LEN).encode()
+
+
+def _legacy_index_heads(index_path):
+    """Yield the store positions stored as chain heads in a legacy index."""
+    with open(index_path, 'rb') as fh:
+        while True:
+            block = fh.read(_LEGACY_INDEX_BLOCK_LEN)
+            if len(block) < _LEGACY_INDEX_BLOCK_LEN:
+                break
+            if block == _LEGACY_EMPTY_INDEX_BLOCK:
+                continue
+            try:
+                pos = int(block)
+            except ValueError:
+                continue  # unrecognized block, nothing to chase
+            if pos >= 0:
+                yield pos
+
+
+def _collect_live_positions(legacy_index_paths, legacy_store_path):
+    """Return the set of live record positions in the legacy store.
+
+    A record is live iff it is reachable from a legacy index chain head and is
+    the first record for its key along the chain (head -> tail order), which
+    is exactly what the legacy Index.get returned. Records that were deleted
+    (unlinked) or superseded by a newer same-key write are excluded.
+
+    *legacy_index_paths* must be ordered the way the legacy Indexer searched
+    them (ascending index id) so that a key present in several index files
+    resolves to the same record the old version would have returned.
+    """
+    live = set()
+    seen_keys = set()
+    with open(legacy_store_path, 'rb') as sf:
+        for idx_path in legacy_index_paths:
+            for head in _legacy_index_heads(idx_path):
+                pos = head
+                visited = set()
+                while pos != -1 and pos not in visited:
+                    visited.add(pos)
+                    sf.seek(pos)
+                    result = _read_legacy_record(sf)
+                    if result is None:
+                        break  # dangling pointer / truncated record
+                    _, key, _value, _vtype, key_link, _vlink = result
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        live.add(pos)
+                    pos = key_link
+    return live
+
+
+# ---------------------------------------------------------------------------
 # Index migration
 # ---------------------------------------------------------------------------
 
-def _migrate_index(index_path, migrated_store_path):
-    """Rebuild an index file from the migrated Spindle store.
+def _migrate_index(index_path, migrated_store_path, live_new_positions):
+    """Rebuild an index file containing exactly *live_new_positions*.
 
     Rather than translating legacy slot positions (which are tied to the old
-    slot formula), we scan the migrated store and call Index.put for each
-    record. This builds chains correctly under the current slot formula.
+    slot formula), we chain each live record of the migrated store into its
+    slot under the current slot formula. Only live records are chained: the
+    4.x Index.put invariant is that a key appears at most once in a bucket
+    chain (scanner and MemoryView depend on it), and records deleted in 3.x
+    must not reappear.
 
     Capacity is inferred from the legacy index file size so any user-custom
     capacity is preserved across the migration.
@@ -216,36 +296,31 @@ def _migrate_index(index_path, migrated_store_path):
         )
     capacity = legacy_size // _LEGACY_INDEX_BLOCK_LEN
 
-    # Prepare an empty new-format index in memory, then populate by walking
-    # the migrated store and appending each record into its slot chain. This
-    # replicates Index.put without needing to open an Index instance.
     slots = bytearray(capacity * block_len)
 
     codec = SpindleCodec(created_at=None)
     with open(migrated_store_path, 'rb+') as sf:
         if sf.read(6) != V2_MAGIC:
             raise ValueError(f"expected Spindle magic in {migrated_store_path}")
-        sf.seek(V2_HEADER_SIZE)
 
-        while True:
-            pos = sf.tell()
+        for pos in sorted(live_new_positions):
+            sf.seek(pos)
             raw = codec.read_record(sf)
             if raw is None:
-                break
+                raise ValueError(
+                    f"live record at position {pos} is unreadable in {migrated_store_path}")
             rec = codec.decode_record(raw)
 
             slot = cog_hash(rec.key, capacity)
             offset = slot * block_len
             existing_head = struct.unpack_from('<q', slots, offset)[0]
 
-            # New record becomes the slot's head; its key_link points to the
-            # previous head (which may be same-key or a collision — readers
-            # walk key_link until they find a matching key).
+            # The record joins the head of its slot chain; its key_link points
+            # to the previous head (a hash collision — readers walk key_link
+            # until they find a matching key).
             new_key_link = existing_head if existing_head != 0 else -1
-            after_record = sf.tell()
             sf.seek(pos)
             sf.write(struct.pack('<q', new_key_link))
-            sf.seek(after_record)
             struct.pack_into('<q', slots, offset, pos)
 
     tmp_path = index_path + '.v4_tmp'
@@ -276,6 +351,47 @@ def _cleanup_temps(directory):
 
 
 # ---------------------------------------------------------------------------
+# Pre-flight
+# ---------------------------------------------------------------------------
+
+def _preflight_store(legacy_path, rewrite_edge_keys=False, max_errors=20):
+    """Check that every record in a legacy store encodes in the new format.
+
+    Returns a list of error strings (empty = fully migratable). Files already
+    in Spindle format and empty files report no errors (migration skips them).
+    """
+    errors = []
+    file_size = os.path.getsize(legacy_path)
+    with open(legacy_path, 'rb') as fh:
+        head = fh.read(6)
+        if len(head) == 0 or head == V2_MAGIC:
+            return errors
+        fh.seek(0)
+        while True:
+            scan_pos = fh.tell()
+            result = _read_legacy_record(fh)
+            if result is None:
+                # The sequential migration reader stops here too. If this is
+                # not the true end of the file, everything after this point
+                # would be silently dropped — treat it as unmigratable.
+                if fh.tell() != file_size:
+                    errors.append(
+                        f"unparseable record at position {scan_pos}; "
+                        f"{file_size - scan_pos} trailing bytes would be lost")
+                break
+            pos, key, value, _vtype, _klink, _vlink = result
+            try:
+                spindle_pack.packb(
+                    _migrate_edge_key(key) if rewrite_edge_keys else key, value)
+            except Exception as e:
+                if len(errors) >= max_errors:
+                    errors.append("... more unencodable records omitted")
+                    break
+                errors.append(f"record at {pos} (key={key!r}): {e}")
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -285,6 +401,11 @@ INDEX_MARKER = '-index-'
 
 def migrate(db_path, remove_backups=False):
     """Migrate all legacy 3.x files under *db_path* to Spindle 4.x format.
+
+    A pre-flight pass first verifies that every record in every legacy store
+    can be represented in the new format. If any record cannot, ALL problems
+    are reported in ``errors`` and nothing is converted, so the database is
+    never left half-migrated.
 
     Args:
         db_path: Root database directory (the value of COG_HOME or
@@ -306,6 +427,8 @@ def migrate(db_path, remove_backups=False):
 
     stats = {'stores_migrated': 0, 'indexes_migrated': 0, 'skipped': 0, 'errors': []}
 
+    # ---------------------------------------------------------- discovery
+    namespaces = []  # (ns_dir, store_files, index_files, is_graph_ns)
     for ns_entry in sorted(os.listdir(db_path)):
         ns_dir = os.path.join(db_path, ns_entry)
         if not os.path.isdir(ns_dir):
@@ -337,9 +460,30 @@ def migrate(db_path, remove_backups=False):
                 key = (table_name, instance_id)
                 index_files.setdefault(key, []).append(fpath)
 
+        # Torque edge-key rewriting applies only to graph namespaces,
+        # recognizable by their node-set table (see _migrate_edge_key).
+        table_names = {t for t, _ in store_files} | {t for t, _ in index_files}
+        is_graph_ns = _GRAPH_NODE_SET_TABLE_NAME in table_names
+
+        namespaces.append((ns_dir, store_files, index_files, is_graph_ns))
+
+    # ---------------------------------------------------------- pre-flight
+    for ns_dir, store_files, _index_files, is_graph_ns in namespaces:
+        for store_path in store_files.values():
+            try:
+                problems = _preflight_store(store_path, rewrite_edge_keys=is_graph_ns)
+            except Exception as e:
+                problems = [f"pre-flight scan failed: {e}"]
+            stats['errors'].extend(f"{store_path}: {p}" for p in problems)
+    if stats['errors']:
+        # Report every problem up front and convert nothing.
+        return stats
+
+    # ---------------------------------------------------------- conversion
+    for ns_dir, store_files, index_files, is_graph_ns in namespaces:
         for key, store_path in store_files.items():
             try:
-                pos_map = _migrate_store(store_path)
+                pos_map = _migrate_store(store_path, rewrite_edge_keys=is_graph_ns)
             except Exception as e:
                 stats['errors'].append(f"{store_path}: {e}")
                 _cleanup_temps(ns_dir)
@@ -349,29 +493,36 @@ def migrate(db_path, remove_backups=False):
                 stats['skipped'] += 1
                 continue
 
-            idx_paths = index_files.get(key, [])
-            idx_ok = True
             migrated_store_path = store_path + '.v4_tmp'
 
-            # Sort index paths so index-0 comes first.  The rebuild walks
-            # the entire migrated store and inserts every key, so a single
+            # Order index files by index id.  Only index-0 gets a rebuilt
+            # replacement — the rebuild inserts every live key, so a single
             # index-0 file is sufficient.  Extra legacy index files (from
-            # the old multi-index Indexer) are renamed to .v3_backup
-            # without producing replacements.
-            idx_paths.sort()
-            primary_idx = None
-            extra_idxs = []
-            for idx_path in idx_paths:
-                fname = os.path.basename(idx_path)
-                idx_id = int(fname.rsplit('-', 1)[1])
-                if idx_id == 0:
-                    primary_idx = idx_path
-                else:
-                    extra_idxs.append(idx_path)
+            # the old multi-index Indexer) still participate in the
+            # liveness walk, then are renamed to .v3_backup without
+            # producing replacements.
+            idx_ok = True
+            try:
+                indexed = sorted(
+                    (int(os.path.basename(p).rsplit('-', 1)[1]), p)
+                    for p in index_files.get(key, [])
+                )
+            except ValueError as e:
+                stats['errors'].append(f"{store_path}: cannot parse index file name: {e}")
+                _cleanup_temps(ns_dir)
+                continue
+            primary_idx = next((p for i, p in indexed if i == 0), None)
+            extra_idxs = [p for i, p in indexed if i != 0]
 
             if primary_idx is not None:
                 try:
-                    _migrate_index(primary_idx, migrated_store_path)
+                    # Deletions and same-key updates in 3.x are recorded only
+                    # in the legacy index chains — derive liveness from them,
+                    # not from the append-only store log.
+                    live_legacy = _collect_live_positions(
+                        [p for _i, p in indexed], store_path)
+                    live_new = {pos_map[p] for p in live_legacy if p in pos_map}
+                    _migrate_index(primary_idx, migrated_store_path, live_new)
                 except Exception as e:
                     stats['errors'].append(f"{primary_idx}: {e}")
                     idx_ok = False

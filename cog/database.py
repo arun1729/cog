@@ -157,16 +157,42 @@ class Cog:
     def load_namespace(self, namespace):
         if namespace not in self.namespaces:
             self.namespaces[namespace] = {}
+            table_names = set()
             for index_file_name in os.listdir(self.config.cog_data_dir(namespace)):
-                table_names = set()
-                if self.config.INDEX in index_file_name:
+                # migration artifacts (rollback backups, aborted temp files)
+                # live next to the real store/index files and must be ignored.
+                if index_file_name.endswith(('.v3_backup', '.v4_tmp')):
+                    continue
+                if self.config.INDEX not in index_file_name:
+                    continue
+                try:
                     id = self.config.index_id(index_file_name)
-                    table_name = self.config.get_table_name(index_file_name)
-                    if table_name not in table_names:
-                        table_names.add(table_name)
-                        self.logger.info("loading index: id: {}, table name: {}".format(id, table_name))
-                        self.load_table(table_name, namespace)
-                        self.refresh_cache(table_name, namespace)
+                except ValueError:
+                    self.logger.warning(
+                        "skipping unrecognized file in namespace '%s': %s", namespace, index_file_name)
+                    continue
+                table_name = self.config.get_table_name(index_file_name)
+                if table_name in table_names:
+                    continue
+                table_names.add(table_name)
+                self.logger.info("loading index: id: {}, table name: {}".format(id, table_name))
+                try:
+                    self.load_table(table_name, namespace)
+                    self.refresh_cache(table_name, namespace)
+                except Exception as e:
+                    # One unloadable table (e.g. still in legacy 3.x format) must
+                    # not make the rest of the namespace unreachable.
+                    broken = self.namespaces[namespace].pop(table_name, None)
+                    if broken is not None:
+                        if self.current_table is broken:
+                            self.current_table = None
+                        try:
+                            broken.close()
+                        except Exception:
+                            pass
+                    self.logger.error(
+                        "failed to load table '%s' in namespace '%s' "
+                        "(file may need migration, see cog.migrate): %s", table_name, namespace, e)
         self.current_namespace = namespace
 
     def load_table(self, name, namespace):
