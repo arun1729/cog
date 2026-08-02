@@ -506,6 +506,51 @@ g = Graph(graph_name="people")
 g.load_edgelist("/path/to/edgelist", "people")
 ```
 
+## SPARQL queries
+
+CogDB graphs can be queried with standard [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) — including joins, FILTER, OPTIONAL, UNION, aggregates and property paths — via an [rdflib](https://rdflib.readthedocs.io/) store adapter, included by default.
+
+Torque and SPARQL query the same storage. A vertex written with `put()` is addressable in SPARQL as an IRI:
+
+```python
+from cog.torque import Graph
+g = Graph(graph_name="people")
+g.put("alice", "follows", "bob")
+g.put("bob", "follows", "fred")
+
+g.sparql("SELECT ?x WHERE { <alice> <follows> ?y . ?y <follows> ?x }")
+# {'head': {'vars': ['x']}, 'results': {'bindings': [{'x': {'type': 'uri', 'value': 'fred'}}]}}
+
+g.sparql("SELECT ?x WHERE { <alice> <follows>+ ?x }")   # property path (transitive)
+g.sparql("ASK { <alice> <follows> <bob> }")             # {'head': {}, 'boolean': True}
+```
+
+`sparql()` returns SELECT/ASK results in the [W3C SPARQL JSON results format](https://www.w3.org/TR/sparql11-results-json/), so any standard SPARQL tooling can consume them.
+
+#### Loading RDF files (Turtle, JSON-LD, RDF/XML, ...)
+
+```python
+g.load_rdf("people.ttl")                                 # format guessed from extension
+g.v("http://example.org/alice").out().all()              # visible to Torque too
+```
+
+Language tags and datatypes are preserved — `"chat"@fr` and `"chat"` stay distinct terms, and typed literals compare numerically:
+
+```python
+g.sparql('SELECT ?p WHERE { ?p <http://example.org/age> ?a FILTER(?a > 30) }')
+```
+
+#### Full rdflib access
+
+`g.rdf()` returns a live `rdflib.Graph` view over the CogDB graph for anything rdflib can do — serialization, JSON-LD export, SHACL validation via pySHACL, and so on:
+
+```python
+rg = g.rdf()
+rg.serialize("out.ttl", format="turtle")
+```
+
+The stored-string convention (how IRIs, literals and blank nodes map onto CogDB vertex ids) is documented in `cog/rdf_terms.py`.
+
 ## Config
 
 If no config is provided when creating a Cog instance, it will use the defaults:

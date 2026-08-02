@@ -1395,6 +1395,96 @@ class Graph(EmbeddingMixin, TraversalMixin):
         from cog.export import export_triples
         return export_triples(self, filepath, fmt=fmt, strict=strict)
 
+    # === RDF / SPARQL (optional, requires rdflib) ===
+
+    def rdf(self):
+        """
+        Return an rdflib.Graph view over this graph.
+
+        The returned graph reads and writes the same storage as Torque —
+        triples added through rdflib (e.g. rdf().parse(...)) are visible to
+        Torque traversals and vice versa. Term conversion rules are
+        documented in cog.rdf_terms.
+
+        :return: An rdflib.Graph backed by this CogDB graph.
+
+        Example:
+            rg = g.rdf()
+            rg.parse("data.ttl")                       # load Turtle
+            rg.serialize("out.ttl", format="turtle")   # export Turtle
+            for row in rg.query("SELECT ?s WHERE { ?s ?p ?o }"):
+                print(row.s)
+        """
+        if self._cloud:
+            raise NotImplementedError(
+                "RDF/SPARQL is not available in cloud mode yet. "
+                "Open the graph locally to use sparql()/rdf().")
+        if getattr(self, "_rdf_graph", None) is None:
+            try:
+                import rdflib
+            except ImportError:
+                # rdflib ships with cogdb; this only triggers on stripped
+                # installs (e.g. pip install --no-deps).
+                raise ImportError(
+                    "rdflib is required for RDF/SPARQL support. "
+                    "Install it with: pip install rdflib")
+            from cog.rdf_store import CogStore
+            self._rdf_graph = rdflib.Graph(
+                store=CogStore(self),
+                identifier=rdflib.URIRef("cogdb:{}".format(self.graph_name)))
+        return self._rdf_graph
+
+    def sparql(self, query, init_bindings=None, init_ns=None):
+        """
+        Run a SPARQL 1.1 query against this graph.
+
+        Torque-written vertices are addressable as IRIs: g.put("alice",
+        "follows", "bob") matches the pattern { <alice> <follows> ?x }.
+
+        :param query: SPARQL query string (SELECT, ASK, CONSTRUCT, DESCRIBE).
+        :param init_bindings: Optional dict of initial variable bindings.
+        :param init_ns: Optional dict of prefix -> namespace for the query.
+        :return: SELECT/ASK: dict in W3C SPARQL 1.1 JSON Results format
+                 (https://www.w3.org/TR/sparql11-results-json/).
+                 CONSTRUCT/DESCRIBE: list of (s, p, o) tuples in N3 syntax.
+
+        Example:
+            g.put("alice", "follows", "bob")
+            g.sparql("SELECT ?x WHERE { <alice> <follows> ?x }")
+            # {'head': {'vars': ['x']},
+            #  'results': {'bindings': [{'x': {'type': 'uri', 'value': 'bob'}}]}}
+        """
+        result = self.rdf().query(
+            query, initBindings=init_bindings or {}, initNs=init_ns or {})
+        if result.type in ("SELECT", "ASK"):
+            data = result.serialize(format="json")
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+            return json.loads(data)
+        return [(s.n3(), p.n3(), o.n3()) for s, p, o in result]
+
+    def load_rdf(self, source, format=None):
+        """
+        Load an RDF document (Turtle, N-Triples, RDF/XML, JSON-LD, ...) into
+        the graph using rdflib's parsers, in batch mode.
+
+        :param source: File path, URL, or file-like object.
+        :param format: Optional rdflib format name ("turtle", "nt", "xml",
+                       "json-ld", ...). Guessed from the file extension when
+                       omitted.
+        :return: self for method chaining.
+
+        Example:
+            g.load_rdf("people.ttl")
+            g.v("http://example.org/alice").out().all()
+        """
+        rdf_graph = self.rdf()  # raises with install hint if rdflib missing
+        import rdflib
+        parsed = rdflib.Graph()
+        parsed.parse(source=source, format=format)
+        rdf_graph.store.addN((s, p, o, None) for s, p, o in parsed)
+        return self
+
     def view(self, view_name, persist=True):
         """
         Returns an interactive D3.js graph view of the query result.

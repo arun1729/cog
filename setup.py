@@ -14,9 +14,15 @@ setup(
     author_email='hello@cogdb.io',
     license='MIT',
     packages=['cog'],
-    install_requires=['xxhash>=3.2.0', 'simsimd>=5.0.0', 'websocket-client>=1.9.0', 'certifi'],
+    install_requires=['xxhash>=3.2.0', 'simsimd>=5.0.0', 'websocket-client>=1.9.0', 'certifi',
+                      'rdflib>=7.0'],
     extras_require={
         'dev': ['pytest', 'pytest-cov'],
+    },
+    entry_points={
+        'rdf.plugins.store': [
+            'cogdb = cog.rdf_store:CogStore',
+        ],
     },
     python_requires='>=3.8',
     zip_safe=False,
