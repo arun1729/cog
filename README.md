@@ -42,13 +42,6 @@ g.put("bob", "status", "active")
 g.v("alice").out("follows").all()                    # → {'result': [{'id': 'bob'}]}
 g.v().has("status", "active").all()                  # → {'result': [{'id': 'bob'}]}
 g.v("alice").out("follows").out("follows").all()     # → {'result': [{'id': 'charlie'}]}
-
-# Serve your graph over HTTP
-g.serve()  # Now queryable at http://localhost:8080
-
-# Expose to the internet with ngrok
-# $ ngrok http 8080
-# Query your graph from anywhere: https://your-ngrok-url.ngrok.io
 ```
 
 > Full documentation at [cogdb.io](https://cogdb.io)
