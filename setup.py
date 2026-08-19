@@ -21,7 +21,7 @@ setup(
         'certifi==2026.7.22',
     ],
     extras_require={
-        'dev': ['pytest==8.4.2', 'pytest-cov==7.1.0'],
+        'dev': ['pytest==9.0.3', 'pytest-cov==7.1.0'],
     },
     python_requires='>=3.9',
     zip_safe=False,
