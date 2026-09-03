@@ -773,6 +773,22 @@ class Graph(EmbeddingMixin, TraversalMixin):
 
 
     def update(self, vertex1, predicate, vertex2):
+        """
+        Replaces all outgoing edges from vertex1 for the given predicate with a single edge to vertex2.
+        Shorthand for put(vertex1, predicate, vertex2, update=True).
+
+        Note: this replaces every existing target of vertex1 for this predicate, not just one edge.
+        Use put() to add an additional edge instead.
+
+        :param vertex1: Source vertex
+        :param predicate: Edge predicate/relationship
+        :param vertex2: New target vertex
+        :return: self for method chaining
+
+        Example:
+            g.put("alice", "follows", "bob")
+            g.update("alice", "follows", "carol")  # alice now follows only carol
+        """
         self.updatej(vertex1, predicate, vertex2)
         return self
 

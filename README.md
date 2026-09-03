@@ -90,6 +90,15 @@ g.put("dani","score","100")
 g.drop("bob", "follows", "fred")
 ```
 
+#### Using `update` to replace an edge
+
+Replaces all of a vertex's outgoing edges for a predicate with a single new edge. Shorthand for `put(..., update=True)`.
+
+```python
+g.put("alice", "follows", "bob")
+g.update("alice", "follows", "carol")  # alice now follows only carol
+```
+
 #### Using `putj` to insert JSONs
 
 ```python
