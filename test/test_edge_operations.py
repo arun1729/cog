@@ -351,5 +351,42 @@ class TestGraphIntegration:
         assert a_rels_after["result"][0]["id"] == "Z"
 
 
+class TestGraphUpdate:
+    """
+    Tests for Graph.update, the public shorthand for put(..., update=True).
+    """
+
+    def test_update_replaces_edge(self, clean_graph):
+        """update() must replace the existing edge, like put(update=True)."""
+        g = clean_graph
+
+        g.put("alice", "follows", "bob")
+        g.update("alice", "follows", "carol")
+
+        alice_follows = g.v("alice").out("follows").all()
+        assert len(alice_follows["result"]) == 1
+        assert alice_follows["result"][0]["id"] == "carol"
+
+    def test_update_returns_self_for_chaining(self, clean_graph):
+        """update() is documented as chainable."""
+        g = clean_graph
+
+        g.put("A", "rel", "B")
+        assert g.update("A", "rel", "C") is g
+
+    def test_update_preserves_unrelated_edges(self, clean_graph):
+        """Updating one subject must not disturb another subject's edge."""
+        g = clean_graph
+
+        g.put("alice", "follows", "bob")
+        g.put("dave", "follows", "bob")
+
+        g.update("alice", "follows", "carol")
+
+        dave_follows = g.v("dave").out("follows").all()
+        assert len(dave_follows["result"]) == 1
+        assert dave_follows["result"][0]["id"] == "bob"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

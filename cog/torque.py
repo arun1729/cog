@@ -773,7 +773,7 @@ class Graph(EmbeddingMixin, TraversalMixin):
 
 
     def update(self, vertex1, predicate, vertex2):
-        self.updatej(vertex1, predicate, vertex2)
+        self.put(vertex1, predicate, vertex2, update=True)
         return self
 
     def v(self, vertex=None, func=None, track_paths=True):
