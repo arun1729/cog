@@ -458,6 +458,9 @@ class Store:
 
         self.store = self.config.cog_store(
             tablemeta.namespace, tablemeta.name, tablemeta.db_instance_id)
+        # Resolved once so _refresh_mmap reopens this exact file even if the
+        # process later changes its working directory.
+        self._store_abspath = os.path.abspath(self.store)
         self.store_cache = StoreCache(self.store, shared_cache)
         fd = os.open(self.store, os.O_RDWR | os.O_CREAT, 0o644)
         self.store_file = os.fdopen(fd, 'rb+')
@@ -497,8 +500,21 @@ class Store:
         current = self._mmap
         if current is not None and len(current) >= size:
             return
-        self._mmap = mmap.mmap(self.store_file.fileno(), 0,
-                               access=mmap.ACCESS_READ)
+        # Map through a private read-only descriptor, never store_file's.
+        # On Windows, CPython's mmap constructor seeks the descriptor it is
+        # given to offset 0. Doing that to store_file desynchronises its
+        # buffered position, so a later flush()/close() rewinds to a negative
+        # offset and fails with OSError [Errno 22]. mmap keeps its own
+        # duplicate of the handle, so the private descriptor closes at once.
+        try:
+            fd = os.open(self._store_abspath,
+                         os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        except OSError:
+            return  # keep the current mapping; reads fall back to store_file
+        try:
+            self._mmap = mmap.mmap(fd, 0, access=mmap.ACCESS_READ)
+        finally:
+            os.close(fd)
         if current is not None:
             current.close()
 
