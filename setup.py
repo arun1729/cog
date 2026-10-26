@@ -18,7 +18,7 @@ setup(
         'xxhash==3.8.1',
         'simsimd==6.5.16',
         'websocket-client==1.9.0',
-        'certifi==2026.7.22',
+        'certifi==2026.10.19',
     ],
     extras_require={
         'dev': ['pytest==8.4.2', 'pytest-cov==7.1.0'],
