@@ -12,8 +12,10 @@ jobs:
   # Gate: run the suite on the released ref across all supported Pythons.
   # If any of these fail, `deploy` is skipped and nothing is published.
   test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest (26.04) has no Python 3.9 build for setup-python.
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12']
 
